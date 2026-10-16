@@ -19,7 +19,7 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
 - **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`).
 - **Buyback at 96%** (`BUYBACK_RATE`) of a card's value, paid on chain from pokenearfun.near at the same rate as the pack prices.
 - **Dev wallet**: `pokenearfun.near` (`DEV_ACCOUNTS`) rips without paying; its rips use server randomness and are recorded like any other (vault, history, ranks, database), marked as dev rips.
-- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen).
+- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen). Every Pokémon has artwork: dream-world sprites up to Gen 5, PokeAPI official artwork for newer Pokémon (`npm run build:cards` downloads it once into `.cache/`).
 - **Docs** at `#docs` and a leaderboard by vault value. Official X: [@pokenearfun](https://x.com/pokenearfun).
 
 ## Payments and on-chain RNG

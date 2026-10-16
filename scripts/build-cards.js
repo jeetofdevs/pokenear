@@ -3,7 +3,8 @@
    Run: npm run build:cards  (needs the devDependencies installed)
    Sources:
    - Pokémon TCG: @tcgdata/tcgdex-offline (TCGdex cards database)
-   - Pokémon artwork: pokeapi-sprites (dream-world SVGs, rendered to WebP) */
+   - Pokémon artwork: pokeapi-sprites (dream-world SVGs, rendered to WebP). Dream-world stops at
+     Gen 5, so newer Pokémon use PokeAPI's official artwork, downloaded once into .cache/. */
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
@@ -12,7 +13,36 @@ const ROOT = path.resolve(__dirname, '..');
 const NM = path.join(ROOT, 'node_modules');
 const TCGDEX = path.join(NM, '@tcgdata/tcgdex-offline/dist/db/international');
 const DREAM = path.join(NM, 'pokeapi-sprites/sprites/pokemon/other/dream-world');
+const OFFICIAL = path.join(ROOT, '.cache/official-artwork');
+const OFFICIAL_URL = (dex) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dex}.png`;
 const ART_DIR = path.join(ROOT, 'assets/art');
+const artSource = (dex) => {
+  const dream = path.join(DREAM, dex + '.svg');
+  if (fs.existsSync(dream)) return { file: dream, density: 120 };
+  const official = path.join(OFFICIAL, dex + '.png');
+  if (fs.existsSync(official)) return { file: official };
+  return null;
+};
+
+// Download official artwork for Pokémon without a dream-world sprite (curl honours the proxy env).
+async function fetchOfficial(dexes) {
+  fs.mkdirSync(OFFICIAL, { recursive: true });
+  const { execFileSync } = require('node:child_process');
+  for (const dex of dexes) {
+    const file = path.join(OFFICIAL, dex + '.png');
+    if (fs.existsSync(file) || fs.existsSync(path.join(DREAM, dex + '.svg'))) continue;
+    const tmp = file + '.part';
+    try {
+      execFileSync('curl', ['-sSfL', '-m', '30', '-o', tmp, OFFICIAL_URL(dex)]);
+      const meta = await sharp(tmp).metadata(); // must decode as a real PNG
+      if (meta.format !== 'png' || !meta.width) throw new Error('not a PNG');
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      console.warn('no artwork for dex', dex, '-', e.message.split('\n')[0]);
+    }
+  }
+}
 const OUT = path.join(ROOT, 'js/cards.js');
 
 // Gacha series, newest first within each game.
@@ -44,7 +74,7 @@ function buildPokemon(def, needArt) {
     if (!tier) continue;
     const no = c.id.slice(def.set.length + 1);
     const dex = c.dexId && c.dexId[0];
-    const hasArt = dex && fs.existsSync(path.join(DREAM, dex + '.svg'));
+    const hasArt = dex && artSource(dex);
     if (hasArt) needArt.add(dex);
     const card = {
       id: def.id + '-' + no,
@@ -87,7 +117,10 @@ async function renderArt(dexes) {
     const file = path.join(ART_DIR, dex + '.webp');
     keep.add(dex + '.webp');
     if (fs.existsSync(file)) continue;
-    await sharp(path.join(DREAM, dex + '.svg'), { density: 120 })
+    const src = artSource(dex);
+    let img = sharp(src.file, src.density ? { density: src.density } : {});
+    if (!src.density) img = img.trim(); // official artwork has transparent padding; dream-world SVGs are tight
+    await img
       .resize(260, 260, { fit: 'inside' })
       .webp({ quality: 74, alphaQuality: 80 })
       .toFile(file);
@@ -98,6 +131,11 @@ async function renderArt(dexes) {
 async function main() {
   const needArt = new Set();
   const series = [];
+  const allDex = new Set();
+  for (const def of POKEMON_SETS) {
+    for (const c of require(path.join(TCGDEX, 'cards', def.serie, def.set + '.json'))) if (c.dexId && c.dexId[0]) allDex.add(c.dexId[0]);
+  }
+  await fetchOfficial([...allDex].sort((a, b) => a - b));
   for (const def of POKEMON_SETS) {
     series.push({ id: def.id, game: 'pokemon', name: def.name, short: def.short, hue: def.hue, tag: def.tag, coverDex: def.cover, cards: buildPokemon(def, needArt) });
     needArt.add(def.cover);

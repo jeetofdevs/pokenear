@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = '$POKENEAR';
-  var VERSION = '20261017.4'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261017.5'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
   // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
