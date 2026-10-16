@@ -60,10 +60,10 @@ Then set `NEAR_RNG_CONTRACT=rng.pokenear.near` on the server.
 
 ```bash
 npm start            # http://localhost:3000 (verified wallet sign-in, game state in data/db.json)
-npm test             # engine + server tests (Node 18+)
+npm test             # engine + server tests
 ```
 
-The server has no runtime dependencies and needs no API keys. Optional settings (`.env`):
+The server runs on Node 18+, has no runtime dependencies (no `npm install` needed to run it) and needs no API keys. Optional settings (`.env`):
 
 | Variable | Default | Use |
 | --- | --- | --- |
