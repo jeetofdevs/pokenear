@@ -2,7 +2,7 @@
 
 TCG gacha with X login, invite links and a `$POKENEAR` whitelist.
 
-Players connect X, open packs from six card series, complete quests, invite friends and claim a numbered Season 1 whitelist pass. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
+Players connect X, rip real Pokémon and One Piece booster packs, complete quests, invite friends and claim a numbered Season 1 whitelist pass. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
 
 ## Features
 
@@ -15,7 +15,7 @@ Players connect X, open packs from six card series, complete quests, invite frie
 - **Tier rates**: C 60%, R 25%, SR 11%, UR 3.5%, SEC 0.5%. Each real rarity maps to a tier (see the rates table in the app).
 - **Pity**: UR or better guaranteed within 60 pulls per series. Every 10-pack holds at least one SR.
 - **Pack opening**: tear the pack, flip cards one by one, rarity glow on card backs, holo foil tilt on SR+.
-- **Binder**: per-series completion, burn duplicates for `$POKENEAR`, 2,000 `$POKENEAR` set bonus.
+- **Binder**: per-series completion, burn duplicates for `$POKENEAR`, 5,000 `$POKENEAR` set bonus.
 - **Whitelist quests**: connect X, follow on X, post an invite on X, invite 3 friends, open 10 cards.
 - **Invites**: `?ref=CODE` links. New players get +200, inviters get +250 per friend.
 - **Daily drop**, season countdown, share-to-X buttons for pulls and whitelist passes, leaderboard.
