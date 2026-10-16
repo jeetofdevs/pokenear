@@ -1,5 +1,5 @@
 /* Pokenear UI. Renders from store.state; all game rules live in engine.js.
-   Gacha model: tiered packs, one card per rip, published odds, instant 90% buyback.
+   Gacha model: tiered packs, one card per rip, published odds, instant 96% buyback.
    Cards are drawn from real set data (js/cards.js). When remote images are allowed,
    the official card scan fades in over the drawn card. */
 (function (root) {

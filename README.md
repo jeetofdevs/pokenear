@@ -2,7 +2,7 @@
 
 On-chain Pokémon TCG gacha on NEAR: packs are paid in `$POKENEAR` to the interaction wallet **pokenearfun.near**, whose contract draws the randomness in the same transaction.
 
-Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 90% (paid in `$POKENEAR` by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: the only currency is the token in the player's wallet.
+Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 96% (paid in `$POKENEAR` by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: the only currency is the token in the player's wallet.
 
 ## Features
 
@@ -17,7 +17,7 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
   | Legend | $100 | $34 – $320 |
 
 - **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`).
-- **Buyback at 90%** (`BUYBACK_RATE`) of a card's value, paid on chain from pokenearfun.near at the same rate as the pack prices.
+- **Buyback at 96%** (`BUYBACK_RATE`) of a card's value, paid on chain from pokenearfun.near at the same rate as the pack prices.
 - **Dev wallet**: `pokenearfun.near` (`DEV_ACCOUNTS`) rips without paying; its rips use server randomness and are recorded like any other (vault, history, ranks, database), marked as dev rips.
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen).
 - **Docs** at `#docs` and a leaderboard by vault value. Official X: [@pokenearfun](https://x.com/pokenearfun).

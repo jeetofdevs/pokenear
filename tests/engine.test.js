@@ -30,6 +30,10 @@ test('only Pokémon sets are loaded', () => {
   assert.ok(D.SERIES.every((s) => s.game === 'pokemon'));
 });
 
+test('buyback rate is 96%', () => {
+  assert.equal(D.BUYBACK_RATE, 0.96);
+});
+
 test('cheapest pack is $10 and no fixed token amounts exist before launch', () => {
   assert.equal(Math.min(...D.PACKS.map((p) => p.usd)), 10);
   assert.equal(STARTER.price, undefined);
@@ -192,7 +196,7 @@ test('bad seed or unknown pack is rejected', () => {
   assert.throws(() => engine.apply(s, { type: 'ripStart', pack: 'starter', seed: 'xyz' }, ctx()), /Bad rip seed/);
 });
 
-test('buyback values cards at 90% and records the payout once', () => {
+test('buyback values cards at BUYBACK_RATE (96%) and records the payout once', () => {
   const s = ripWith(connected(), 'starter', 1).state;
   const item = s.vault[0];
   const out = engine.apply(s, { type: 'buyback', uid: item.uid, payout: { amount: '900', tx: 'h' } }, ctx());

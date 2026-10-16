@@ -172,9 +172,9 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
     assert.equal(cancel.status, 200);
     assert.equal(cancel.body.state.pendingRip, null);
 
-    // Buyback: pokenearfun.near pays 90% of value at the on-chain Starter rate (1000 tokens = $10).
+    // Buyback: pokenearfun.near pays BUYBACK_RATE of value at the on-chain Starter rate (1000 tokens = $10).
     const sell = items.slice(0, 2).map((i) => i.uid);
-    const usd = Math.round(items.slice(0, 2).reduce((n, i) => n + require('../js/data.js').cardById[i.id].usd, 0) * 0.9 * 100) / 100;
+    const usd = Math.round(items.slice(0, 2).reduce((n, i) => n + require('../js/data.js').cardById[i.id].usd, 0) * require("../js/data.js").BUYBACK_RATE * 100) / 100;
     const sold = await post('/api/buyback', { uids: sell }, bob);
     assert.equal(sold.status, 200, JSON.stringify(sold.body));
     const expected = 1000n * UNIT * BigInt(Math.round(usd * 100)) / 1000n;

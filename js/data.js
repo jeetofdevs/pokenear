@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = '$POKENEAR';
-  var VERSION = '20261017.3'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261017.4'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
   // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
@@ -19,7 +19,7 @@
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
 
   var EV_RATIO = 0.98;      // expected card value / pack price
-  var BUYBACK_RATE = 0.9;   // instant sell-back as a share of card value
+  var BUYBACK_RATE = 0.96;  // instant sell-back as a share of card value
 
   // Gacha packs, cheapest first. min/max bound the card values in the pool (USD).
   var PACKS = [
