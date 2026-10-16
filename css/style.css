@@ -615,3 +615,29 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
 .demo-wallet { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 @media (max-width: 620px) { .wallet-cols { grid-template-columns: 1fr; } }
 .card-back img { width: 46%; height: auto; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5)); }
+
+/* ---------- On-chain rip ---------- */
+.chain-stage { max-width: 520px; }
+.chain-pack { width: 150px; }
+.chain-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; width: 100%; text-align: left; }
+.cs { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.cs b { display: block; }
+.cs small { color: var(--muted); font-size: 13px; }
+.cs-dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; border: 2px solid var(--line); }
+.cs.done .cs-dot { background: var(--ok); border-color: var(--ok); color: #04210f; }
+.cs.error .cs-dot { background: var(--hot); border-color: var(--hot); color: #fff; }
+.cs.active { border-color: var(--gold); }
+.cs.active .cs-dot { border-color: var(--gold); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.seed-line { margin: 0; }
+.proof { width: 100%; max-width: 640px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; font-size: 13px; }
+.proof-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-weight: 800; }
+.proof-src { color: var(--text); }
+.proof-ok { color: var(--ok); }
+.proof-bad { color: var(--hot); }
+.proof dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.proof dt { color: var(--muted); }
+.proof dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; }
+.proof-links { display: flex; gap: 14px; flex-wrap: wrap; }
+.open-rip { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; border-color: var(--gold); }
+.zoom-info .proof { max-width: none; }

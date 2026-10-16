@@ -1,0 +1,5 @@
+# Rust 1.82+ turns on WebAssembly features (reference-types, multivalue, bulk-memory)
+# that the NEAR runtime may reject. 1.81 emits MVP-compatible wasm.
+[toolchain]
+channel = "1.81.0"
+targets = ["wasm32-unknown-unknown"]

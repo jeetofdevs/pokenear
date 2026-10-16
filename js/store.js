@@ -56,6 +56,7 @@
         .then(function (cfg) {
           if (cfg && cfg.mode === 'live') {
             store.mode = 'live';
+            store.rng = cfg.rng || null;
             return fetchJSON('api/me').then(function (me) {
               store.state = (me && me.state && engine.migrate(me.state)) || engine.emptyState();
             });
@@ -116,7 +117,7 @@
       if (store.mode === 'live') {
         return postJSON('api/auth/wallet', {
           chain: chain, nonce: nonce, signature: signed.signature, address: signed.address,
-          accountId: signed.accountId, publicKey: signed.publicKey, callbackUrl: signed.callbackUrl,
+          accountId: signed.accountId, publicKey: signed.publicKey, callbackUrl: signed.callbackUrl, message: signed.message,
           wallet: signed.wallet, ref: store.ref
         }).then(function (body) {
           safeRemove(REF_KEY);
@@ -130,6 +131,50 @@
         safeRemove(REF_KEY);
         return r;
       });
+    },
+
+    /* ---------- rips ----------
+       ripStart: pay and get a seed. ripFinish: deliver cards once randomness exists
+       (live: read from chain by the server; demo: browser randomness). */
+    ripStart: function (pack, count) {
+      if (store.mode === 'live') {
+        return postJSON('api/rip/start', { pack: pack, count: count }).then(function (b) {
+          store.state = b.state;
+          store.rng = b.rng;
+          store.emit();
+          return b.rip;
+        });
+      }
+      var u = store.state.user;
+      return store.dispatch({ type: 'ripStart', pack: pack, count: count, seed: randomHex(32), chain: u && u.chain, source: 'demo' })
+        .then(function (r) { return r.rip; });
+    },
+
+    // -> { pending: true } while the chain has no randomness yet, else the rip result.
+    ripFinish: function (extra) {
+      if (store.mode === 'live') {
+        return fetch('api/rip/finish', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(extra || {})
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (b) {
+            if (res.status === 202) return { pending: true, status: b.status };
+            if (!res.ok || b.error) throw new Error(b.error || 'Server error (' + res.status + '). Try again.');
+            store.state = b.state;
+            store.emit();
+            return b.result;
+          });
+        });
+      }
+      return store.dispatch({ type: 'ripFinish', proof: { randomness: randomHex(64), source: 'demo' } });
+    },
+
+    ripCancel: function () {
+      if (store.mode === 'live') {
+        return postJSON('api/rip/cancel', {}).then(function (b) { store.state = b.state; store.emit(); return b.result; });
+      }
+      return store.dispatch({ type: 'ripCancel' });
     },
 
     logout: function () {

@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const engine = require('../js/engine.js');
 const auth = require('../js/auth.js');
 const verify = require('./wallet-verify.js');
+const onchain = require('./onchain.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
@@ -20,8 +21,12 @@ const PUBLIC_URL = process.env.PUBLIC_URL || '';
 const SECURE_COOKIE = PUBLIC_URL.startsWith('https://');
 const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
 const NEAR_RPC = process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet' ? 'https://rpc.testnet.near.org' : 'https://rpc.mainnet.near.org');
+// On-chain RNG: Solana players use ORAO VRF, NEAR players use the Pokenear RNG contract.
+const SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || 'mainnet-beta';
+const SOLANA_RPC = process.env.SOLANA_RPC || (SOLANA_CLUSTER === 'devnet' ? 'https://api.devnet.solana.com' : 'https://api.mainnet-beta.solana.com');
+const NEAR_RNG_CONTRACT = process.env.NEAR_RNG_CONTRACT || '';
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'vendor/near-wallet.js']);
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
@@ -124,8 +129,13 @@ async function walletLogin(req, res) {
   if (chain === 'solana') {
     address = String(body.address || '');
     if (!auth.isSolanaAddress(address)) return send(res, 400, { error: 'That is not a valid Solana address.' });
-    if (!verify.verifySolana({ address, signature, message: auth.loginMessage('solana', address, nonce) })) {
-      return send(res, 401, { error: 'The wallet signature did not match. Try again.' });
+    // Verify the exact text the wallet signed, after checking it is our sign-in message.
+    const expected = auth.loginMessage('solana', address, nonce);
+    const signed = typeof body.message === 'string' ? body.message.replace(/\r\n/g, '\n') : expected;
+    if (signed !== expected) return send(res, 400, { error: 'The signed message is not the Pokenear sign-in message. Try again.' });
+    if (!verify.verifySolana({ address, signature, message: signed })) {
+      console.warn('[solana-login] signature mismatch', { address, wallet: body.wallet, sigLen: String(signature || '').length });
+      return send(res, 401, { error: 'The wallet signature did not match this address. If you use a Ledger or a multi-account wallet, select the account you connected and try again.' });
     }
   } else {
     address = String(body.accountId || '');
@@ -162,7 +172,7 @@ async function walletLogin(req, res) {
 }
 
 /* ---------- API ---------- */
-const CLIENT_ACTIONS = new Set(['daily', 'pull', 'buyback', 'joinWhitelist']);
+const CLIENT_ACTIONS = new Set(['daily', 'buyback', 'joinWhitelist']);
 
 async function handleAction(req, res) {
   const uid = currentUserId(req);
@@ -179,6 +189,66 @@ async function handleAction(req, res) {
     if (err.isGameError) return send(res, 400, { error: err.message });
     console.error('[action]', err);
     send(res, 500, { error: 'Server error. Try again.' });
+  }
+}
+
+/* ---------- on-chain rips ----------
+   start:  pay with $POKENEAR, get a one-time seed. The player then requests randomness on their
+           chain with that seed (ORAO VRF on Solana, draw(seed) on NEAR) from their own wallet.
+   finish: the server reads the randomness from chain and derives the cards (engine.cardsFromRandomness).
+   cancel: refund, only while no randomness exists for the seed (so a bad roll can never be undone). */
+function rngInfo() {
+  return {
+    solana: { source: 'orao-vrf', program: onchain.ORAO_PROGRAM, cluster: SOLANA_CLUSTER, rpc: process.env.SOLANA_PUBLIC_RPC || SOLANA_RPC },
+    near: { source: 'near-rng', contract: NEAR_RNG_CONTRACT || null, network: NEAR_NETWORK }
+  };
+}
+
+async function readRandomness(user, seed) {
+  if (user.chain === 'solana') {
+    const r = await onchain.solanaRandomness(SOLANA_RPC, seed);
+    return { status: r.status, randomness: r.randomness, ref: r.account, source: 'orao-vrf' };
+  }
+  if (!NEAR_RNG_CONTRACT) throw Object.assign(new Error('NEAR randomness is not configured on this server.'), { status: 503 });
+  const r = await onchain.nearDraw(NEAR_RPC, NEAR_RNG_CONTRACT, seed);
+  if (r.status === 'fulfilled' && r.account !== user.address) throw Object.assign(new Error('That draw was made by a different NEAR account.'), { status: 400 });
+  return { status: r.status, randomness: r.randomness, ref: NEAR_RNG_CONTRACT, source: 'near-rng' };
+}
+
+async function ripRoute(req, res, step) {
+  const uid = currentUserId(req);
+  const st = uid && db.users[uid];
+  if (!st) return send(res, 401, { error: 'Connect your wallet first.' });
+  let body = {};
+  try { body = JSON.parse((await readBody(req)) || '{}'); } catch { return send(res, 400, { error: 'Invalid request.' }); }
+  try {
+    if (step === 'start') {
+      if (st.user.chain === 'near' && !NEAR_RNG_CONTRACT) return send(res, 503, { error: 'NEAR randomness is not configured on this server.' });
+      const seed = crypto.randomBytes(32).toString('hex');
+      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count: body.count, seed, chain: st.user.chain, source: st.user.chain === 'solana' ? 'orao-vrf' : 'near-rng' }, ctx());
+      db.users[uid] = out.state;
+      saveDb();
+      return send(res, 200, { state: out.state, rip: out.result.rip, rng: rngInfo() });
+    }
+    const pr = st.pendingRip;
+    if (!pr) return send(res, 400, { error: 'There is no open rip.' });
+    const r = await readRandomness(st.user, pr.seed);
+    if (step === 'cancel') {
+      if (r.status !== 'missing') return send(res, 409, { error: 'Randomness was already requested for this rip. Finish it instead.' });
+      const out = engine.apply(st, { type: 'ripCancel' }, ctx());
+      db.users[uid] = out.state;
+      saveDb();
+      return send(res, 200, { state: out.state, result: out.result });
+    }
+    if (r.status !== 'fulfilled') return send(res, 202, { status: r.status, rip: pr, rng: rngInfo() });
+    const out = engine.apply(st, { type: 'ripFinish', proof: { randomness: r.randomness, source: r.source, ref: r.ref, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null } }, ctx());
+    db.users[uid] = out.state;
+    saveDb();
+    return send(res, 200, { state: out.state, result: out.result });
+  } catch (err) {
+    if (err.isGameError) return send(res, 400, { error: err.message });
+    console.error('[rip]', err.message);
+    return send(res, err.status || 502, { error: err.status ? err.message : 'Could not read randomness from chain. Try again in a moment.' });
   }
 }
 
@@ -212,7 +282,10 @@ function serveStatic(req, res, pathname) {
 async function route(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK, rng: rngInfo() });
+  if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
+  if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
+  if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');
   if (p === '/api/auth/nonce' && req.method === 'POST') return issueNonce(res);
   if (p === '/api/auth/wallet' && req.method === 'POST') return walletLogin(req, res);
   if (p === '/api/auth/logout' && req.method === 'POST') {

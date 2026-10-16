@@ -9,11 +9,12 @@
   },
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test tests/engine.test.js tests/server.test.js",
+    "test": "node --test tests/engine.test.js tests/onchain.test.js tests/server.test.js",
     "build:cards": "node scripts/build-cards.js",
     "build:near": "esbuild scripts/near-wallet-entry.js --bundle --minify --format=iife --platform=browser --target=es2019 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/near-wallet.js",
     "build:brand": "node scripts/build-brand.js",
-    "build:x-header": "node scripts/render-x-header.js"
+    "build:x-header": "node scripts/render-x-header.js",
+    "build:solana": "esbuild scripts/solana-vrf-entry.js --bundle --minify --format=iife --platform=browser --target=es2020 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/solana-vrf.js"
   },
   "devDependencies": {
     "@fontsource/figtree": "^5.0.20",
@@ -25,6 +26,7 @@
     "@near-wallet-selector/meteor-wallet": "^10.1.4",
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
     "@near-wallet-selector/sender": "^10.1.4",
+    "@orao-network/solana-vrf": "^0.8.0",
     "@tcgdata/tcgdex-offline": "^0.0.4",
     "buffer": "^6.0.3",
     "esbuild": "^0.25.9",
@@ -32,5 +34,8 @@
     "pokeapi-sprites": "^2.0.4",
     "sharp": "^0.33.5",
     "util": "^0.12.5"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4"
   }
 }

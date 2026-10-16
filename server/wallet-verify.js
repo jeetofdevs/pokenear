@@ -27,11 +27,23 @@ function decodeSignature(sig) {
   return b.length === 64 ? b : null;
 }
 
+// Ledger accounts (e.g. through Phantom) sign Solana "off-chain messages": the text wrapped in a
+// header. Format v0: "\xffsolana offchain" | version 0 | format (0 ASCII, 1 UTF-8) | u16 LE length | text.
+function offchainMessage(text, format) {
+  const body = Buffer.from(text, 'utf8');
+  const len = Buffer.alloc(2);
+  len.writeUInt16LE(body.length);
+  return Buffer.concat([Buffer.from('\xffsolana offchain', 'latin1'), Buffer.from([0, format]), len, body]);
+}
+
+// Returns the variant that verified ('raw' or 'offchain'), or null.
 function verifySolana({ address, signature, message }) {
   const key = auth.base58Decode(address);
   const sig = decodeSignature(signature);
-  if (!key || key.length !== 32 || !sig) return false;
-  return verifyEd25519(key, Buffer.from(message, 'utf8'), sig);
+  if (!key || key.length !== 32 || !sig) return null;
+  if (verifyEd25519(key, Buffer.from(message, 'utf8'), sig)) return 'raw';
+  for (const format of [0, 1]) if (verifyEd25519(key, offchainMessage(message, format), sig)) return 'offchain';
+  return null;
 }
 
 function borshString(s) {
@@ -82,4 +94,4 @@ async function nearKeyBelongsTo(accountId, publicKey, rpcUrl) {
   return body.result.permission === 'FullAccess';
 }
 
-module.exports = { verifySolana, verifyNearSignature, nearKeyBelongsTo, nep413Hash, NEP413_TAG };
+module.exports = { offchainMessage, verifySolana, verifyNearSignature, nearKeyBelongsTo, nep413Hash, NEP413_TAG };

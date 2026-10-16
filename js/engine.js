@@ -6,6 +6,7 @@
 
   var D = root.PN && root.PN.data ? root.PN.data : require('./data.js');
   var A = root.PN && root.PN.auth ? root.PN.auth : require('./auth.js');
+  var H = root.PN && root.PN.sha256 ? root.PN.sha256 : require('./sha256.js');
   var E = D.ECONOMY;
 
   function GameError(message) {
@@ -37,7 +38,8 @@
       invites: 0,
       lastDaily: 0,
       whitelist: null,
-      history: []
+      history: [],
+      pendingRip: null    // paid rip waiting for its on-chain randomness
     };
   }
 
@@ -59,13 +61,38 @@
     state.earned += amount;
   }
 
-  // One rip: pick a card from the pack pool by its published chance.
-  function rip(pack, rng) {
-    var x = rng();
+  // Pick a card from the pack pool for a uniform number u in [0, 1).
+  function pickByU(pack, u) {
     var pool = pack.pool;
-    for (var i = 0; i < pool.length; i++) if (x < pool[i].cum) return D.cardById[pool[i].id];
+    for (var i = 0; i < pool.length; i++) if (u < pool[i].cum) return D.cardById[pool[i].id];
     return D.cardById[pool[pool.length - 1].id];
   }
+  function rip(pack, rng) { return pickByU(pack, rng()); }
+
+  /* Turn on-chain randomness into card picks. Public and deterministic, so anyone can
+     re-derive a rip from its seed and randomness:
+       h_i = sha256("pokenear-rip:v1" || randomness || seed || i)
+       u_i = first 6 bytes of h_i as an integer / 2^48
+       card_i = first card in the pack's published list whose cumulative chance exceeds u_i */
+  var RIP_DOMAIN = H.utf8('pokenear-rip:v1');
+  function uniformsFromRandomness(randomnessHex, seedHex, count) {
+    var r = H.hexToBytes(randomnessHex);
+    var sd = H.hexToBytes(seedHex);
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var h = H.sha256(H.concat([RIP_DOMAIN, r, sd, new Uint8Array([i])]));
+      var n = 0;
+      for (var b = 0; b < 6; b++) n = n * 256 + h[b];
+      out.push(n / 281474976710656);
+    }
+    return out;
+  }
+  function cardsFromRandomness(packId, count, randomnessHex, seedHex) {
+    var pack = D.packById[packId];
+    return uniformsFromRandomness(randomnessHex, seedHex, count).map(function (u) { return pickByU(pack, u); });
+  }
+
+  function isHex(s, bytes) { return typeof s === 'string' && new RegExp('^[0-9a-f]{' + bytes * 2 + '}$').test(s); }
 
   function whitelistStatus(state) {
     var checks = {
@@ -137,8 +164,10 @@
         result.amount = E.dailyReward;
         break;
       }
-      case 'pull': {
+      case 'ripStart': {
+        // Pay for a rip and reserve its seed. The cards are decided later by on-chain randomness.
         requireUser(state);
+        if (state.pendingRip) throw GameError('Finish or cancel your open rip first.');
         var pack = D.packById[action.pack];
         if (!pack) throw GameError('That pack is not available.');
         var count = D.MULTI.indexOf(action.count) >= 0 ? action.count : 1;
@@ -146,20 +175,43 @@
         if (state.balance < cost) {
           throw GameError('Not enough ' + D.TOKEN + '. ' + (count > 1 ? count + '× ' : '') + pack.name + ' costs $' + pack.usd * count + ' (' + cost.toLocaleString('en-US') + ' ' + D.TOKEN + ').');
         }
+        if (!isHex(action.seed, 32)) throw GameError('Bad rip seed.');
         state.balance -= cost;
-        var items = [];
-        for (var k = 0; k < count; k++) {
-          var card = rip(pack, ctx.rng);
-          var item = { uid: state.nextUid++, id: card.id, pack: pack.id, at: now };
+        state.pendingRip = { seed: action.seed, pack: pack.id, count: count, cost: cost, chain: action.chain || null, source: action.source || null, at: now };
+        result.rip = state.pendingRip;
+        break;
+      }
+      case 'ripFinish': {
+        requireUser(state);
+        var pr = state.pendingRip;
+        if (!pr) throw GameError('There is no open rip.');
+        var proof = action.proof || {};
+        var randomness = String(proof.randomness || '');
+        if (!(isHex(randomness, 32) || isHex(randomness, 64))) throw GameError('Bad randomness.');
+        var cards = cardsFromRandomness(pr.pack, pr.count, randomness, pr.seed);
+        var stored = { source: proof.source || pr.source, chain: pr.chain, seed: pr.seed, randomness: randomness, ref: proof.ref || null, tx: proof.tx || null };
+        var items = cards.map(function (card, k) {
+          var item = { uid: state.nextUid++, id: card.id, pack: pr.pack, at: now, proof: stored, n: k };
           state.vault.push(item);
           state.history.unshift({ id: card.id, at: now });
-          items.push(item);
-        }
-        state.pulls[pack.id] = (state.pulls[pack.id] || 0) + count;
-        state.totalPulls += count;
+          return item;
+        });
+        state.pulls[pr.pack] = (state.pulls[pr.pack] || 0) + pr.count;
+        state.totalPulls += pr.count;
         state.history = state.history.slice(0, E.historySize);
+        state.pendingRip = null;
         result.items = items;
-        result.spent = cost;
+        result.spent = pr.cost;
+        result.proof = stored;
+        break;
+      }
+      case 'ripCancel': {
+        // Only allowed (by the server) when no randomness was ever requested for the seed.
+        requireUser(state);
+        if (!state.pendingRip) throw GameError('There is no open rip.');
+        state.balance += state.pendingRip.cost;
+        result.refund = state.pendingRip.cost;
+        state.pendingRip = null;
         break;
       }
       case 'buyback': {
@@ -210,6 +262,9 @@
     emptyState: emptyState,
     migrate: migrate,
     rip: rip,
+    pickByU: pickByU,
+    uniformsFromRandomness: uniformsFromRandomness,
+    cardsFromRandomness: cardsFromRandomness,
     refCodeFor: refCodeFor,
     whitelistStatus: whitelistStatus,
     seriesProgress: seriesProgress,

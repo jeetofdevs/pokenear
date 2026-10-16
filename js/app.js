@@ -343,7 +343,10 @@
         '<span class="buy-name">Rip ' + n + (n > 1 ? ' cards' : ' card') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
         '<small>' + COIN + fmt(cost) + ' ' + D.TOKEN + '</small></button>';
     }).join('');
-    return '<section class="season"><div><div class="eyebrow"><span class="live-dot"></span>Season 1 live</div><h2>Whitelist mint closes soon</h2></div>' +
+    var pr = st.pendingRip;
+    var openRip = pr ? '<section class="panel open-rip"><div><b>You have an open rip</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' card' + (pr.count > 1 ? 's' : '') + ' · paid ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or refund it if no randomness was requested yet.</p></div>' +
+      '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Refund</button></div></section>' : '';
+    return openRip + '<section class="season"><div><div class="eyebrow"><span class="live-dot"></span>Season 1 live</div><h2>Whitelist mint closes soon</h2></div>' +
         '<div class="season-right">' + countdownHTML() +
         (dailyWait > 0
           ? '<button class="btn" disabled>Daily drop in ' + Math.ceil(dailyWait / 3600000) + 'h</button>'
@@ -388,7 +391,7 @@
           '<p class="muted small">Redeeming the physical card opens at launch.</p></div>' +
           '<div class="binder-grid">' + items.map(function (it) {
             var c = D.cardById[it.id];
-            return '<div class="slot vault-item"><button data-act="zoom" data-id="' + c.id + '" aria-label="' + esc(c.name) + '">' + cardHTML(c) + '</button>' +
+            return '<div class="slot vault-item"><button data-act="zoom" data-id="' + c.id + '" data-uid="' + it.uid + '" aria-label="' + esc(c.name) + '">' + cardHTML(c) + '</button>' +
               '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
               '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '">Sell back ' + tokenUsd(c.buyback) + '</button></div>';
           }).join('') + '</div>'
@@ -497,7 +500,7 @@
         ? '<button class="btn btn-sm btn-gold" data-act="wallet-sol" data-id="' + w.id + '" data-name="' + esc(w.name) + '">Connect</button>'
         : w.openUrl ? '<a class="btn btn-sm" href="' + esc(w.openUrl) + '">Open in app</a>'
         : '<a class="btn btn-sm btn-ghost" href="' + esc(w.install) + '" target="_blank" rel="noopener">Install</a>';
-      return '<li class="wallet-row"><span class="wallet-ico" style="--wc:' + w.color + '">' + esc(w.name[0]) + '</span><span class="wallet-name">' + esc(w.name) + (w.installed ? '<small>Detected</small>' : '') + '</span>' + action + '</li>';
+      return '<li class="wallet-row">' + (w.icon ? '<img class="wallet-ico" src="' + w.icon + '" alt="">' : '<span class="wallet-ico" style="--wc:' + w.color + '">' + esc(w.name[0]) + '</span>') + '<span class="wallet-name">' + esc(w.name) + (w.installed ? '<small>Detected</small>' : '') + '</span>' + action + '</li>';
     }).join('');
     var near;
     if (!ui.nearList) near = '<li class="wallet-row muted small">Loading NEAR wallets…</li>';
@@ -537,7 +540,8 @@
     });
   }
 
-  function openZoom(id) {
+  function openZoom(id, uid) {
+    var item = uid && store.state.vault ? store.state.vault.filter(function (it) { return it.uid === uid; })[0] : null;
     var card = D.cardById[id];
     if (!card) return;
     var s = seriesOf(card);
@@ -558,21 +562,127 @@
       '<div class="zoom-card">' + cardHTML(card) + '</div>' +
       '<div class="zoom-info"><div class="eyebrow">Pokémon TCG</div><h2>' + esc(card.name) + '</h2>' +
       '<dl>' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>' +
+      (item && item.proof ? '<div class="eyebrow">How this card was pulled</div>' + proofSingleHTML(item) : '') +
       '<div class="modal-actions" style="justify-content:start">' + (best && store.state.user ? '<button class="btn btn-gold" data-act="go-pack" data-id="' + best.id + '">Rip the ' + esc(best.name) + '</button>' : '') + '<button class="btn btn-ghost" data-act="close-modal">Close</button></div></div>' +
       '</div></div>';
   }
   function closeModal() { $('#modal').innerHTML = ''; }
 
+  // Proof for one vault item: re-derive the whole rip and check this card's position.
+  function proofSingleHTML(item) {
+    var pr = item.proof;
+    var group = store.state.vault.filter(function (it) { return it.proof && it.proof.seed === pr.seed; });
+    var n = Math.max(group.length, (item.n || 0) + 1);
+    var expected = engine.cardsFromRandomness(item.pack, n, pr.randomness, pr.seed)[item.n || 0];
+    return proofHTML(pr, [item.id], item.pack, 1).replace(/class="proof-(ok|bad)">[^<]*</, expected && expected.id === item.id ? 'class="proof-ok">✓ Verified in your browser<' : 'class="proof-bad">✗ Does not match<');
+  }
+
   /* ---------- rip ---------- */
+  /* A rip: pay -> request randomness on chain (player's wallet) -> server reads it -> cards. */
   function startRip(count) {
     if (ui.busy) return;
-    var packId = ui.pack;
-    run({ type: 'pull', pack: packId, count: count }, function (result) {
-      if (!result || !result.items) return;
-      ui.opening = { pack: packId, items: result.items, count: count, stage: 'pack', revealed: {}, sold: {} };
+    if (store.state.pendingRip) { resumeRip(); return; }
+    ui.busy = true;
+    store.ripStart(ui.pack, count).then(function (rip) {
+      ui.busy = false;
+      beginRandomness(rip, false);
+    }).catch(function (e) { ui.busy = false; toast(e.message || 'Could not start the rip.', true); });
+  }
+
+  function resumeRip() {
+    var pr = store.state.pendingRip;
+    if (pr) beginRandomness(pr, true);
+  }
+
+  function rngSourceName(user) {
+    if (store.mode !== 'live') return 'Demo randomness';
+    return user.chain === 'solana' ? 'ORAO VRF on Solana' : 'Pokenear RNG contract on NEAR';
+  }
+
+  function beginRandomness(rip, resuming) {
+    ui.opening = { pack: rip.pack, count: rip.count, rip: rip, stage: 'chain', status: 'wallet', error: null, revealed: {}, sold: {} };
+    renderOverlay();
+    if (store.mode !== 'live') { ui.opening.status = 'waiting'; renderOverlay(); setTimeout(function () { pollRip(0); }, 900); return; }
+    if (resuming) {
+      // The request may already be on chain: check first, ask the wallet only if nothing is there.
+      ui.opening.status = 'checking';
       renderOverlay();
+      store.ripFinish({}).then(function (r) {
+        if (!ui.opening) return;
+        if (!r.pending) return deliverRip(r);
+        if (r.status === 'missing') return askWallet();
+        ui.opening.status = 'waiting';
+        renderOverlay();
+        pollRip(0);
+      }).catch(ripError);
+      return;
+    }
+    askWallet();
+  }
+
+  function askWallet() {
+    var o = ui.opening;
+    o.status = 'wallet';
+    o.error = null;
+    renderOverlay();
+    W.requestRandomness(store.state.user, o.rip, store.rng).then(function (out) {
+      if (!ui.opening) return;
+      ui.opening.tx = out.tx;
+      ui.opening.status = 'waiting';
+      renderOverlay();
+      pollRip(0);
+    }).catch(function (e) {
+      var msg = e && (e.message || String(e)) || '';
+      if (/already drawn|already in use/i.test(msg)) { ui.opening.status = 'waiting'; renderOverlay(); return pollRip(0); }
+      ripError(e);
     });
   }
+
+  function pollRip(tries) {
+    if (!ui.opening || ui.opening.stage !== 'chain') return;
+    store.ripFinish({ tx: ui.opening.tx || null }).then(function (r) {
+      if (!ui.opening) return;
+      if (r.pending) {
+        if (tries >= 80) { ui.opening.status = 'slow'; renderOverlay(); return; }
+        setTimeout(function () { pollRip(tries + 1); }, 1500);
+        return;
+      }
+      deliverRip(r);
+    }).catch(ripError);
+  }
+
+  function deliverRip(r) {
+    var o = ui.opening;
+    o.items = r.items;
+    o.proof = r.proof;
+    o.stage = 'pack';
+    renderOverlay();
+  }
+
+  function ripError(e) {
+    if (!ui.opening) return toast(e.message || 'Something went wrong.', true);
+    var msg = e && (e.message || String(e)) || 'Something went wrong.';
+    if (/reject|denied|cancel|closed|declined/i.test(msg)) msg = 'The request was cancelled in your wallet. Nothing was sent on chain.';
+    ui.opening.status = 'error';
+    ui.opening.error = msg;
+    renderOverlay();
+  }
+
+  // Proof box: where the randomness came from, links, and a local re-derivation check.
+  function proofHTML(proof, ids, packId, count) {
+    if (!proof) return '';
+    var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
+    var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
+    var src = proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : proof.source === 'near-rng' ? 'Pokenear RNG · NEAR' : 'Demo randomness (off-chain preview)';
+    var ex = W.explorer(proof, store.rng);
+    var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
+      (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'orao-vrf' ? 'Randomness account' : 'RNG contract') + '</a>' : '') : '';
+    return '<div class="proof"><div class="proof-head"><span class="proof-src">' + esc(src) + '</span>' +
+      '<span class="' + (ok ? 'proof-ok' : 'proof-bad') + '">' + (ok ? '✓ Verified in your browser' : '✗ Does not match') + '</span></div>' +
+      '<dl><dt>Seed</dt><dd class="num">' + esc(proof.seed) + '</dd><dt>Randomness</dt><dd class="num">' + esc(proof.randomness) + '</dd></dl>' +
+      (links ? '<div class="proof-links">' + links + '</div>' : '') + '</div>';
+  }
+
   function allRevealed() {
     var o = ui.opening;
     return o.items.every(function (it, i) { return o.revealed[i]; });
@@ -585,7 +695,34 @@
     doc.body.style.overflow = 'hidden';
     var p = D.packById[o.pack];
     var html;
-    if (o.stage === 'pack') {
+    if (o.stage === 'chain') {
+      var u = store.state.user;
+      var live = store.mode === 'live';
+      var walletName = u.wallet || A.CHAINS[u.chain].name;
+      var steps = [
+        ['done', 'Paid ' + usd(p.usd * o.count) + ' in ' + D.TOKEN, fmt(p.price * o.count) + ' ' + D.TOKEN],
+        [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
+          live ? (u.chain === 'solana' ? 'Request randomness from ORAO VRF' : 'Call draw on the Pokenear RNG contract') : 'Demo randomness',
+          live ? (o.status === 'checking' ? 'Checking the chain for an earlier request…' : 'Approve one transaction in ' + esc(walletName) + (u.chain === 'solana' ? ' (Solana network fee + ORAO fee)' : ' (gas + 0.003 NEAR storage)')) : 'This preview is not connected to a chain'],
+        [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Wait for the randomness on chain',
+          o.status === 'slow' ? 'Taking longer than usual. Your rip is saved; check again in a moment.' : (live && u.chain === 'solana' ? 'ORAO oracles fulfil it in a few seconds' : 'Read back from the contract')]
+      ];
+      var actions = '';
+      if (o.status === 'error') {
+        actions = '<button class="btn btn-gold" data-act="rip-retry">Try again</button><button class="btn" data-act="rip-refund">Refund</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
+      } else if (o.status === 'slow') {
+        actions = '<button class="btn btn-gold" data-act="rip-check">Check again</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
+      }
+      html = '<div class="open-stage chain-stage"><div class="eyebrow">' + esc(p.name) + ' · ' + o.count + ' card' + (o.count > 1 ? 's' : '') + ' · ' + esc(rngSourceName(u)) + '</div>' +
+        '<div class="chain-pack">' + packArtHTML(p) + '</div>' +
+        '<h2>' + (o.status === 'error' ? 'Randomness not requested' : 'Getting on-chain randomness') + '</h2>' +
+        '<ol class="chain-steps">' + steps.map(function (st) {
+          return '<li class="cs ' + st[0] + '"><span class="cs-dot" aria-hidden="true">' + (st[0] === 'done' ? '✓' : st[0] === 'error' ? '!' : '') + '</span><div><b>' + st[1] + '</b><small>' + st[2] + '</small></div></li>';
+        }).join('') + '</ol>' +
+        (o.error ? '<p class="err" role="alert">' + esc(o.error) + '</p>' : '') +
+        '<p class="muted small seed-line">Rip seed <span class="num">' + esc(o.rip.seed.slice(0, 16)) + '…</span></p>' +
+        (actions ? '<div class="open-actions">' + actions + '</div>' : '') + '</div>';
+    } else if (o.stage === 'pack') {
       html = '<div class="open-stage"><div class="eyebrow">' + esc(p.name) + ' · ' + o.items.length + ' card' + (o.items.length > 1 ? 's' : '') + '</div>' +
         '<button class="big-pack" data-act="tear" aria-label="Tear open the pack">' + packArtHTML(p) + '</button>' +
         '<h2>Tap the pack to rip it</h2></div>';
@@ -613,6 +750,7 @@
         var unsold = o.items.filter(function (it) { return !o.sold[it.uid]; });
         summary = '<div class="summary"><span>Pulled <b>' + usd(Math.round(total * 100) / 100) + '</b> for <b>' + usd(spent) + '</b></span>' +
           '<span class="' + (total >= spent ? 'up' : 'down') + '">' + (total >= spent ? '+' : '−') + usd(Math.abs(Math.round((total - spent) * 100) / 100)) + '</span></div>';
+        summary += proofHTML(o.proof, o.items.map(function (it) { return it.id; }), o.pack, o.items.length);
         actions = (unsold.length > 1 ? '<button class="btn" data-act="sell-all-rip">Sell back all · ' + tokenUsd(unsold.reduce(function (n, it) { return n + D.cardById[it.id].buyback; }, 0)) + '</button>' : '') +
           '<button class="btn btn-gold" data-act="again"' + (store.state.balance < p.price * o.count ? ' disabled' : '') + '>Rip again · ' + usd(p.usd * o.count) + '</button>' +
           '<button class="btn" data-act="close-open">Keep in vault</button>';
@@ -676,8 +814,16 @@
       case 'pack': ui.pack = id; ui.showAllOdds = false; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
       case 'all-odds': ui.showAllOdds = !ui.showAllOdds; render(); break;
-      case 'zoom': openZoom(id); break;
+      case 'zoom': openZoom(id, Number(el.getAttribute('data-uid')) || null); break;
       case 'rip': startRip(Number(el.getAttribute('data-count'))); break;
+      case 'rip-resume': resumeRip(); break;
+      case 'rip-retry': askWallet(); break;
+      case 'rip-check': ui.opening.status = 'waiting'; renderOverlay(); pollRip(0); break;
+      case 'rip-later': ui.opening = null; renderOverlay(); render(); break;
+      case 'rip-refund':
+        store.ripCancel().then(function (r) { ui.opening = null; renderOverlay(); render(); toast('Refunded ' + fmt(r.refund) + ' ' + D.TOKEN + '.'); },
+          function (e) { toast(e.message, true); });
+        break;
       case 'daily': run({ type: 'daily' }, function (r) { toast('+' + r.amount + ' ' + D.TOKEN + ' claimed.'); }); break;
       case 'vsort': ui.vaultSort = id; render(); break;
       case 'sell': run({ type: 'buyback', uid: uid }, function (r) { toast('Sold back for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').'); }); break;
@@ -774,6 +920,7 @@
     doc.addEventListener('error', onImgError, true);
     root.addEventListener('hashchange', setRoute);
     store.subscribe(function () { if (!ui.opening) render(); });
+    root.addEventListener('beforeunload', function () { /* open rips stay saved and can be resumed */ });
     store.init().then(function () {
       // Back from a redirect-based NEAR wallet (MyNearWallet): finish the sign-in.
       var back = W.takeNearRedirect();
