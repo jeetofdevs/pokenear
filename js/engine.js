@@ -70,8 +70,6 @@
   function whitelistStatus(state) {
     var checks = {
       connect: !!state.user,
-      follow: !!state.tasks.follow,
-      post: !!state.tasks.post,
       invites: state.invites >= E.whitelistInvites,
       pulls: state.totalPulls >= E.whitelistPulls
     };
@@ -181,16 +179,6 @@
         state.sold += soldN;
         result.amount = paid;
         result.sold = soldN;
-        break;
-      }
-      case 'task': {
-        requireUser(state);
-        var task = D.TASKS.filter(function (t) { return t.id === action.id && !t.auto; })[0];
-        if (!task) throw GameError('Unknown quest.');
-        if (state.tasks[task.id]) throw GameError('Quest already completed.');
-        state.tasks[task.id] = now;
-        credit(state, task.reward);
-        result.amount = task.reward;
         break;
       }
       case 'joinWhitelist': {

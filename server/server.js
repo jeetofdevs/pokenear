@@ -7,7 +7,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const D = require('../js/data.js');
 const engine = require('../js/engine.js');
 const auth = require('../js/auth.js');
 const verify = require('./wallet-verify.js');
@@ -163,7 +162,7 @@ async function walletLogin(req, res) {
 }
 
 /* ---------- API ---------- */
-const CLIENT_ACTIONS = new Set(['daily', 'pull', 'buyback', 'task', 'joinWhitelist']);
+const CLIENT_ACTIONS = new Set(['daily', 'pull', 'buyback', 'joinWhitelist']);
 
 async function handleAction(req, res) {
   const uid = currentUserId(req);
@@ -213,7 +212,7 @@ function serveStatic(req, res, pathname) {
 async function route(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK, xHandle: D.X_HANDLE });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK });
   if (p === '/api/auth/nonce' && req.method === 'POST') return issueNonce(res);
   if (p === '/api/auth/wallet' && req.method === 'POST') return walletLogin(req, res);
   if (p === '/api/auth/logout' && req.method === 'POST') {

@@ -12,8 +12,6 @@
   --gold-ink: #241a00;
   --hot: #ff4f7b;
   --ok: #3ee08f;
-  --x-bg: #f4f4f6;
-  --x-fg: #0b0b0d;
 
   --r-C: #a3a9d1;
   --r-R: #4fc3ff;
@@ -72,8 +70,6 @@ button { font: inherit; color: inherit; }
 .btn-gold { background: var(--gold); color: var(--gold-ink); border-color: transparent; box-shadow: 0 6px 0 #b8901c; }
 .btn-gold:hover { background: #ffd95e; border-color: transparent; }
 .btn-gold:active { box-shadow: 0 3px 0 #b8901c; transform: translateY(3px); }
-.btn-x { background: var(--x-bg); color: var(--x-fg); border-color: transparent; }
-.btn-x:hover { background: #fff; border-color: transparent; }
 .btn-ghost { background: transparent; }
 .btn-sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
 .btn-lg { min-height: 54px; padding: 0 26px; font-size: 17px; }

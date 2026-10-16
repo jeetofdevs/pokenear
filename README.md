@@ -26,9 +26,9 @@ Same model as Courtyard, Collector Crypt and Phygitals:
 - **Vault**: every pull is a unique item you can hold or sell back. Physical redemption is planned for launch.
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data).
 - **Card values** are estimates (rarity base × card spread × popularity, hand-set for headline cards). Connect a price feed before launch.
-- **Whitelist quests**: connect wallet, follow on X, post an invite on X, invite 3 friends, rip your first pack.
+- **Whitelist quests** (checked automatically): connect a wallet, invite 3 friends, rip your first pack.
 - **Invites**: `?ref=CODE` links. New players get +500, inviters get +500 per friend.
-- **Daily drop**, season countdown, share-to-X buttons, leaderboard by vault value.
+- **Daily drop**, season countdown, leaderboard by vault value.
 
 ## Run it
 
@@ -74,6 +74,5 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 
 - Pokémon card names, art and scans belong to Nintendo / The Pokémon Company. A public launch with a token needs a licence or a physical-card model.
 
-- X follow and post quests are self-confirmed. Verifying them needs the paid X API tiers.
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.
 - `$POKENEAR` balances are points. Connecting them to an on-chain token is a separate step.

@@ -157,17 +157,11 @@ test('daily reward has a cooldown', () => {
   assert.equal(s.balance, D.ECONOMY.startBonus + 2 * D.ECONOMY.dailyReward);
 });
 
-test('quests pay once', () => {
-  let s = connected();
-  s = engine.apply(s, { type: 'task', id: 'follow' }, ctx()).state;
-  assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /already/);
-});
-
 test('whitelist requires every quest', () => {
   let s = connected();
   assert.throws(() => engine.apply(s, { type: 'joinWhitelist' }, ctx()), /Finish every quest/);
-  s = engine.apply(s, { type: 'task', id: 'follow' }, ctx()).state;
-  s = engine.apply(s, { type: 'task', id: 'post' }, ctx()).state;
+  assert.equal(engine.whitelistStatus(s).total, 3);
+  assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /Unknown action/);
   for (let i = 0; i < 3; i++) s = engine.apply(s, { type: 'inviteJoined' }, ctx()).state;
   s = engine.apply(s, { type: 'pull', pack: 'starter' }, ctx()).state;
   assert.equal(engine.whitelistStatus(s).eligible, true);

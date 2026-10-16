@@ -18,7 +18,6 @@
     pack: D.PACKS[0].id,
     vaultSort: 'value',
     showAllOdds: false,
-    clicked: {},          // quests whose X link was opened, awaiting confirm
     opening: null,        // { pack, items, stage, revealed: {}, count, sold: {} }
     busy: false,
     leaderboard: null
@@ -39,7 +38,6 @@
   function tokenUsd(amount) { return usd(amount * D.TOKEN_USD); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
-  var X_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
   var COIN = '<span class="coin" aria-hidden="true">P</span>';
   var WALLET_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a3 3 0 0 1 3-3h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm14 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
   var CHAIN_BADGE = {
@@ -57,8 +55,6 @@
     var u = store.state.user;
     return u ? siteBase() + '?ref=' + u.refCode : siteBase();
   }
-  function intentPost(text) { return 'https://x.com/intent/tweet?text=' + encodeURIComponent(text); }
-  function intentFollow() { return 'https://x.com/intent/follow?screen_name=' + D.X_HANDLE; }
 
   function toast(msg, bad) {
     var box = $('#toasts');
@@ -284,7 +280,7 @@
 
   function footerHTML() {
     return '<footer><div class="wrap"><span>Sign in with a Solana or NEAR wallet. Prices in USD, paid in ' + D.TOKEN + ' (demo peg 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + '). Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
-      '<span>Follow <a href="https://x.com/' + D.X_HANDLE + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a></span></div></footer>';
+      '</div></footer>';
   }
 
   function step(n, title, body) {
@@ -404,25 +400,17 @@
     var st = store.state;
     var wl = engine.whitelistStatus(st);
     var link = inviteLink();
-    var postText = 'Ripping Pokémon cards on @' + D.X_HANDLE + ' with published odds and instant buyback, farming ' + D.TOKEN + ' for the Season 1 whitelist. Join with my link and get +' + fmt(E.referredBonus) + ' bonus: ' + link;
-    function quest(id, title, sub, action, reward) {
+    function quest(id, title, sub, action) {
       var done = wl.checks[id];
       return '<li class="quest' + (done ? ' done' : '') + '"><span class="tick" aria-hidden="true">✓</span><div><div class="q-title">' + title + '</div><div class="q-sub">' + sub + '</div></div><div class="q-act">' +
-        (reward ? '<span class="reward">' + COIN + '+' + reward + '</span>' : '') + (done ? '<span class="done-txt">Done</span>' : action) + '</div></li>';
+        (done ? '<span class="done-txt">Done</span>' : action) + '</div></li>';
     }
-    var followAct = ui.clicked.follow
-      ? '<button class="btn btn-gold btn-sm" data-act="task" data-id="follow">I followed</button>'
-      : '<a class="btn btn-x btn-sm" href="' + intentFollow() + '" target="_blank" rel="noopener" data-act="xlink" data-id="follow">' + X_SVG + 'Follow</a>';
-    var postAct = ui.clicked.post
-      ? '<button class="btn btn-gold btn-sm" data-act="task" data-id="post">I posted</button>'
-      : '<a class="btn btn-x btn-sm" href="' + intentPost(postText) + '" target="_blank" rel="noopener" data-act="xlink" data-id="post">' + X_SVG + 'Post</a>';
     var inviteAct = store.mode === 'local'
       ? '<button class="btn btn-sm" data-act="demoInvite" title="Demo only: no server is tracking real sign-ups">Simulate a friend joining</button>'
       : '<button class="btn btn-sm" data-act="copy">Copy link</button>';
     var spot = st.whitelist ? String(st.whitelist.spot).padStart(4, '0') : '';
     var pass = st.whitelist
-      ? '<div class="wl-pass"><div class="eyebrow" style="color:inherit">Season 1 Whitelist Pass</div><h3>You are on the list</h3><div class="spot">#' + spot + '</div><div class="num">' + esc(st.user.name) + ' · ' + fmt(st.earned) + ' ' + D.TOKEN + ' earned</div>' +
-        '<div><a class="btn btn-x" href="' + intentPost('I just locked whitelist spot #' + spot + ' for ' + D.TOKEN + ' on @' + D.X_HANDLE + '. Get yours before Season 1 closes: ' + link) + '" target="_blank" rel="noopener">' + X_SVG + 'Share my pass</a></div></div>'
+      ? '<div class="wl-pass"><div class="eyebrow" style="color:inherit">Season 1 Whitelist Pass</div><h3>You are on the list</h3><div class="spot">#' + spot + '</div><div class="num">' + esc(st.user.name) + ' · ' + A.CHAINS[st.user.chain].name + ' · ' + fmt(st.earned) + ' ' + D.TOKEN + ' earned</div></div>'
       : '<div class="panel" style="display:grid;gap:12px"><b>Claim your whitelist pass</b><p class="muted small">Finish all ' + wl.total + ' quests to get a numbered pass for the ' + D.TOKEN + ' launch.</p>' +
         '<button class="btn btn-gold btn-lg" data-act="joinWhitelist"' + (wl.eligible ? '' : ' disabled') + '>' + (wl.eligible ? 'Join the whitelist' : (wl.total - wl.done) + ' quests left') + '</button></div>';
 
@@ -430,20 +418,17 @@
       '<div class="wl-grid">' +
         '<section class="panel" style="display:grid;gap:18px">' +
           '<div class="wl-status"><div class="ring" style="--p:' + Math.round(wl.done / wl.total * 100) + '"><div><b class="num">' + wl.done + '/' + wl.total + '</b><small>quests</small></div></div>' +
-            '<div><h3 style="font-size:24px">' + (st.whitelist ? 'Whitelisted' : wl.eligible ? 'Ready to join' : 'Not whitelisted yet') + '</h3><p class="muted small" style="margin-top:4px">Quest rewards are paid in ' + D.TOKEN + ' the moment you complete them.</p></div></div>' +
+            '<div><h3 style="font-size:24px">' + (st.whitelist ? 'Whitelisted' : wl.eligible ? 'Ready to join' : 'Not whitelisted yet') + '</h3><p class="muted small" style="margin-top:4px">Quests are checked automatically as you play.</p></div></div>' +
           '<ul class="quests">' +
-            quest('connect', 'Connect your wallet', 'Signed in with ' + esc(st.user.wallet || A.CHAINS[st.user.chain].name) + ' · ' + esc(st.user.name) + ' on ' + A.CHAINS[st.user.chain].name, '', 0) +
-            quest('follow', 'Follow @' + D.X_HANDLE + ' on X', 'Opens X in a new tab, then confirm here.', followAct, 100) +
-            quest('post', 'Post your invite link on X', 'Shares a ready-made post with your code.', postAct, 150) +
-            quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + fmt(E.inviteReward) + ' per friend', inviteAct, 0) +
-            quest('pulls', 'Rip your first pack', 'Packs from ' + usd(D.PACKS[0].usd), '<a class="btn btn-sm" href="#packs">Open packs</a>', 0) +
+            quest('connect', 'Connect your wallet', 'Signed in with ' + esc(st.user.wallet || A.CHAINS[st.user.chain].name) + ' · ' + esc(st.user.name) + ' on ' + A.CHAINS[st.user.chain].name, '') +
+            quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + fmt(E.inviteReward) + ' ' + D.TOKEN + ' per friend', inviteAct) +
+            quest('pulls', 'Rip your first pack', 'Packs from ' + usd(D.PACKS[0].usd), '<a class="btn btn-sm" href="#packs">Open packs</a>') +
           '</ul>' +
-          (store.mode === 'local' ? '<p class="demo-note">Demo mode: X follows and posts are self-confirmed, and invites are simulated because there is no server tracking sign-ups. Run the Pokenear server for verified wallet sign-in and real referral tracking.</p>' : '') +
+          (store.mode === 'local' ? '<p class="demo-note">Demo mode: invites are simulated because there is no server tracking sign-ups. Run the Pokenear server for verified wallet sign-in and real referral tracking.</p>' : '') +
         '</section>' +
         '<div style="display:grid;gap:24px">' + pass +
-          '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on sign-up. You get ' + fmt(E.inviteReward) + ' for each one.</p></div>' +
-            '<div class="ref-box"><input id="ref-link" readonly value="' + esc(link) + '" aria-label="Your invite link"><button class="btn" data-act="copy">Copy</button></div>' +
-            '<a class="btn btn-x" href="' + intentPost(postText) + '" target="_blank" rel="noopener">' + X_SVG + 'Share invite on X</a>' +
+          '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' when they connect a wallet with your link. You get ' + fmt(E.inviteReward) + ' for each one.</p></div>' +
+            '<div class="ref-box"><input id="ref-link" readonly value="' + esc(link) + '" aria-label="Your invite link"><button class="btn btn-gold" data-act="copy">Copy link</button></div>' +
             '<div class="stats-row"><div class="stat"><b>' + st.invites + '</b><span>Friends joined</span></div><div class="stat"><b>' + fmt(st.invites * E.inviteReward) + '</b><span>' + D.TOKEN + ' from invites</span></div><div class="stat"><b class="num">' + esc(st.user.refCode) + '</b><span>Your code</span></div></div>' +
           '</section>' +
         '</div>' +
@@ -626,11 +611,9 @@
         var best = o.items.slice().sort(function (a, b) { return D.cardById[b.id].usd - D.cardById[a.id].usd; })[0];
         var bestCard = D.cardById[best.id];
         var unsold = o.items.filter(function (it) { return !o.sold[it.uid]; });
-        var shareText = 'Just pulled ' + bestCard.name + ' (' + bestCard.code + ', ' + usd(bestCard.usd) + ') from a ' + usd(p.usd) + ' ' + p.name + ' on @' + D.X_HANDLE + '. Join me: ' + inviteLink();
         summary = '<div class="summary"><span>Pulled <b>' + usd(Math.round(total * 100) / 100) + '</b> for <b>' + usd(spent) + '</b></span>' +
           '<span class="' + (total >= spent ? 'up' : 'down') + '">' + (total >= spent ? '+' : '−') + usd(Math.abs(Math.round((total - spent) * 100) / 100)) + '</span></div>';
-        actions = '<a class="btn btn-x" href="' + intentPost(shareText) + '" target="_blank" rel="noopener">' + X_SVG + 'Share pull</a>' +
-          (unsold.length > 1 ? '<button class="btn" data-act="sell-all-rip">Sell back all · ' + tokenUsd(unsold.reduce(function (n, it) { return n + D.cardById[it.id].buyback; }, 0)) + '</button>' : '') +
+        actions = (unsold.length > 1 ? '<button class="btn" data-act="sell-all-rip">Sell back all · ' + tokenUsd(unsold.reduce(function (n, it) { return n + D.cardById[it.id].buyback; }, 0)) + '</button>' : '') +
           '<button class="btn btn-gold" data-act="again"' + (store.state.balance < p.price * o.count ? ' disabled' : '') + '>Rip again · ' + usd(p.usd * o.count) + '</button>' +
           '<button class="btn" data-act="close-open">Keep in vault</button>';
       } else {
@@ -688,7 +671,7 @@
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
       case 'wallet-demo': signIn('solana', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
-      case 'logout': store.logout().then(function () { ui.clicked = {}; toast('Logged out.'); }); break;
+      case 'logout': store.logout().then(function () { toast('Logged out.'); }); break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
       case 'pack': ui.pack = id; ui.showAllOdds = false; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
@@ -700,8 +683,6 @@
       case 'sell': run({ type: 'buyback', uid: uid }, function (r) { toast('Sold back for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').'); }); break;
       case 'sell-rip': sellFromRip([uid]); break;
       case 'sell-all-rip': sellFromRip(ui.opening.items.filter(function (it) { return !ui.opening.sold[it.uid]; }).map(function (it) { return it.uid; })); break;
-      case 'xlink': ui.clicked[id] = true; setTimeout(render, 300); break;
-      case 'task': run({ type: 'task', id: id }, function (r) { toast('Quest complete. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
       case 'demoInvite': run({ type: 'inviteJoined' }, function (r) { toast('A friend joined. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
       case 'joinWhitelist': run({ type: 'joinWhitelist' }, function (r) { toast('Whitelisted! Your spot is #' + r.spot + '.'); }); break;
       case 'copy': copyLink(); break;
