@@ -79,6 +79,8 @@
     el.innerHTML = fix(PN.ui.packArtHTML(PN.data.packById[el.getAttribute('data-pack')]));
   });
   document.getElementById('cards').innerHTML = ['meg-188', 'mew-199', 'blk-171'].map(function (id) { return fix(PN.ui.cardHTML(PN.data.cardById[id])); }).join('');
+  // ?first: launch-day version (first post with the CA): the token is live, not "coming soon".
+  if (/[?&]first\b/.test(location.search)) document.querySelector('.badge').innerHTML = '<small>$POKENEAR</small>Live on NEAR';
   document.body.setAttribute('data-ready', '1');
 </script>
 </body>

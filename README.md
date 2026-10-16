@@ -93,6 +93,7 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 | `x-profile.png` | 400×400 X profile picture |
 | `x-header.png` | 1500×500 X header (source: `x-header.html`) |
 | `x-post.png` | 1600×900 X post image (source: `x-post.html`) |
+| `x-first-post.png` | Launch-day first post: same image with a "Live on NEAR" badge (`x-post.html?first`) |
 
 Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header` and `npm run build:x-post` (need Playwright + Chromium).
 
