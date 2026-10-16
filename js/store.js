@@ -152,6 +152,15 @@
       return store.dispatch({ type: 'buyback', uids: uids });
     },
 
+    // Admin page: only the interaction wallet itself (pokenearfun.near), live mode.
+    isAdmin: function () {
+      var u = store.state.user;
+      var account = (store.game && store.game.account) || root.PN.data.GAME_ACCOUNT;
+      return store.mode === 'live' && !!u && u.chain === 'near' && u.address === account;
+    },
+    adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
+    adminToken: function (ca) { return fetchJSONOrError('api/admin/token?ca=' + encodeURIComponent(ca)); },
+
     // Dev wallet (pokenearfun.near): rips without paying, recorded as dev rips.
     isDev: function () {
       var u = store.state.user;
@@ -199,6 +208,16 @@
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (b) {
         if (!res.ok || b.error) throw new Error(b.error || 'Server error (' + res.status + '). Try again.');
+        return b;
+      });
+    });
+  }
+
+  // GET that surfaces the server's error message.
+  function fetchJSONOrError(url) {
+    return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (b) {
+        if (!res.ok || b.error) throw new Error(b.error || 'Server error (' + res.status + ').');
         return b;
       });
     });

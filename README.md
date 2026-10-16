@@ -36,7 +36,16 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
 4. The browser re-derives the cards and shows the proof with NearBlocks links. `POST /api/rip/cancel` drops a rip only while nothing was paid for its seed.
 5. `POST /api/buyback` sends `payout(receiver, amount, ref_id)` to pokenearfun.near, signed with `PAYOUT_KEY` (a function-call key limited to `payout`, signed by `server/near-tx.js` without dependencies). Each `ref_id` pays once; cards leave the vault only after the payout succeeds.
 
-### Launch checklist (only the CA is needed)
+### Launch from the admin page (no terminal)
+
+Log in to the site with **pokenearfun.near** and open **Admin** (`#admin`, only shown to that wallet). Each step is one transaction your wallet approves; the server never holds the wallet's keys:
+
+1. **Deploy** the Pokenear contract (if your wallet cannot deploy from a website, the page shows the one CLI command instead).
+2. **CA and prices**: enter the `$POKENEAR` CA and the USD price of one token, check it, save. Packs open for players right away.
+3. **Register** pokenearfun.near with the token so it can receive payments.
+4. **Buyback key**: generated in your browser and shown once. Paste it into your hosting as `PAYOUT_KEY`, approve adding it (it can only call `payout`), redeploy.
+
+### Launch checklist with the CLI (alternative)
 
 ```bash
 node scripts/near-commands.js <TOKEN_CA> <USD_PER_TOKEN> [decimals]   # prints every command below with real values

@@ -148,6 +148,19 @@
     }).then(function (out) { return out ? { tx: out.tx, ref: pay.receiver } : new Promise(function () {}); });
   }
 
+  // Admin (interaction wallet): new payout key pair, and transactions signed by that wallet.
+  function adminKeyPair() {
+    return loadNear().then(function (x) { return x.near.newKeyPair(); });
+  }
+  function adminSend(user, tx) {
+    var walletId = null;
+    try { walletId = root.localStorage.getItem(NEAR_WALLET_KEY); } catch (e) { /* ignore */ }
+    if (!walletId) return Promise.reject(new Error('Reconnect your NEAR wallet first.'));
+    return loadNear().then(function (x) {
+      return x.near.send(walletId, { signerId: user.address, receiverId: tx.receiverId, actions: tx.actions });
+    });
+  }
+
   // Block explorer links for a proof.
   function explorer(proof, network) {
     if (!proof) return null;
@@ -176,6 +189,8 @@
     nearSigner: nearSigner,
     takeNearRedirect: takeNearRedirect,
     payRip: payRip,
+    adminKeyPair: adminKeyPair,
+    adminSend: adminSend,
     explorer: explorer,
     demoSigner: demoSigner
   };

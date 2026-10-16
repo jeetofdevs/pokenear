@@ -49,9 +49,9 @@ const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_A
 // $POKENEAR lives on NEAR, so sign-in is NEAR only.
 const CHAINS = ['near'];
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js']);
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/pokenear_game.wasm']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
 
 function loadDotEnv(file) {
   let text;
@@ -349,6 +349,77 @@ async function buybackRoute(req, res) {
   }
 }
 
+/* ---------- admin (interaction wallet only) ----------
+   Read-only status for the #admin page. Every change (deploy, CA, prices, keys) is a transaction
+   the interaction wallet signs in the browser; the server never holds that wallet's keys. */
+const EMPTY_CODE = '11111111111111111111111111111111';
+function adminOnly(req, res) {
+  const uid = currentUserId(req);
+  const st = uid && db.users[uid];
+  if (!st || st.user.chain !== 'near' || st.user.address !== GAME_ACCOUNT) {
+    send(res, 403, { error: 'Admin is only for ' + GAME_ACCOUNT + '.' });
+    return null;
+  }
+  return st;
+}
+const safe = (p) => p.catch((err) => ({ error: err.message }));
+
+async function adminStatus(req, res) {
+  if (!adminOnly(req, res)) return;
+  gameCache = { at: 0, ttl: 0, value: null };
+  const [account, config] = await Promise.all([
+    safe(withNearRpc((url) => onchain.nearAccount(url, GAME_ACCOUNT))),
+    safe(withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'get_config', {})))
+  ]);
+  const out = {
+    account: GAME_ACCOUNT, network: NEAR_NETWORK,
+    exists: Boolean(account && !account.error),
+    near: account && !account.error ? account.amount : null,
+    deployed: Boolean(account && !account.error && account.code_hash && account.code_hash !== EMPTY_CODE),
+    initialized: Boolean(config && !config.error),
+    config: config && !config.error ? config : null,
+    token: null,
+    payoutKey: { configured: Boolean(PAYOUT_KEY), publicKey: null, onChain: false }
+  };
+  const token = out.config && out.config.token;
+  if (token) {
+    const [meta, bal, storage] = await Promise.all([
+      safe(withNearRpc((url) => onchain.nearView(url, token, 'ft_metadata', {}))),
+      safe(withNearRpc((url) => onchain.nearView(url, token, 'ft_balance_of', { account_id: GAME_ACCOUNT }))),
+      safe(withNearRpc((url) => onchain.nearView(url, token, 'storage_balance_of', { account_id: GAME_ACCOUNT })))
+    ]);
+    out.token = {
+      id: token, symbol: meta && meta.symbol, decimals: meta && !meta.error ? Number(meta.decimals) : null,
+      balance: bal && !bal.error ? String(bal) : null, registered: Boolean(storage && !storage.error)
+    };
+  }
+  if (PAYOUT_KEY) {
+    try {
+      out.payoutKey.publicKey = nearTx.parseSecretKey(PAYOUT_KEY).publicKeyString;
+      const ak = await withNearRpc((url) => onchain.nearAccessKey(url, GAME_ACCOUNT, out.payoutKey.publicKey));
+      const fc = ak && ak.permission && ak.permission.FunctionCall;
+      out.payoutKey.onChain = Boolean(fc && fc.receiver_id === GAME_ACCOUNT && (fc.method_names || []).includes('payout'));
+    } catch (err) {
+      out.payoutKey.error = err.message;
+    }
+  }
+  send(res, 200, out);
+}
+
+// Token metadata for a CA typed on the admin page (decimals are needed to compute prices).
+async function adminToken(req, res, url) {
+  if (!adminOnly(req, res)) return;
+  const ca = String(url.searchParams.get('ca') || '').trim();
+  if (!auth.isNearAccount(ca)) return send(res, 400, { error: 'That is not a NEAR contract address.' });
+  try {
+    const meta = await withNearRpc((u) => onchain.nearView(u, ca, 'ft_metadata', {}));
+    if (!meta || meta.decimals == null) return send(res, 400, { error: 'No fungible token found at ' + ca + '.' });
+    send(res, 200, { id: ca, name: meta.name, symbol: meta.symbol, decimals: Number(meta.decimals), icon: meta.icon || null });
+  } catch (err) {
+    send(res, 400, { error: 'No fungible token found at ' + ca + '.' });
+  }
+}
+
 async function balanceRoute(req, res) {
   const uid = currentUserId(req);
   const st = uid && db.users[uid];
@@ -397,6 +468,8 @@ async function route(req, res) {
   if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, version: D.VERSION });
   if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
   if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
+  if (p === '/api/admin/status' && req.method === 'GET') return adminStatus(req, res);
+  if (p === '/api/admin/token' && req.method === 'GET') return adminToken(req, res, url);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
   if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
   if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');

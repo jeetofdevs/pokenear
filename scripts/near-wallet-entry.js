@@ -8,6 +8,7 @@ import { setupMeteorWallet } from '@near-wallet-selector/meteor-wallet';
 import { setupMyNearWallet } from '@near-wallet-selector/my-near-wallet';
 import { setupSender } from '@near-wallet-selector/sender';
 import { setupIntearWallet } from '@near-wallet-selector/intear-wallet';
+import { KeyPairEd25519, PublicKey } from '@near-js/crypto';
 
 if (!globalThis.Buffer) globalThis.Buffer = Buffer;
 
@@ -60,4 +61,32 @@ async function pay(walletId, params) {
   return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };
 }
 
-globalThis.PNNear = { init, signIn, pay };
+// Admin (interaction wallet only): a fresh payout key, generated in this browser.
+function newKeyPair() {
+  const kp = KeyPairEd25519.fromRandom();
+  return { secret: kp.toString(), publicKey: kp.getPublicKey().toString() };
+}
+
+// Admin: sign and send one transaction from the interaction wallet. actions:
+//   { type: 'call', method, args, gas, deposit }      deposit/gas as strings (yocto / gas units)
+//   { type: 'addKey', publicKey, receiverId, methods, allowance }
+//   { type: 'deploy', code }                           code: Uint8Array of the contract WASM
+async function send(walletId, params) {
+  if (!selector) await init();
+  const wallet = await selector.wallet(walletId);
+  const actions = buildActions(params.actions);
+  const outcome = await wallet.signAndSendTransaction({ signerId: params.signerId, receiverId: params.receiverId, actions });
+  if (!outcome) return null;
+  return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };
+}
+
+function buildActions(list) {
+  return list.map((a) => {
+    if (a.type === 'call') return actionCreators.functionCall(a.method, a.args || {}, BigInt(a.gas || '30000000000000'), BigInt(a.deposit || '0'));
+    if (a.type === 'addKey') return actionCreators.addKey(PublicKey.from(a.publicKey), actionCreators.functionCallAccessKey(a.receiverId, a.methods, BigInt(a.allowance)));
+    if (a.type === 'deploy') return actionCreators.deployContract(a.code);
+    throw new Error('Unknown action ' + a.type);
+  });
+}
+
+globalThis.PNNear = { init, signIn, pay, newKeyPair, send, buildActions };

@@ -11,7 +11,7 @@
   var doc = root.document;
   var CFG = root.PN_CONFIG || {};
 
-  var ROUTES = ['packs', 'vault', 'ranks', 'docs'];
+  var ROUTES = ['packs', 'vault', 'ranks', 'docs', 'admin'];
   var ui = {
     route: 'packs',
     pack: D.PACKS[0].id,
@@ -247,7 +247,7 @@
     var st = store.state;
     var u = st.user;
     var nav = u ? '<nav class="nav" aria-label="Main">' +
-      [['packs', 'Packs'], ['vault', 'Vault'], ['ranks', 'Ranks'], ['docs', 'Docs']].map(function (n) {
+      [['packs', 'Packs'], ['vault', 'Vault'], ['ranks', 'Ranks'], ['docs', 'Docs']].concat(store.isAdmin() ? [['admin', 'Admin']] : []).map(function (n) {
         return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
       }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="#docs"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
     var right = u
@@ -516,12 +516,191 @@
       '<div class="docs">' + toc + '<div class="doc-body">' + secs.join('') + '</div></div>';
   }
 
+  /* ---------- admin (interaction wallet only) ----------
+     Every change is a transaction pokenearfun.near approves in its own wallet; the payout key
+     is generated in this browser and shown once so it can be pasted into the hosting settings. */
+  var ADMIN_KEY_STORE = 'pokenear:admin-new-key';
+  var YOCTO = '000000000000000000000000';
+  var STORAGE_DEPOSIT = '12500000000000000000000'; // 0.0125 NEAR in yoctoNEAR
+  function adminState() {
+    if (!ui.admin) {
+      var saved = null;
+      try { saved = JSON.parse(root.sessionStorage.getItem(ADMIN_KEY_STORE) || 'null'); } catch (e) { saved = null; }
+      ui.admin = { status: null, loading: false, error: null, token: null, ca: '', usd: '', prices: null, newKey: saved, busy: null };
+    }
+    return ui.admin;
+  }
+  function loadAdmin() {
+    var a = adminState();
+    a.loading = true; a.error = null; render();
+    return store.adminStatus().then(function (st) {
+      a.status = st; a.loading = false;
+      if (!a.ca && st.config && st.config.token) a.ca = st.config.token;
+      render();
+    }, function (e) { a.loading = false; a.error = e.message; render(); });
+  }
+  function adminTx(label, tx) {
+    var a = adminState();
+    if (a.busy) return;
+    a.busy = label; render();
+    return W.adminSend(store.state.user, tx).then(function (out) {
+      a.busy = null;
+      toast(label + ': sent' + (out && out.tx ? ' (' + out.tx.slice(0, 8) + '…)' : '') + '.');
+      setTimeout(loadAdmin, 2500);
+      return out;
+    }, function (e) {
+      a.busy = null; render();
+      var msg = e && (e.message || String(e)) || '';
+      toast(/reject|denied|cancel|closed/i.test(msg) ? label + ' was cancelled in the wallet.' : label + ' failed: ' + msg, true);
+    });
+  }
+  function adminStep(n, done, title, body) {
+    return '<section class="panel admin-step' + (done ? ' done' : '') + '"><div class="admin-head"><span class="admin-n">' + (done ? '✓' : n) + '</span><h3>' + title + '</h3>' +
+      '<span class="admin-pill ' + (done ? 'ok' : 'todo') + '">' + (done ? 'Done' : 'To do') + '</span></div>' + body + '</section>';
+  }
+  function adminHTML() {
+    if (!store.isAdmin()) return '<section class="panel">The admin page is only for ' + esc(D.GAME_ACCOUNT) + '.</section>';
+    var a = adminState();
+    if (!a.status && !a.loading && !a.error) setTimeout(loadAdmin, 0);
+    var st = a.status;
+    var head = '<section class="section-head"><div><div class="eyebrow">Interaction wallet</div><h2 class="page-title">Admin</h2></div>' +
+      '<button class="btn btn-sm" data-act="admin-refresh"' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'Checking…' : 'Refresh') + '</button></section>';
+    if (a.error) return head + '<section class="panel err">' + esc(a.error) + '</section>';
+    if (!st) return head + '<section class="panel muted">Reading ' + esc(D.GAME_ACCOUNT) + ' from NEAR…</section>';
+    var busy = function (label) { return a.busy === label ? ' disabled' : ''; };
+    var GA = '<code>' + esc(st.account) + '</code>';
+    var summary = '<section class="panel admin-summary">' +
+      '<div class="stat"><b>' + (st.near ? fmtToken(st.near, 24) : '—') + '</b><span>NEAR on ' + esc(st.account) + '</span></div>' +
+      '<div class="stat"><b>' + (st.token && st.token.balance != null ? fmtToken(st.token.balance, st.token.decimals) : '—') + '</b><span>' + D.TOKEN + ' for buybacks</span></div>' +
+      '<div class="stat"><b>' + (st.config ? st.config.prices.length : 0) + '/' + D.PACKS.length + '</b><span>Pack prices on chain</span></div></section>';
+
+    // 1. Contract
+    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","token":null,"prices":null}\'';
+    var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account),
+      st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
+        : (st.deployed
+          ? '<p class="small">Code is deployed but not initialized.</p><button class="btn btn-gold" data-act="admin-init"' + busy('Initialize') + '>Initialize contract</button>'
+          : '<p class="small">Deploys the Pokenear contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
+            '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
+            '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/pokenear_game.wasm" download>pokenear_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
+
+    // 2. CA + prices
+    var cur = st.config && st.config.token;
+    var priceRows = a.prices && a.token ? '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">' + esc(a.token.symbol || 'Token') + ' per pack</th></tr></thead><tbody>' +
+      D.PACKS.map(function (p, i) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + usd(p.usd) + '</td><td class="num">' + fmtToken(a.prices[i], a.token.decimals) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
+    var s2 = adminStep(2, Boolean(cur && st.config.prices.length >= D.PACKS.length), D.TOKEN + ' contract address and prices',
+      (cur ? '<p class="small">Current CA: <code>' + esc(cur) + '</code>' + (st.token ? ' (' + esc(st.token.symbol || '?') + ', ' + st.token.decimals + ' decimals)' : '') + '</p>' : '') +
+      '<div class="admin-form"><label>CA (token contract)<input id="admin-ca" value="' + esc(a.ca) + '" placeholder="pokenear.tkn.near" autocomplete="off"></label>' +
+      '<label>USD price of 1 ' + D.TOKEN + '<input id="admin-usd" value="' + esc(a.usd) + '" placeholder="0.01" inputmode="decimal" autocomplete="off"></label>' +
+      '<button class="btn" data-act="admin-check">Check token</button></div>' + priceRows +
+      (a.prices ? '<button class="btn btn-gold" data-act="admin-save-token"' + (st.initialized ? '' : ' disabled title="Deploy the contract first"') + busy('Save CA and prices') + '>Save CA and prices on chain</button>' : '') +
+      '<p class="muted small">Packs open for players as soon as this is saved. Change prices again any time the token price moves.</p>');
+
+    // 3. Register with the token
+    var s3 = adminStep(3, Boolean(st.token && st.token.registered), 'Register ' + esc(st.account) + ' with the token',
+      st.token ? (st.token.registered ? '<p class="muted small">' + esc(st.account) + ' can receive ' + esc(st.token.symbol || D.TOKEN) + '.</p>'
+        : '<p class="small">Lets ' + GA + ' receive ' + D.TOKEN + ' payments (0.0125 NEAR storage deposit, mostly refunded if already registered).</p><button class="btn btn-gold" data-act="admin-register"' + busy('Register') + '>Register with wallet</button>')
+        : '<p class="muted small">Save the CA first.</p>');
+
+    // 4. Buyback key
+    var pk = st.payoutKey;
+    var keyDone = pk.configured && pk.onChain;
+    var nk = a.newKey;
+    var s4body;
+    if (keyDone) {
+      s4body = '<p class="muted small">Buyback is on. Key ' + esc(pk.publicKey) + ' can only call payout() on ' + esc(st.account) + '.</p>';
+    } else if (pk.configured && !pk.onChain) {
+      s4body = '<p class="small">The server has a PAYOUT_KEY (' + esc(pk.publicKey || '?') + ') but it is not on ' + GA + ' yet.</p>' +
+        '<button class="btn btn-gold" data-act="admin-addkey" data-key="' + esc(pk.publicKey || '') + '"' + busy('Add buyback key') + '>Add this key with wallet</button>';
+    } else if (nk) {
+      s4body = '<p class="small"><b>1.</b> Copy this secret key now and add it to your hosting as the environment variable <code>PAYOUT_KEY</code>. It is shown only in this browser tab and is never sent anywhere.</p>' +
+        '<div class="ref-row"><input id="admin-secret" readonly value="' + esc(nk.secret) + '" aria-label="Payout secret key"><button class="btn" data-act="admin-copy">Copy</button></div>' +
+        '<p class="small"><b>2.</b> Allow it on ' + GA + ' (it can only call payout, with at most 1 NEAR of gas):</p>' +
+        '<button class="btn btn-gold" data-act="admin-addkey" data-key="' + esc(nk.publicKey) + '"' + busy('Add buyback key') + '>Add key with wallet</button>' +
+        '<p class="small"><b>3.</b> Redeploy the server, then press Refresh. When the server sees the key this step turns green.</p>' +
+        '<button class="btn btn-ghost btn-sm" data-act="admin-forget">I saved it, hide the secret</button>';
+    } else {
+      s4body = '<p class="small">Buybacks are paid by ' + GA + ' through a key that can only call payout(). Generate it here; it is created in this browser.</p>' +
+        '<button class="btn btn-gold" data-act="admin-genkey">Generate buyback key</button>';
+    }
+    var s4 = adminStep(4, keyDone, 'Buyback key (PAYOUT_KEY)', s4body);
+    return head + summary + '<div class="admin-steps">' + s1 + s2 + s3 + s4 + '</div>';
+  }
+  function adminCheckToken() {
+    var a = adminState();
+    a.ca = ($('#admin-ca') || {}).value ? $('#admin-ca').value.trim() : '';
+    a.usd = ($('#admin-usd') || {}).value ? $('#admin-usd').value.trim() : '';
+    a.token = null; a.prices = null;
+    if (!a.ca) return toast('Enter the CA.', true);
+    store.adminToken(a.ca).then(function (t) {
+      a.token = t;
+      a.prices = D.packPricesRaw(a.usd, t.decimals);
+      if (!a.prices) toast('Enter the USD price of 1 ' + D.TOKEN + ', for example 0.01.', true);
+      render();
+    }, function (e) { toast(e.message, true); render(); });
+  }
+  function adminAction(act, el) {
+    var a = adminState();
+    var st = a.status;
+    var GA = st && st.account;
+    switch (act) {
+      case 'admin-refresh': loadAdmin(); break;
+      case 'admin-check': adminCheckToken(); break;
+      case 'admin-deploy':
+        a.busy = 'Deploy'; render();
+        fetch('contracts/near-rng/res/pokenear_game.wasm').then(function (r) {
+          if (!r.ok) throw new Error('Could not load the contract file.');
+          return r.arrayBuffer();
+        }).then(function (buf) {
+          a.busy = null;
+          return adminTx('Deploy', { receiverId: GA, actions: [
+            { type: 'deploy', code: new Uint8Array(buf) },
+            { type: 'call', method: 'new', args: { owner: GA, token: a.token ? a.token.id : null, prices: a.prices || null }, gas: '100000000000000' }
+          ] });
+        }).catch(function (e) { a.busy = null; render(); toast(e.message, true); });
+        break;
+      case 'admin-init':
+        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, token: null, prices: null } }] });
+        break;
+      case 'admin-save-token':
+        if (!a.token || !a.prices) return;
+        adminTx('Save CA and prices', { receiverId: GA, actions: [
+          { type: 'call', method: 'set_token', args: { token: a.token.id } },
+          { type: 'call', method: 'set_prices', args: { prices: a.prices } }
+        ] });
+        break;
+      case 'admin-register':
+        adminTx('Register', { receiverId: st.token.id, actions: [{ type: 'call', method: 'storage_deposit', args: { account_id: GA, registration_only: true }, deposit: STORAGE_DEPOSIT }] });
+        break;
+      case 'admin-genkey':
+        W.adminKeyPair().then(function (k) {
+          a.newKey = k;
+          try { root.sessionStorage.setItem(ADMIN_KEY_STORE, JSON.stringify(k)); } catch (e) { /* tab memory only */ }
+          render();
+        }, function (e) { toast(e.message, true); });
+        break;
+      case 'admin-copy':
+        var inp = $('#admin-secret');
+        try { navigator.clipboard.writeText(inp.value).then(function () { toast('Secret key copied. Paste it as PAYOUT_KEY in your hosting.'); }); } catch (e) { inp.select(); toast('Press Ctrl+C or Cmd+C to copy.'); }
+        break;
+      case 'admin-addkey':
+        adminTx('Add buyback key', { receiverId: GA, actions: [{ type: 'addKey', publicKey: el.getAttribute('data-key'), receiverId: GA, methods: ['payout'], allowance: '1' + YOCTO }] });
+        break;
+      case 'admin-forget':
+        a.newKey = null;
+        try { root.sessionStorage.removeItem(ADMIN_KEY_STORE); } catch (e) { /* ignore */ }
+        render();
+        break;
+    }
+  }
+
   /* ---------- main render ---------- */
   function render() {
     var st = store.state;
     var body;
     if (ui.route === 'docs') body = docsHTML();
     else if (!st.user) body = landingHTML();
+    else if (ui.route === 'admin') body = adminHTML();
     else if (ui.route === 'vault') body = vaultHTML();
     else if (ui.route === 'ranks') body = ranksHTML();
     else body = packsHTML();
@@ -869,6 +1048,7 @@
     var act = el.getAttribute('data-act');
     var id = el.getAttribute('data-id');
     var uid = Number(el.getAttribute('data-uid'));
+    if (act.indexOf('admin-') === 0) { adminAction(act, el); return; }
     switch (act) {
       case 'connect': openConnect(); break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;

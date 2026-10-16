@@ -10,13 +10,26 @@
   'use strict';
 
   var TOKEN = '$POKENEAR';
-  var VERSION = '20261017.5'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261017.6'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
   // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
   // contract at launch; the site never shows a fixed token amount.
   var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
+
+  // On-chain pack prices for set_prices: each pack's USD price converted to the token's smallest
+  // unit, given the USD price of one token (decimal string) and the token's decimals. Exact BigInt math.
+  function packPricesRaw(usdPerToken, decimals) {
+    var m = /^(\d+)(?:\.(\d+))?$/.exec(String(usdPerToken).trim());
+    if (!m || !/^\d+$/.test(String(decimals))) return null;
+    var frac = m[2] || '';
+    var units = BigInt(m[1] + frac);
+    if (units === BigInt(0)) return null;
+    var scale = BigInt(10) ** BigInt(frac.length);
+    var one = BigInt(10) ** BigInt(decimals);
+    return PACKS.map(function (p) { return (BigInt(Math.round(p.usd * 100)) * scale * one / (BigInt(100) * units)).toString(); });
+  }
 
   var EV_RATIO = 0.98;      // expected card value / pack price
   var BUYBACK_RATE = 0.96;  // instant sell-back as a share of card value
@@ -155,6 +168,7 @@
   var data = {
     TOKEN: TOKEN,
     GAME_ACCOUNT: GAME_ACCOUNT,
+    packPricesRaw: packPricesRaw,
     VERSION: VERSION,
     EV_RATIO: EV_RATIO,
     X_HANDLE: X_HANDLE,

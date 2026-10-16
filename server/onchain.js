@@ -109,6 +109,26 @@ async function solanaRandomness(rpcUrl, seedHex) {
 }
 
 // -> { status: 'missing' } | { status: 'fulfilled', randomness, account, blockHeight }
+// NEAR account state ({ amount, code_hash, ... }) or null if the account does not exist.
+async function nearAccount(rpcUrl, accountId) {
+  try {
+    return await rpc(rpcUrl, 'query', { request_type: 'view_account', finality: 'final', account_id: accountId });
+  } catch (err) {
+    if (/UNKNOWN_ACCOUNT|does not exist/i.test(err.message)) return null;
+    throw err;
+  }
+}
+
+// An access key of an account, or null if it is not on the account.
+async function nearAccessKey(rpcUrl, accountId, publicKey) {
+  try {
+    return await rpc(rpcUrl, 'query', { request_type: 'view_access_key', finality: 'final', account_id: accountId, public_key: publicKey });
+  } catch (err) {
+    if (/UNKNOWN_ACCESS_KEY|does not exist|not found/i.test(err.message)) return null;
+    throw err;
+  }
+}
+
 // Call a NEAR view method and parse its JSON result.
 async function nearView(rpcUrl, contractId, method, args) {
   const result = await rpc(rpcUrl, 'query', {
@@ -130,4 +150,4 @@ async function nearDraw(rpcUrl, contractId, seedHex) {
   };
 }
 
-module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearView, nearDraw };
+module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearView, nearDraw, nearAccount, nearAccessKey };

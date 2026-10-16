@@ -11,11 +11,8 @@ if (!ca || !usdPerToken) {
 }
 const decimals = Number(decimalsArg || 18);
 const account = accountArg || D.GAME_ACCOUNT;
-// tokens per pack = usd / usdPerToken, in the smallest unit, with exact decimal math.
-const [ip, fp = ''] = String(usdPerToken).split('.');
-const priceScale = 10n ** BigInt(fp.length);
-const priceUnits = BigInt(ip + fp); // usdPerToken * priceScale
-const prices = D.PACKS.map((p) => (BigInt(Math.round(p.usd * 100)) * priceScale * 10n ** BigInt(decimals) / (100n * priceUnits)).toString());
+const prices = D.packPricesRaw(usdPerToken, decimals);
+if (!prices) { console.error('USD_PER_TOKEN must be a positive decimal number'); process.exit(1); }
 const args = (o) => "'" + JSON.stringify(o) + "'";
 console.log(`# Packs: ${D.PACKS.map((p, i) => `${p.name} $${p.usd} = ${prices[i]} (raw)`).join(', ')}
 # 1. Deploy the Pokenear contract on the interaction wallet (once):

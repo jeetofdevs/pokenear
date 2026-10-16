@@ -68,7 +68,8 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
         const ok = nearKeys[params.account_id] === params.public_key;
         return reply(ok ? { result: { permission: 'FullAccess', nonce: 1, block_hash: blockHash } } : { error: { cause: { name: 'UNKNOWN_ACCESS_KEY' } } });
       }
-      const args = JSON.parse(Buffer.from(params.args_base64, 'base64').toString() || '{}');
+      if (params.request_type === 'view_account') return reply(params.account_id === GAME ? { result: { amount: '5000000000000000000000000', code_hash: 'Gc8dD7NQnRZ5cRdxqd7tq9RYr8EpTkL8BF8D1nQDvYJ5' } } : { error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
+      const args = JSON.parse(Buffer.from(params.args_base64 || '', 'base64').toString() || '{}');
       if (params.account_id === GAME) {
         if (!contract) return reply({ error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
         if (params.method_name === 'get_config') return view(contract);
@@ -78,6 +79,7 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
       if (params.account_id === TOKEN) {
         if (params.method_name === 'ft_metadata') return view({ symbol: 'POKENEAR', decimals: 18 });
         if (params.method_name === 'ft_balance_of') return view(String(123n * UNIT + 45n * UNIT / 100n));
+        if (params.method_name === 'storage_balance_of') return view({ total: '1250000000000000000000', available: '0' });
       }
       reply({ error: { cause: { name: 'UNKNOWN' } } });
     });
@@ -203,6 +205,22 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
     assert.equal(devSell.status, 200);
     assert.equal(devSell.body.result.payout.dev, true);
     assert.equal(sent.length, 1); // no payout transaction for the dev wallet
+    // Admin endpoints answer only the interaction wallet.
+    assert.equal((await get('/api/admin/status', bob)).status, 403);
+    const adm = await get('/api/admin/status', dev);
+    assert.equal(adm.status, 200, JSON.stringify(adm.body));
+    assert.equal(adm.body.account, GAME);
+    assert.equal(adm.body.initialized, true);
+    assert.equal(adm.body.token.id, TOKEN);
+    assert.equal(adm.body.token.decimals, 18);
+    assert.equal(adm.body.payoutKey.configured, true);
+    assert.equal(adm.body.payoutKey.publicKey, payoutPub);
+    assert.equal(adm.body.payoutKey.onChain, false); // the mock reports it as a FunctionCall key without payout
+    const tok = await get('/api/admin/token?ca=' + TOKEN, dev);
+    assert.deepEqual([tok.status, tok.body.decimals, tok.body.symbol], [200, 18, 'POKENEAR']);
+    assert.equal((await get('/api/admin/token?ca=Not%20Valid', dev)).status, 400);
+    assert.equal((await get('/api/admin/token?ca=' + TOKEN, bob)).status, 403);
+
     // The dev wallet still rips while the contract is unreachable.
     contract = null;
     srv.resetGameCache();
