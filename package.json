@@ -1,7 +1,7 @@
 {
   "name": "pokenear",
   "version": "1.0.0",
-  "description": "Pokenear: real Pok\u00e9mon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
+  "description": "Pokenear: real Pokémon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -27,6 +27,7 @@
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
     "@near-wallet-selector/sender": "^10.1.4",
     "@orao-network/solana-vrf": "^0.8.0",
+    "@solana/web3.js": "^1.98.4",
     "@tcgdata/tcgdex-offline": "^0.0.4",
     "buffer": "^6.0.3",
     "esbuild": "^0.25.9",
@@ -34,8 +35,5 @@
     "pokeapi-sprites": "^2.0.4",
     "sharp": "^0.33.5",
     "util": "^0.12.5"
-  },
-  "dependencies": {
-    "@solana/web3.js": "^1.98.4"
   }
 }

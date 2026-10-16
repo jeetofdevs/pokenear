@@ -4,15 +4,67 @@
      of the ORAO program. Layout (Anchor): 8-byte discriminator | enum tag (0 pending, 1 fulfilled)
      | client pubkey (32) | seed (32) | fulfilled: randomness (64).
    - NEAR: the Pokenear RNG contract (contracts/near-rng), view method get_draw({ seed }). */
-const { PublicKey } = require('@solana/web3.js');
+const crypto = require('node:crypto');
+const auth = require('../js/auth.js');
 
 const ORAO_PROGRAM = 'VRFzZoJdhFWL8rkvu87LpKM3RbcVezpMEc6X5GVDr7y';
 const ORAO_SEED_PREFIX = Buffer.from('orao-vrf-randomness-request');
 const DISC_V2 = Buffer.from([139, 239, 184, 215, 227, 86, 191, 226]);
 const DISC_V1 = Buffer.from([188, 96, 216, 248, 93, 94, 49, 112]);
 
+/* Solana program-derived addresses without @solana/web3.js (keeps the server dependency-free).
+   PDA = sha256(seeds || bump || program id || "ProgramDerivedAddress") for the highest bump
+   (255 down) whose hash is NOT a valid ed25519 point. */
+const P = 2n ** 255n - 19n;
+const D = ((-121665n * modPow(121666n, P - 2n)) % P + P) % P;
+const SQRT_M1 = modPow(2n, (P - 1n) / 4n);
+
+function modPow(b, e) {
+  let r = 1n;
+  b %= P;
+  if (b < 0n) b += P;
+  while (e > 0n) {
+    if (e & 1n) r = (r * b) % P;
+    b = (b * b) % P;
+    e >>= 1n;
+  }
+  return r;
+}
+
+// Same rule as RFC 8032 point decoding (what web3.js PublicKey.isOnCurve uses).
+function isOnCurve(bytes) {
+  const b = Buffer.from(bytes);
+  const sign = b[31] >> 7;
+  b[31] &= 0x7f;
+  const y = BigInt('0x' + Buffer.from(b).reverse().toString('hex'));
+  if (y >= P) return false;
+  const y2 = (y * y) % P;
+  const u = (y2 - 1n + P) % P;
+  const v = (D * y2 + 1n) % P;
+  const v3 = (v * v % P) * v % P;
+  const v7 = (v3 * v3 % P) * v % P;
+  let x = (u * v3 % P) * modPow(u * v7 % P, (P - 5n) / 8n) % P;
+  const vx2 = (v * x % P) * x % P;
+  if (vx2 === u) { /* root found */ }
+  else if (vx2 === (P - u) % P) x = (x * SQRT_M1) % P;
+  else return false;
+  if (x === 0n && sign === 1) return false;
+  return true;
+}
+
+function findProgramAddress(seeds, programId) {
+  const program = Buffer.from(auth.base58Decode(programId));
+  for (let bump = 255; bump >= 0; bump--) {
+    const h = crypto.createHash('sha256')
+      .update(Buffer.concat([...seeds, Buffer.from([bump]), program, Buffer.from('ProgramDerivedAddress')]))
+      .digest();
+    if (!isOnCurve(h)) return auth.base58Encode(h);
+  }
+  throw new Error('No program address found');
+}
+
 function oraoRandomnessAddress(seedHex) {
-  return PublicKey.findProgramAddressSync([ORAO_SEED_PREFIX, Buffer.from(seedHex, 'hex')], new PublicKey(ORAO_PROGRAM))[0].toBase58();
+  return findProgramAddress([ORAO_SEED_PREFIX, Buffer.from(seedHex, 'hex')], ORAO_PROGRAM);
 }
 
 async function rpc(url, method, params) {
@@ -38,7 +90,7 @@ async function solanaRandomness(rpcUrl, seedHex) {
   const disc = data.subarray(0, 8);
   if (disc.equals(DISC_V2)) {
     const tag = data[8];
-    const client = new PublicKey(data.subarray(9, 41)).toBase58();
+    const client = auth.base58Encode(data.subarray(9, 41));
     const seed = data.subarray(41, 73).toString('hex');
     if (seed !== seedHex) throw new Error('Randomness account seed does not match the rip.');
     if (tag === 0) return { status: 'pending', account, client };
@@ -67,4 +119,4 @@ async function nearDraw(rpcUrl, contractId, seedHex) {
   return { status: 'fulfilled', randomness: draw.randomness, account: draw.account, blockHeight: draw.block_height };
 }
 
-module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, oraoRandomnessAddress, solanaRandomness, nearDraw };
+module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearDraw };

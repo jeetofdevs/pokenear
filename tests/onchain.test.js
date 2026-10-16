@@ -4,17 +4,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { BorshAccountsCoder } = require('@coral-xyz/anchor');
-const { PublicKey, Keypair } = require('@solana/web3.js');
 const idl = require('@orao-network/solana-vrf/dist/types/orao_vrf.json');
-const sdk = require('@orao-network/solana-vrf');
 const onchain = require('../server/onchain.js');
+
+// Reference libraries (dev only). @solana/web3.js cannot load on Node 18 (its uuid dependency
+// is ESM-only), so the comparisons are skipped there; the server itself does not use them.
+let BorshAccountsCoder, PublicKey, Keypair, sdk, skip = false;
+try {
+  ({ BorshAccountsCoder } = require('@coral-xyz/anchor'));
+  ({ PublicKey, Keypair } = require('@solana/web3.js'));
+  sdk = require('@orao-network/solana-vrf');
+} catch (e) {
+  skip = 'reference Solana libraries need Node 20+: ' + e.code;
+}
 
 function listen(srv) {
   return new Promise((resolve) => srv.listen(0, '127.0.0.1', () => resolve(srv.address().port)));
 }
 
-test('ORAO program id, PDA and discriminators match the SDK', () => {
+test('ORAO program id, PDA and discriminators match the SDK', { skip }, () => {
   assert.equal(onchain.ORAO_PROGRAM, sdk.PROGRAM_ADDRESS);
   const seed = crypto.randomBytes(32);
   assert.equal(onchain.oraoRandomnessAddress(seed.toString('hex')), sdk.randomnessAccountAddress(seed).toBase58());
@@ -22,7 +30,22 @@ test('ORAO program id, PDA and discriminators match the SDK', () => {
   assert.deepEqual([...onchain.DISC_V1], idl.accounts.find((a) => a.name === 'Randomness').discriminator);
 });
 
-test('decoder reads pending and fulfilled ORAO accounts encoded by Anchor', async () => {
+test('dependency-free PDA derivation and curve check match @solana/web3.js', { skip }, () => {
+  for (let i = 0; i < 300; i++) {
+    const seed = crypto.randomBytes(32);
+    assert.equal(onchain.oraoRandomnessAddress(seed.toString('hex')), sdk.randomnessAccountAddress(seed).toBase58());
+  }
+  for (let i = 0; i < 2000; i++) {
+    const b = crypto.randomBytes(32);
+    assert.equal(onchain.isOnCurve(b), PublicKey.isOnCurve(b), b.toString('hex'));
+  }
+  for (let i = 0; i < 50; i++) {
+    const k = Keypair.generate().publicKey.toBytes();
+    assert.equal(onchain.isOnCurve(k), true);
+  }
+});
+
+test('decoder reads pending and fulfilled ORAO accounts encoded by Anchor', { skip }, async () => {
   const coder = new BorshAccountsCoder(idl);
   const seed = crypto.randomBytes(32);
   const seedHex = seed.toString('hex');
