@@ -11,9 +11,13 @@
     "start": "node server/server.js",
     "test": "node --test tests/engine.test.js tests/server.test.js",
     "build:cards": "node scripts/build-cards.js",
-    "build:near": "esbuild scripts/near-wallet-entry.js --bundle --minify --format=iife --platform=browser --target=es2019 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/near-wallet.js"
+    "build:near": "esbuild scripts/near-wallet-entry.js --bundle --minify --format=iife --platform=browser --target=es2019 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/near-wallet.js",
+    "build:brand": "node scripts/build-brand.js",
+    "build:x-header": "node scripts/render-x-header.js"
   },
   "devDependencies": {
+    "@fontsource/figtree": "^5.0.20",
+    "@fontsource/lilita-one": "^5.0.8",
     "@near-wallet-selector/core": "^10.1.4",
     "@near-wallet-selector/here-wallet": "^10.1.4",
     "@near-wallet-selector/hot-wallet": "^10.1.4",
@@ -24,6 +28,7 @@
     "@tcgdata/tcgdex-offline": "^0.0.4",
     "buffer": "^6.0.3",
     "esbuild": "^0.25.9",
+    "opentype.js": "^1.3.4",
     "pokeapi-sprites": "^2.0.4",
     "sharp": "^0.33.5",
     "util": "^0.12.5"

@@ -136,6 +136,8 @@ test('wallet sign-in, referral and game API', async () => {
     assert.equal((await fetch(`${base}/vendor/near-wallet.js`)).status, 200);
     for (const f of ['js/auth.js', 'js/wallets.js', 'js/cards.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js', 'css/style.css']) assert.equal((await fetch(`${base}/${f}`)).status, 200, f);
     assert.equal((await fetch(`${base}/`)).status, 200);
+    assert.equal((await fetch(`${base}/assets/brand/pokenear-icon.svg`)).headers.get('content-type'), 'image/svg+xml');
+    assert.equal((await fetch(`${base}/assets/brand/x-header.html`)).status, 404);
   } finally {
     server.close();
     rpc.close();

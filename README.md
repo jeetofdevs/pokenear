@@ -53,6 +53,19 @@ To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `in
 
 Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle).
 
+## Brand
+
+`assets/brand/` holds the Pokenear brand kit:
+
+| File | Use |
+| --- | --- |
+| `pokenear-logo.svg` / `.png` | Wordmark with the orb as the O and the "Trading Card Gacha" ribbon (vector outlines, no font needed) |
+| `pokenear-icon.svg` / `.png` | The orb: collector ball with the NEAR symbol in the centre button. Site favicon and topbar icon |
+| `x-profile.png` | 400×400 X profile picture |
+| `x-header.png` | 1500×500 X header (source: `x-header.html`) |
+
+Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-header` (needs Playwright + Chromium).
+
 ## Layout
 
 | Path | What |
@@ -73,6 +86,7 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 ## Notes before launch
 
 - Pokémon card names, art and scans belong to Nintendo / The Pokémon Company. A public launch with a token needs a licence or a physical-card model.
+- The logo uses the NEAR symbol. Check the NEAR Foundation brand guidelines before using it publicly, and avoid implying an official partnership.
 
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.
 - `$POKENEAR` balances are points. Connecting them to an on-chain token is a separate step.

@@ -97,6 +97,7 @@ button { font: inherit; color: inherit; }
 .brand-mark::after {
   content: ""; position: absolute; inset: 11px; border-radius: 50%; background: #f4f4f6; box-shadow: 0 0 0 3px var(--ink);
 }
+.brand-icon { width: 36px; height: 36px; flex: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)); }
 .brand-name { font: 22px/1 var(--f-display); letter-spacing: 0.04em; color: var(--gold); text-shadow: 0 2px 0 #7a5a00; }
 .nav { display: flex; gap: 4px; margin-left: 8px; }
 .nav a {
@@ -598,12 +599,10 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
 /* ---------- Wallet sign-in ---------- */
 .chain-dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; flex: none; vertical-align: -4px; margin-right: 4px; }
 .chain-dot.sol { background: linear-gradient(135deg, #9945ff, #19fb9b); }
-.chain-dot.near { background: #fff; box-shadow: inset 0 0 0 2px #111; position: relative; }
-.chain-dot.near::after { content: "N"; position: absolute; inset: 0; display: grid; place-items: center; font: 900 10px/1 var(--f-body); color: #111; }
+.chain-dot.near { background: #00ec97 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 90'%3E%3Cpath fill='black' d='M72.2,4.6L53.4,32.5c-1.3,1.9,1.2,4.2,3,2.6L74.9,19c0.5-0.4,1.2-0.1,1.2,0.6v50.3c0,0.7-0.9,1-1.3,0.5l-56-67C17,1.2,14.4,0,11.5,0h-2C4.3,0,0,4.3,0,9.6v70.8C0,85.7,4.3,90,9.6,90c3.3,0,6.4-1.7,8.2-4.6l18.8-27.9c1.3-1.9-1.2-4.2-3-2.6l-18.5,16c-0.5,0.4-1.2,0.1-1.2-0.6V20.1c0-0.7,0.9-1,1.3-0.5l56,67c1.8,2.2,4.5,3.4,7.3,3.4h2c5.3,0,9.6-4.3,9.6-9.6V9.6c0-5.3-4.3-9.6-9.6-9.6C77.1,0,74,1.7,72.2,4.6z'/%3E%3C/svg%3E") center / 58% no-repeat; }
 .user-chip { padding: 6px 12px 6px 8px; }
 .user-chip .chain-dot { margin-right: 0; }
 .lb .who .chain-dot { width: 26px; height: 26px; }
-.lb .who .chain-dot.near::after { font-size: 13px; }
 .modal.wallet-modal { max-width: 640px; }
 .wallet-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .wallet-cols section { display: grid; gap: 10px; align-content: start; min-width: 0; }
@@ -615,3 +614,4 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
 .wallet-name small { font-size: 11px; color: var(--ok); font-weight: 700; }
 .demo-wallet { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
 @media (max-width: 620px) { .wallet-cols { grid-template-columns: 1fr; } }
+.card-back img { width: 46%; height: auto; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5)); }

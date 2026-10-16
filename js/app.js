@@ -273,7 +273,7 @@
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
-      '<a class="brand" href="#packs"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">POKENEAR</span></a>' +
+      '<a class="brand" href="#packs"><img class="brand-icon" src="assets/brand/pokenear-icon.svg" alt="" width="36" height="36"><span class="brand-name">POKENEAR</span></a>' +
       (store.mode === 'local' ? '<span class="mode-pill" title="No server connected. Progress is saved in this browser only.">Demo</span>' : '') +
       nav + '<div class="top-right">' + right + '</div></div></header>';
   }
@@ -602,7 +602,7 @@
               : '<button class="btn btn-sm sell" data-act="sell-rip" data-uid="' + it.uid + '">Sell back ' + tokenUsd(card.buyback) + '</button>')
           : '';
         return '<div class="rip-slot"><button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + (sold ? ' sold' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 80) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
-          '<div class="flip-inner"><div class="face back"><div class="card-back"><span class="brand-mark"></span></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
+          '<div class="flip-inner"><div class="face back"><div class="card-back"><img src="assets/brand/pokenear-icon.svg" alt=""></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
       }).join('');
       var summary = '', actions;
       if (all) {
@@ -762,6 +762,7 @@
   /* ---------- boot ---------- */
   function boot() {
     var app = $('#app');
+    if (!app) return; // loaded only for its renderers (e.g. assets/brand/x-header.html)
     ['overlay', 'modal', 'toasts'].forEach(function (id) {
       if (!$('#' + id)) { var d = doc.createElement('div'); d.id = id; if (id === 'toasts') d.className = 'toasts'; doc.body.appendChild(d); }
     });
@@ -784,5 +785,6 @@
     });
   }
 
+  root.PN.ui = { packArtHTML: packArtHTML, cardHTML: cardHTML };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof globalThis !== 'undefined' ? globalThis : this);

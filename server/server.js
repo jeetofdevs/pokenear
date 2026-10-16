@@ -22,8 +22,8 @@ const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
 const NEAR_RPC = process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet' ? 'https://rpc.testnet.near.org' : 'https://rpc.mainnet.near.org');
 
 const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'vendor/near-wallet.js']);
-const ART_RE = /^assets\/art\/\d{1,4}\.webp$/;
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp' };
+const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 function loadDotEnv(file) {
   let text;
