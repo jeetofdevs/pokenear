@@ -559,6 +559,7 @@
     var parts = (root.location.hash || '').replace('#', '').split('/');
     var h = parts[0];
     ui.route = ROUTES.indexOf(h) >= 0 ? h : (ui.route || 'packs');
+    if ($('#modal') && $('#modal').innerHTML) closeModal();
     if (ui.route === 'ranks' && store.mode === 'live') {
       store.leaderboard().then(function (rows) { ui.leaderboard = rows; render(); }).catch(function () { ui.leaderboard = null; });
     }

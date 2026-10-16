@@ -267,7 +267,8 @@ function leaderboard() {
 }
 
 function serveStatic(req, res, pathname) {
-  let rel = decodeURIComponent(pathname).replace(/^\/+/, '');
+  let rel;
+  try { rel = decodeURIComponent(pathname).replace(/^\/+/, ''); } catch { return send(res, 400, 'Bad request'); }
   if (rel === '') rel = 'index.html';
   if (!STATIC.has(rel) && !ART_RE.test(rel)) return send(res, 404, 'Not found');
   const file = path.join(ROOT, rel);
@@ -279,7 +280,8 @@ function serveStatic(req, res, pathname) {
 }
 
 async function route(req, res) {
-  const url = new URL(req.url, 'http://localhost');
+  let url;
+  try { url = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost'); } catch { return send(res, 400, 'Bad request'); }
   const p = url.pathname;
   if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK, rng: rngInfo() });
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
