@@ -149,13 +149,6 @@
       (card.illus ? '<div class="illus">Illus. ' + esc(card.illus) + '</div>' : '') + '</div></div>';
   }
 
-  function callName(name) {
-    var n = name.replace(/".*?"/g, ' ').replace(/\(.*?\)/g, ' ').trim();
-    if (n.indexOf('&') >= 0) return n;
-    var parts = n.split(/[.\s]+/).filter(Boolean);
-    return parts[parts.length - 1] || name;
-  }
-
   function cardHTML(card, opts) {
     opts = opts || {};
     var t = rar(card.tier);
@@ -170,23 +163,44 @@
     return face.replace(/^<div class="/, '<div class="' + cls).slice(0, -6) + extras + '</div>';
   }
 
-  function coverDex(p) {
-    var c = p.top.filter(function (x) { return x.dex; })[0];
-    return c ? c.dex : 25;
-  }
+  // Booster wrapper look per pack tier: foil colours, hero Pokémon and two companions behind it.
+  var PACK_LOOK = {
+    starter: { hero: 25, side: [1, 7], foil: ['#ffe14d', '#f7a51c', '#c4560f'], ink: '#3a1d00', stars: 1, label: 'Starter' },
+    rare: { hero: 94, side: [92, 93], foil: ['#c7a2ff', '#7a3fe0', '#2a1263'], ink: '#ffffff', stars: 2, label: 'Rare' },
+    elite: { hero: 448, side: [282, 359], foil: ['#8fe9ff', '#2a8fe0', '#0d2f73'], ink: '#ffffff', stars: 3, label: 'Elite' },
+    legend: { hero: 6, side: [150, 151], foil: ['#ffcf6b', '#c0262d', '#1c0306'], ink: '#ffe8a8', stars: 4, label: 'Legend' }
+  };
+  // Zig-zag crimp along the top and bottom of the wrapper.
+  var CRIMP = (function () {
+    var pts = [], teeth = 24, depth = 2.2;
+    for (var i = 0; i <= teeth; i++) pts.push((i * 100 / teeth).toFixed(2) + '% ' + (i % 2 ? depth : 0) + '%');
+    for (var j = teeth; j >= 0; j--) pts.push((j * 100 / teeth).toFixed(2) + '% ' + (100 - (j % 2 ? depth : 0)) + '%');
+    return 'polygon(' + pts.join(',') + ')';
+  })();
+
   function packArtHTML(p) {
-    return '<div class="pack-art gacha" style="--h:' + p.hue + '"><div class="pa-crimp top"></div>' +
-      '<div class="pa-inner"><div class="pa-game">Pokémon TCG</div>' +
-      '<img class="pa-img" src="' + artUrl(coverDex(p)) + '" alt="" decoding="async">' +
-      '<div class="pa-name">' + esc(p.name) + '</div><div class="pa-sub">' + usd(p.usd) + ' · 1 card</div></div>' +
-      '<div class="pa-crimp bottom"></div><div class="pa-shine"></div></div>';
-  }
-  function soonArtHTML(s) {
-    return '<div class="pack-art onepiece" style="--h:' + s.hue + '"><div class="pa-crimp top"></div>' +
-      '<div class="pa-inner"><div class="pa-game">One Piece Card Game</div><div class="pa-burst" aria-hidden="true"></div>' +
-      '<div class="pa-op">' + esc(callName(s.coverName)) + '</div>' +
-      '<div class="pa-name">' + esc(s.name) + '</div><div class="pa-sub">' + esc(s.short) + '</div></div>' +
-      '<div class="pa-crimp bottom"></div></div>';
+    var look = PACK_LOOK[p.id] || PACK_LOOK.starter;
+    var stars = '';
+    for (var i = 0; i < 4; i++) stars += '<i class="' + (i < look.stars ? 'on' : '') + '">★</i>';
+    return '<div class="booster" style="--f1:' + look.foil[0] + ';--f2:' + look.foil[1] + ';--f3:' + look.foil[2] + ';--ink:' + look.ink + '">' +
+      '<div class="bw" style="clip-path:' + CRIMP + '">' +
+        '<div class="bw-rays"></div><div class="bw-holo"></div>' +
+        '<div class="bw-crimp top"></div><div class="bw-crimp bottom"></div>' +
+        '<div class="bw-tear">TEAR ▸</div>' +
+        '<div class="bw-logo"><span>POKENEAR</span><small>Trading Card Gacha</small></div>' +
+        '<div class="bw-stage">' +
+          '<span class="bw-ring"></span>' +
+          '<img class="bw-side l" src="' + artUrl(look.side[0]) + '" alt="" decoding="async">' +
+          '<img class="bw-side r" src="' + artUrl(look.side[1]) + '" alt="" decoding="async">' +
+          '<img class="bw-hero" src="' + artUrl(look.hero) + '" alt="" decoding="async">' +
+        '</div>' +
+        '<div class="bw-ribbon"><span>' + esc(look.label) + ' Pack</span></div>' +
+        '<div class="bw-stars">' + stars + '</div>' +
+        '<div class="bw-foot">1 CARD · EV ' + usd(p.ev) + '</div>' +
+        '<div class="bw-sheen"></div>' +
+      '</div>' +
+      '<div class="bw-price"><b>' + usd(p.usd) + '</b></div>' +
+    '</div>';
   }
 
   function chanceOf(p, cardId) {
@@ -280,12 +294,6 @@
     if (!interactive) return '<div class="pack-tile static" style="--h:' + p.hue + '">' + inner + '</div>';
     return '<button class="pack-tile" style="--h:' + p.hue + '" data-act="pack" data-id="' + p.id + '" aria-pressed="' + (p.id === ui.pack) + '">' + inner + '</button>';
   }
-  function soonTileHTML(s) {
-    return '<div class="pack-tile static soon" style="--h:' + s.hue + '"><span class="tag">Coming soon</span>' + soonArtHTML(s) +
-      '<span class="pt-body"><span class="pt-price">One Piece</span><span class="pt-name">' + esc(s.name) + '</span>' +
-      '<span class="pt-hit">' + esc(s.short) + ' · ' + s.cardCount + ' cards · after Season 1</span></span></div>';
-  }
-
   /* ---------- landing ---------- */
   function landingHTML() {
     var fan = ['meg-188', 'mew-199', 'blk-172'].map(function (id) { return D.cardById[id] ? cardHTML(D.cardById[id]) : ''; }).join('');
@@ -310,7 +318,7 @@
       hits.concat(hits).map(function (c) { return '<div class="mq-card">' + cardHTML(c) + '<span class="mq-val">' + usd(c.usd) + '</span></div>'; }).join('') +
     '</div></div></section>' +
     '<section class="view" style="gap:14px"><div class="section-head"><h2>Packs</h2><span class="muted">' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + ' · ' + fmt(D.ALL_CARDS.length) + ' real cards</span></div>' +
-      '<div class="pack-grid">' + D.PACKS.map(function (p) { return packTileHTML(p, false); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
+      '<div class="pack-grid">' + D.PACKS.map(function (p) { return packTileHTML(p, false); }).join('') + '</div></section>' +
     '<section class="panel"><div class="steps">' +
       step(1, 'Connect X', 'Your X account is your Pokenear profile and your invite code.') +
       step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
@@ -347,8 +355,8 @@
           '<div><div class="eyebrow" style="margin-bottom:10px">Top hits</div><div class="chase-row">' +
             p.top.slice(0, 6).map(function (c) { return slotHTML(c, { chance: chanceOf(p, c.id) }); }).join('') + '</div></div>' +
         '</div></section>' +
-      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">Pokémon live now · One Piece coming soon</span></div>' +
-        '<div class="pack-grid">' + D.PACKS.map(function (x) { return packTileHTML(x, true); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
+      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">One card per rip · odds published for every card</span></div>' +
+        '<div class="pack-grid">' + D.PACKS.map(function (x) { return packTileHTML(x, true); }).join('') + '</div></section>' +
       (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#vault" class="muted">Open vault</a></div><div class="mini-cards">' +
         recent.map(function (h) { return slotHTML(D.cardById[h.id], {}); }).join('') + '</div></section>' : '') +
       '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(p.name) + ' odds</h2><span class="muted">' + p.pool.length + ' cards</span></div>' + oddsHTML(p) + '</section>';

@@ -21,7 +21,7 @@ Same model as Courtyard, Collector Crypt and Phygitals:
 - **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`). Cheaper cards are more likely, chase cards are rare. Each pack also shows the chance to pull at least the price and 3× the price.
 - **Instant buyback at 90%** (`BUYBACK_RATE`) of a card's value, right after the rip or later from the vault.
 - **Vault**: every pull is a unique item you can hold or sell back. Physical redemption is planned for launch.
-- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). One Piece is listed as coming soon.
+- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data).
 - **Card values** are estimates (rarity base × card spread × popularity, hand-set for headline cards). Connect a price feed before launch.
 - **Whitelist quests**: connect X, follow on X, post an invite on X, invite 3 friends, rip your first pack.
 - **Invites**: `?ref=CODE` links. New players get +500, inviters get +500 per friend.
@@ -55,9 +55,9 @@ To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `in
 | --- | --- |
 | `index.html`, `css/style.css` | Page and styles |
 | `js/cards.js`, `assets/art/` | Generated real card data and artwork (`npm run build:cards`) |
-| `scripts/build-cards.js` | Builds them from TCGdex, the One Piece card list and PokéAPI sprites |
-| `js/data.js` | Tiers, economy numbers, quests, indexes the card data |
-| `js/engine.js` | Game rules (pulls, pity, rewards, whitelist). Shared by browser and server |
+| `scripts/build-cards.js` | Builds them from TCGdex and PokéAPI sprites |
+| `js/data.js` | Card values, packs and odds, economy numbers, quests |
+| `js/engine.js` | Game rules (rips, buyback, rewards, whitelist). Shared by browser and server |
 | `js/store.js` | Picks live server or local demo backend |
 | `js/app.js` | UI |
 | `server/server.js` | Static files, X OAuth, game API |
@@ -65,7 +65,7 @@ To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `in
 
 ## Notes before launch
 
-- Pokémon and One Piece card names, art and scans belong to Nintendo / The Pokémon Company and Bandai. A public launch with a token needs a licence or a physical-card model.
+- Pokémon card names, art and scans belong to Nintendo / The Pokémon Company. A public launch with a token needs a licence or a physical-card model.
 
 - X follow and post quests are self-confirmed. Verifying them needs the paid X API tiers.
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.

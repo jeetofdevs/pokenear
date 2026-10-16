@@ -23,9 +23,9 @@ function connected(extra = {}) {
 }
 const STARTER = D.packById.starter;
 
-test('only Pokémon is live, One Piece is coming soon', () => {
+test('only Pokémon sets are loaded', () => {
+  assert.ok(D.SERIES.length >= 4);
   assert.ok(D.SERIES.every((s) => s.game === 'pokemon'));
-  assert.ok(D.COMING_SOON.length >= 1 && D.COMING_SOON.every((s) => s.game === 'onepiece'));
 });
 
 test('cheapest pack is $10 and prices convert to $POKENEAR', () => {

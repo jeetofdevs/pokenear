@@ -1,7 +1,7 @@
 {
   "name": "pokenear",
   "version": "1.0.0",
-  "description": "Pokenear: real Pok\u00e9mon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
+  "description": "Pokenear: real Pokémon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -14,7 +14,6 @@
   },
   "devDependencies": {
     "@tcgdata/tcgdex-offline": "^0.0.4",
-    "one-piece-card-game-json": "^0.2.55",
     "pokeapi-sprites": "^2.0.4",
     "sharp": "^0.33.5"
   }
