@@ -342,16 +342,10 @@ button.pack-tile:hover { border-color: hsl(var(--h) 90% 65% / 0.7); transform: t
 .binder-head .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: end; }
 .progress-line { display: grid; gap: 6px; min-width: 0; }
 
-/* ---------- Invite ---------- */
-.reward { display: inline-flex; align-items: center; gap: 4px; font: 700 13px/1 var(--f-mono); color: var(--gold); }
-.ref-box { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
-.ref-box input { flex: 1 1 220px; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); color: var(--text); font: 13px var(--f-mono); }
-.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+/* ---------- Stats ---------- */
 .stat { background: var(--panel-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
 .stat b { font: 700 22px/1.1 var(--f-mono); }
 .stat span { font-size: 12px; color: var(--muted); }
-.invite-panel { display: grid; gap: 16px; max-width: 760px; }
-.invite-panel .demo-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .demo-note { font-size: 13px; color: var(--muted); border-left: 3px dashed var(--muted); padding-left: 10px; }
 
 /* ---------- Leaderboard ---------- */
@@ -451,7 +445,6 @@ footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wr
   .chase-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mq-card { width: 120px; }
   .steps { grid-template-columns: 1fr; }
-  .stats-row { grid-template-columns: 1fr 1fr; }
     .fan .card { width: 140px; }
   .fan { height: 270px; }
   .fan .card:nth-child(1) { transform: translateX(-80px) rotate(-14deg) translateY(14px); }

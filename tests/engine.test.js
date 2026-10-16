@@ -30,9 +30,11 @@ test('only Pokémon sets are loaded', () => {
   assert.ok(D.SERIES.every((s) => s.game === 'pokemon'));
 });
 
-test('cheapest pack is $10 and prices convert to $POKENEAR', () => {
+test('cheapest pack is $10 and no fixed token amounts exist before launch', () => {
   assert.equal(Math.min(...D.PACKS.map((p) => p.usd)), 10);
-  assert.equal(STARTER.price, Math.round(10 / D.TOKEN_USD));
+  assert.equal(STARTER.price, undefined);
+  assert.equal(D.TOKEN_USD, undefined);
+  assert.ok(D.ALL_CARDS.every((c) => c.buyback === undefined));
 });
 
 test('every pack publishes odds that sum to 100% and hit the EV target', () => {
@@ -72,7 +74,7 @@ test('cards are real, unique and valued', () => {
   for (const c of D.ALL_CARDS) {
     assert.ok(!ids.has(c.id));
     ids.add(c.id);
-    assert.ok(c.usd > 0 && c.buyback === Math.round(c.usd * D.BUYBACK_RATE / D.TOKEN_USD));
+    assert.ok(c.usd > 0);
     assert.match(c.img, /^https:\/\//);
   }
   assert.equal(D.cardById['mew-199'].name, 'Charizard ex');

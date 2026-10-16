@@ -11,13 +11,11 @@
 
   var TOKEN = '$POKENEAR';
 
-  // Packs are labelled in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
-  // interaction wallet. The live $POKENEAR price of each pack is set on chain in that wallet's
-  // contract; TOKEN_USD is only the demo-mode peg.
-  var TOKEN_USD = 0.01;
+  // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
+  // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
+  // contract at launch; the site never shows a fixed token amount.
   var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
-  function usdToToken(usd) { return Math.round(usd / TOKEN_USD); }
 
   var EV_RATIO = 0.98;      // expected card value / pack price
   var BUYBACK_RATE = 0.9;   // instant sell-back as a share of card value
@@ -99,7 +97,6 @@
       card.code = info.code;
       card.tier = info.tier;
       card.usd = estimateUsd(card);
-      card.buyback = usdToToken(card.usd * BUYBACK_RATE);
       cardById[card.id] = card;
       ALL_CARDS.push(card);
     });
@@ -139,7 +136,6 @@
     pool.forEach(function (e) { acc += e.p; e.cum = acc; });
     pack.pool = pool;
     pack.ev = round2(pool.reduce(function (n, e) { return n + e.p * cardById[e.id].usd; }, 0));
-    pack.price = usdToToken(pack.usd);
     // Top hits: highest values, one card per Pokémon name (two Victini prints show once).
     var seenName = {};
     pack.top = pool.map(function (e) { return cardById[e.id]; }).filter(function (c) {
@@ -157,7 +153,6 @@
 
   var data = {
     TOKEN: TOKEN,
-    TOKEN_USD: TOKEN_USD,
     GAME_ACCOUNT: GAME_ACCOUNT,
     EV_RATIO: EV_RATIO,
     X_HANDLE: X_HANDLE,
@@ -174,7 +169,6 @@
     cardById: cardById,
     seriesById: seriesById,
     packById: PACKS.reduce(function (m, p) { m[p.id] = p; return m; }, {}),
-    usdToToken: usdToToken,
     hash: hash
   };
 
