@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const D = require('../js/data.js');
 const engine = require('../js/engine.js');
+const auth = require('../js/auth.js');
 
 // Small seeded PRNG so tests are repeatable.
 function mulberry32(seed) {
@@ -18,8 +19,9 @@ const T = 1_800_000_000_000;
 function ctx(seed = 1, now = T) {
   return { rng: mulberry32(seed), now, mode: 'local' };
 }
+const SOL = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 function connected(extra = {}) {
-  return engine.apply(engine.emptyState(), { type: 'connect', handle: '@near_fan', ...extra }, ctx()).state;
+  return engine.apply(engine.emptyState(), { type: 'connect', chain: 'solana', address: SOL, ...extra }, ctx()).state;
 }
 const STARTER = D.packById.starter;
 
@@ -77,15 +79,36 @@ test('cards are real, unique and valued', () => {
   assert.equal(D.cardById['mew-199'].code, 'SIR');
 });
 
-test('connect validates handle and grants demo credit', () => {
-  assert.throws(() => engine.apply(engine.emptyState(), { type: 'connect', handle: 'bad handle!' }, ctx()), /valid X handle/);
-  assert.equal(connected().balance, D.ECONOMY.startBonus);
+test('connect accepts Solana and NEAR addresses and grants demo credit', () => {
+  const bad = (chain, address) => assert.throws(() => engine.apply(engine.emptyState(), { type: 'connect', chain, address }, ctx()), /not a valid|Choose Solana/);
+  bad('solana', 'not-a-key');
+  bad('solana', '0OIl' + SOL.slice(4));
+  bad('near', 'Alice.near');
+  bad('near', 'a');
+  bad('evm', '0xabc');
+  const s = connected();
+  assert.equal(s.user.chain, 'solana');
+  assert.equal(s.user.name, '7xKX…gAsU');
+  assert.equal(s.balance, D.ECONOMY.startBonus);
+  const n = engine.apply(engine.emptyState(), { type: 'connect', chain: 'near', address: 'pokefan.near' }, ctx()).state;
+  assert.equal(n.user.name, 'pokefan.near');
+  assert.notEqual(n.user.refCode, s.user.refCode);
   assert.equal(connected({ ref: 'PNFRIEND1' }).balance, D.ECONOMY.startBonus + D.ECONOMY.referredBonus);
-  assert.equal(connected({ ref: engine.refCodeFor('near_fan') }).balance, D.ECONOMY.startBonus);
+  assert.equal(connected({ ref: engine.refCodeFor('solana', SOL) }).balance, D.ECONOMY.startBonus);
 });
 
-test('actions require a connected X account', () => {
-  assert.throws(() => engine.apply(engine.emptyState(), { type: 'pull', pack: 'starter' }, ctx()), /Connect your X/);
+test('base58 round-trips and validates key length', () => {
+  const bytes = new Uint8Array(32).map((_, i) => (i * 37 + 11) & 255);
+  const enc = auth.base58Encode(bytes);
+  assert.deepEqual(Array.from(auth.base58Decode(enc)), Array.from(bytes));
+  assert.ok(auth.isSolanaAddress(enc));
+  assert.ok(auth.isSolanaAddress(SOL));
+  assert.equal(auth.base58Decode('0abc'), null);
+  assert.ok(auth.isNearAccount('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'));
+});
+
+test('actions require a connected wallet', () => {
+  assert.throws(() => engine.apply(engine.emptyState(), { type: 'pull', pack: 'starter' }, ctx()), /Connect your wallet/);
 });
 
 test('a rip charges the pack price and puts one card in the vault', () => {
@@ -151,11 +174,9 @@ test('whitelist requires every quest', () => {
   assert.equal(engine.apply(s, { type: 'joinWhitelist' }, { ...ctx(), nextSpot: () => 42 }).result.spot, 42);
 });
 
-test('old saves migrate without losing balance or quests', () => {
-  const old = { v: 3, user: { handle: 'x' }, balance: 1234, earned: 2000, tasks: { follow: 1 }, invites: 2, collection: { 'mew-001': 3 }, totalPulls: 20 };
-  const st = engine.migrate(old);
-  assert.equal(st.v, 4);
-  assert.equal(st.balance, 1234);
-  assert.equal(st.invites, 2);
-  assert.deepEqual(st.vault, []);
+test('saves from the X-login era reset; wallet saves are kept', () => {
+  const old = { v: 4, user: { handle: 'x' }, balance: 1234, tasks: { follow: 1 }, vault: [] };
+  assert.deepEqual(engine.migrate(old), engine.emptyState());
+  const cur = connected();
+  assert.equal(engine.migrate(cur), cur);
 });

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Pokenear Gacha</title>
-  <meta name="description" content="Pull TCG packs, collect cards and earn a $POKENEAR whitelist spot. Connect with X to start.">
+  <meta name="description" content="Rip Pokémon card packs with published odds and instant buyback, and earn a $POKENEAR whitelist spot. Connect a Solana or NEAR wallet to start.">
   <meta property="og:title" content="Pokenear Gacha">
   <meta property="og:description" content="Pull TCG packs, collect cards and earn a $POKENEAR whitelist spot.">
   <meta name="twitter:card" content="summary_large_image">
@@ -19,12 +19,15 @@
     // Optional: public URL used in invite links, e.g. 'https://pokenear.example'.
     // Leave empty to use the current page address.
     // remoteImages: load official card scans over the drawn cards when the host allows it.
-    window.PN_CONFIG = { siteUrl: '', remoteImages: true };
+    // nearNetwork: 'mainnet' or 'testnet' for NEAR wallet sign-in (match NEAR_NETWORK on the server).
+    window.PN_CONFIG = { siteUrl: '', remoteImages: true, nearNetwork: 'mainnet' };
   </script>
   <script src="js/cards.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/store.js"></script>
+  <script src="js/wallets.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

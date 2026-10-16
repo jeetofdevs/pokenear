@@ -1,7 +1,7 @@
 'use strict';
-/* Pokenear server: static files + X (Twitter) OAuth 2.0 PKCE login + authoritative game API.
-   No dependencies. Without X_CLIENT_ID/X_REDIRECT_URI it only serves files and the
-   front end falls back to demo mode. */
+/* Pokenear server: static files + wallet sign-in (Solana, NEAR) + authoritative game API.
+   No runtime dependencies. Sign-in is a signed message with a one-time nonce; no keys,
+   no transactions. Game state lives in a JSON file (DB_FILE). */
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -9,21 +9,20 @@ const crypto = require('node:crypto');
 
 const D = require('../js/data.js');
 const engine = require('../js/engine.js');
+const auth = require('../js/auth.js');
+const verify = require('./wallet-verify.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
-const X_CLIENT_ID = process.env.X_CLIENT_ID || '';
-const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET || '';
-const X_REDIRECT_URI = process.env.X_REDIRECT_URI || '';
-const X_AUTH_URL = process.env.X_AUTH_URL || 'https://x.com/i/oauth2/authorize';
-const X_API_BASE = (process.env.X_API_BASE || 'https://api.x.com').replace(/\/+$/, '');
 const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
-const LIVE = Boolean(X_CLIENT_ID && X_REDIRECT_URI);
-const SECURE_COOKIE = X_REDIRECT_URI.startsWith('https://');
+const PUBLIC_URL = process.env.PUBLIC_URL || '';
+const SECURE_COOKIE = PUBLIC_URL.startsWith('https://');
+const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
+const NEAR_RPC = process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet' ? 'https://rpc.testnet.near.org' : 'https://rpc.mainnet.near.org');
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js']);
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'vendor/near-wallet.js']);
 const ART_RE = /^assets\/art\/\d{1,4}\.webp$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp' };
 
@@ -58,8 +57,8 @@ function saveDb() {
   }, 100);
 }
 
-const pending = new Map(); // oauth state -> { verifier, ref, at }
-const PENDING_TTL = 10 * 60 * 1000;
+const nonces = new Map(); // nonce -> issued at
+const NONCE_TTL = 10 * 60 * 1000;
 
 function rng() { return crypto.randomInt(0, 2 ** 32) / 2 ** 32; }
 function ctx() { return { rng, now: Date.now(), mode: 'server', nextSpot: () => ++db.wlCounter }; }
@@ -74,10 +73,6 @@ function send(res, status, body, headers = {}) {
     ...headers
   });
   res.end(isJson ? JSON.stringify(body) : body);
-}
-function redirect(res, location, headers = {}) {
-  res.writeHead(302, { Location: location, ...headers });
-  res.end();
 }
 function cookies(req) {
   const out = {};
@@ -108,71 +103,63 @@ function currentUserId(req) {
   return sid && db.sessions[sid] ? db.sessions[sid] : null;
 }
 
-/* ---------- X OAuth 2.0 (PKCE) ---------- */
-function startLogin(req, res, url) {
-  const state = b64url(crypto.randomBytes(24));
-  const verifier = b64url(crypto.randomBytes(48));
-  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-  const ref = (url.searchParams.get('ref') || '').toUpperCase();
+/* ---------- wallet sign-in ---------- */
+function issueNonce(res) {
   const now = Date.now();
-  for (const [k, v] of pending) if (now - v.at > PENDING_TTL) pending.delete(k);
-  pending.set(state, { verifier, ref: /^[A-Z0-9]{4,12}$/.test(ref) ? ref : '', at: now });
-  const q = new URLSearchParams({
-    response_type: 'code',
-    client_id: X_CLIENT_ID,
-    redirect_uri: X_REDIRECT_URI,
-    scope: 'tweet.read users.read',
-    state,
-    code_challenge: challenge,
-    code_challenge_method: 'S256'
-  });
-  redirect(res, `${X_AUTH_URL}?${q}`);
+  for (const [k, at] of nonces) if (now - at > NONCE_TTL) nonces.delete(k);
+  const nonce = crypto.randomBytes(32).toString('hex');
+  nonces.set(nonce, now);
+  send(res, 200, { nonce, nearRecipient: auth.NEAR_RECIPIENT, nearNetwork: NEAR_NETWORK });
 }
 
-async function finishLogin(req, res, url) {
-  const state = url.searchParams.get('state') || '';
-  const code = url.searchParams.get('code') || '';
-  const p = pending.get(state);
-  pending.delete(state);
-  if (!p || !code || Date.now() - p.at > PENDING_TTL) return redirect(res, '/?x_error=1');
-  try {
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-    if (X_CLIENT_SECRET) headers.Authorization = 'Basic ' + Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString('base64');
-    const tokenRes = await fetch(`${X_API_BASE}/2/oauth2/token`, {
-      method: 'POST',
-      headers,
-      body: new URLSearchParams({ code, grant_type: 'authorization_code', client_id: X_CLIENT_ID, redirect_uri: X_REDIRECT_URI, code_verifier: p.verifier })
-    });
-    if (!tokenRes.ok) throw new Error(`token ${tokenRes.status}`);
-    const token = await tokenRes.json();
-    const meRes = await fetch(`${X_API_BASE}/2/users/me?user.fields=profile_image_url`, { headers: { Authorization: `Bearer ${token.access_token}` } });
-    if (!meRes.ok) throw new Error(`users/me ${meRes.status}`);
-    const me = (await meRes.json()).data;
-    if (!me || !me.id || !me.username) throw new Error('users/me: no data');
+async function walletLogin(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req, 8192)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
+  const { chain, nonce, signature } = body || {};
+  const issued = nonces.get(nonce);
+  nonces.delete(nonce);
+  if (!issued || Date.now() - issued > NONCE_TTL) return send(res, 400, { error: 'Sign-in expired. Try again.' });
+  if (!auth.CHAINS[chain]) return send(res, 400, { error: 'Choose Solana or NEAR.' });
 
-    let state0 = db.users[me.id];
-    if (!state0) {
-      const referrerId = p.ref && db.refIndex[p.ref] && db.refIndex[p.ref] !== me.id ? db.refIndex[p.ref] : null;
-      const out = engine.apply(engine.emptyState(), {
-        type: 'connect', handle: me.username, name: me.name, xId: me.id, avatar: me.profile_image_url, ref: referrerId ? p.ref : ''
-      }, ctx());
-      state0 = out.state;
-      db.refIndex[state0.user.refCode] = me.id;
-      if (referrerId) db.users[referrerId] = engine.apply(db.users[referrerId], { type: 'inviteJoined' }, ctx()).state;
-    } else {
-      // Keep profile fresh if the user renamed their X account.
-      state0.user.name = String(me.name || me.username).slice(0, 50);
-      state0.user.avatar = me.profile_image_url || state0.user.avatar;
+  let address;
+  if (chain === 'solana') {
+    address = String(body.address || '');
+    if (!auth.isSolanaAddress(address)) return send(res, 400, { error: 'That is not a valid Solana address.' });
+    if (!verify.verifySolana({ address, signature, message: auth.loginMessage('solana', address, nonce) })) {
+      return send(res, 401, { error: 'The wallet signature did not match. Try again.' });
     }
-    db.users[me.id] = state0;
-    const sid = b64url(crypto.randomBytes(32));
-    db.sessions[sid] = me.id;
-    saveDb();
-    redirect(res, '/#packs', { 'Set-Cookie': sessionCookie(sid, 60 * 60 * 24 * 30) });
-  } catch (err) {
-    console.error('[x-login]', err.message);
-    redirect(res, '/?x_error=1');
+  } else {
+    address = String(body.accountId || '');
+    if (!auth.isNearAccount(address)) return send(res, 400, { error: 'That is not a valid NEAR account.' });
+    const ok = verify.verifyNearSignature({
+      publicKey: body.publicKey, signature, message: auth.loginMessage('near', null, nonce),
+      nonce: Buffer.from(nonce, 'hex'), recipient: auth.NEAR_RECIPIENT, callbackUrl: body.callbackUrl || undefined
+    });
+    if (!ok) return send(res, 401, { error: 'The wallet signature did not match. Try again.' });
+    try {
+      if (!(await verify.nearKeyBelongsTo(address, body.publicKey, NEAR_RPC))) {
+        return send(res, 401, { error: 'That key is not a full-access key of ' + address + '.' });
+      }
+    } catch (err) {
+      console.error('[near-rpc]', err.message);
+      return send(res, 502, { error: 'Could not reach NEAR to confirm your account. Try again.' });
+    }
   }
+
+  const id = chain + ':' + address;
+  let state0 = db.users[id];
+  if (!state0) {
+    const ref = String(body.ref || '').toUpperCase();
+    const referrerId = ref && db.refIndex[ref] && db.refIndex[ref] !== id ? db.refIndex[ref] : null;
+    state0 = engine.apply(engine.emptyState(), { type: 'connect', chain, address, wallet: body.wallet, ref: referrerId ? ref : '' }, ctx()).state;
+    db.refIndex[state0.user.refCode] = id;
+    if (referrerId) db.users[referrerId] = engine.apply(db.users[referrerId], { type: 'inviteJoined' }, ctx()).state;
+  }
+  db.users[id] = state0;
+  const sid = b64url(crypto.randomBytes(32));
+  db.sessions[sid] = id;
+  saveDb();
+  send(res, 200, { state: state0 }, { 'Set-Cookie': sessionCookie(sid, 60 * 60 * 24 * 30) });
 }
 
 /* ---------- API ---------- */
@@ -180,7 +167,7 @@ const CLIENT_ACTIONS = new Set(['daily', 'pull', 'buyback', 'task', 'joinWhiteli
 
 async function handleAction(req, res) {
   const uid = currentUserId(req);
-  if (!uid || !db.users[uid]) return send(res, 401, { error: 'Connect your X account first.' });
+  if (!uid || !db.users[uid]) return send(res, 401, { error: 'Connect your wallet first.' });
   let action;
   try { action = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
   if (!action || !CLIENT_ACTIONS.has(action.type)) return send(res, 400, { error: 'Unknown action.' });
@@ -200,7 +187,8 @@ function leaderboard() {
   return Object.values(db.users)
     .filter((s) => s.user)
     .map((s) => ({
-      handle: s.user.handle,
+      chain: s.user.chain,
+      address: s.user.address,
       name: s.user.name,
       score: engine.vaultValue(s),
       cards: s.vault.length,
@@ -225,11 +213,10 @@ function serveStatic(req, res, pathname) {
 async function route(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: LIVE ? 'live' : 'local', xHandle: D.X_HANDLE });
-  if (!LIVE && (p.startsWith('/api/') || p.startsWith('/auth/'))) return send(res, 404, { error: 'X login is not configured on this server.' });
-  if (p === '/auth/x/login' && req.method === 'GET') return startLogin(req, res, url);
-  if (p === '/auth/x/callback' && req.method === 'GET') return finishLogin(req, res, url);
-  if (p === '/auth/logout' && req.method === 'POST') {
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK, xHandle: D.X_HANDLE });
+  if (p === '/api/auth/nonce' && req.method === 'POST') return issueNonce(res);
+  if (p === '/api/auth/wallet' && req.method === 'POST') return walletLogin(req, res);
+  if (p === '/api/auth/logout' && req.method === 'POST') {
     const sid = cookies(req).pn_sid;
     if (sid) { delete db.sessions[sid]; saveDb(); }
     return send(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
@@ -253,7 +240,7 @@ const server = http.createServer((req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`Pokenear running at http://localhost:${PORT} (${LIVE ? 'live X login' : 'demo mode: set X_CLIENT_ID and X_REDIRECT_URI for X login'})`);
+    console.log(`Pokenear running at http://localhost:${PORT} (wallet sign-in: Solana, NEAR ${NEAR_NETWORK})`);
   });
 }
 

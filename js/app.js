@@ -41,6 +41,13 @@
 
   var X_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
   var COIN = '<span class="coin" aria-hidden="true">P</span>';
+  var WALLET_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a3 3 0 0 1 3-3h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm14 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
+  var CHAIN_BADGE = {
+    solana: '<span class="chain-dot sol" title="Solana" aria-label="Solana"></span>',
+    near: '<span class="chain-dot near" title="NEAR" aria-label="NEAR"></span>'
+  };
+  var A = root.PN.auth;
+  var W = root.PN.wallets;
 
   function siteBase() {
     if (CFG.siteUrl) return CFG.siteUrl.replace(/\/+$/, '') + '/';
@@ -266,9 +273,9 @@
       }).join('') + '</nav>' : '';
     var right = u
       ? '<div class="balance" title="' + D.TOKEN + ' balance">' + COIN + '<span class="num">' + fmt(st.balance) + '</span><span class="muted bal-label">' + D.TOKEN + ' · ' + tokenUsd(st.balance) + '</span></div>' +
-        '<div class="user-chip"><span class="avatar">' + (u.avatar ? '<img src="' + esc(u.avatar) + '" alt="">' : esc(u.handle.slice(0, 2).toUpperCase())) + '</span><span class="uh">@' + esc(u.handle) + '</span></div>' +
+        '<div class="user-chip" title="' + esc(u.address) + '">' + CHAIN_BADGE[u.chain] + '<span class="uh num">' + esc(u.name) + '</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
-      : '<button class="btn btn-x btn-sm" data-act="connect">' + X_SVG + 'Connect X</button>';
+      : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
       '<a class="brand" href="#packs"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">POKENEAR</span></a>' +
       (store.mode === 'local' ? '<span class="mode-pill" title="No server connected. Progress is saved in this browser only.">Demo</span>' : '') +
@@ -276,7 +283,7 @@
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>Prices in USD, paid in ' + D.TOKEN + ' (demo peg 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + '). Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
+    return '<footer><div class="wrap"><span>Sign in with a Solana or NEAR wallet. Prices in USD, paid in ' + D.TOKEN + ' (demo peg 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + '). Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
       '<span>Follow <a href="https://x.com/' + D.X_HANDLE + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a></span></div></footer>';
   }
 
@@ -297,7 +304,7 @@
   /* ---------- landing ---------- */
   function landingHTML() {
     var fan = ['meg-188', 'mew-199', 'blk-172'].map(function (id) { return D.cardById[id] ? cardHTML(D.cardById[id]) : ''; }).join('');
-    var refNote = store.ref ? '<p class="demo-note gold-note">Invite code <b class="num">' + esc(store.ref) + '</b> applied. Connect X to get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on top of the welcome credit.</p>' : '';
+    var refNote = store.ref ? '<p class="demo-note gold-note">Invite code <b class="num">' + esc(store.ref) + '</b> applied. Connect your wallet to get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on top of the welcome credit.</p>' : '';
     var seen = {};
     var hits = [];
     D.PACKS.slice().reverse().forEach(function (p) { p.top.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = 1; hits.push(c); } }); });
@@ -309,7 +316,7 @@
         '<h1>Rip Pokémon cards. Sell back instantly. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         refNote +
-        '<div class="hero-cta"><button class="btn btn-x btn-lg" data-act="connect">' + X_SVG + 'Connect with X</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
+        '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
         '<div><div class="eyebrow" style="margin-bottom:8px">Season 1 closes in</div>' + countdownHTML() + '</div>' +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
@@ -320,7 +327,7 @@
     '<section class="view" style="gap:14px"><div class="section-head"><h2>Packs</h2><span class="muted">' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + ' · ' + fmt(D.ALL_CARDS.length) + ' real cards</span></div>' +
       '<div class="pack-grid">' + D.PACKS.map(function (p) { return packTileHTML(p, false); }).join('') + '</div></section>' +
     '<section class="panel"><div class="steps">' +
-      step(1, 'Connect X', 'Your X account is your Pokenear profile and your invite code.') +
+      step(1, 'Connect wallet', 'Phantom, Solflare, Backpack or any NEAR wallet. One signature, no transaction, no fee.') +
       step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
       step(3, 'Keep or sell back', 'Hold the card in your vault or take ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value right away.') +
       step(4, 'Lock your spot', 'Finish the quests and invite friends to claim a numbered whitelist pass.') +
@@ -414,7 +421,7 @@
       : '<button class="btn btn-sm" data-act="copy">Copy link</button>';
     var spot = st.whitelist ? String(st.whitelist.spot).padStart(4, '0') : '';
     var pass = st.whitelist
-      ? '<div class="wl-pass"><div class="eyebrow" style="color:inherit">Season 1 Whitelist Pass</div><h3>You are on the list</h3><div class="spot">#' + spot + '</div><div>@' + esc(st.user.handle) + ' · ' + fmt(st.earned) + ' ' + D.TOKEN + ' earned</div>' +
+      ? '<div class="wl-pass"><div class="eyebrow" style="color:inherit">Season 1 Whitelist Pass</div><h3>You are on the list</h3><div class="spot">#' + spot + '</div><div class="num">' + esc(st.user.name) + ' · ' + fmt(st.earned) + ' ' + D.TOKEN + ' earned</div>' +
         '<div><a class="btn btn-x" href="' + intentPost('I just locked whitelist spot #' + spot + ' for ' + D.TOKEN + ' on @' + D.X_HANDLE + '. Get yours before Season 1 closes: ' + link) + '" target="_blank" rel="noopener">' + X_SVG + 'Share my pass</a></div></div>'
       : '<div class="panel" style="display:grid;gap:12px"><b>Claim your whitelist pass</b><p class="muted small">Finish all ' + wl.total + ' quests to get a numbered pass for the ' + D.TOKEN + ' launch.</p>' +
         '<button class="btn btn-gold btn-lg" data-act="joinWhitelist"' + (wl.eligible ? '' : ' disabled') + '>' + (wl.eligible ? 'Join the whitelist' : (wl.total - wl.done) + ' quests left') + '</button></div>';
@@ -425,13 +432,13 @@
           '<div class="wl-status"><div class="ring" style="--p:' + Math.round(wl.done / wl.total * 100) + '"><div><b class="num">' + wl.done + '/' + wl.total + '</b><small>quests</small></div></div>' +
             '<div><h3 style="font-size:24px">' + (st.whitelist ? 'Whitelisted' : wl.eligible ? 'Ready to join' : 'Not whitelisted yet') + '</h3><p class="muted small" style="margin-top:4px">Quest rewards are paid in ' + D.TOKEN + ' the moment you complete them.</p></div></div>' +
           '<ul class="quests">' +
-            quest('connect', 'Connect your X account', 'Connected as @' + esc(st.user.handle), '', 0) +
+            quest('connect', 'Connect your wallet', 'Signed in with ' + esc(st.user.wallet || A.CHAINS[st.user.chain].name) + ' · ' + esc(st.user.name) + ' on ' + A.CHAINS[st.user.chain].name, '', 0) +
             quest('follow', 'Follow @' + D.X_HANDLE + ' on X', 'Opens X in a new tab, then confirm here.', followAct, 100) +
             quest('post', 'Post your invite link on X', 'Shares a ready-made post with your code.', postAct, 150) +
             quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + fmt(E.inviteReward) + ' per friend', inviteAct, 0) +
             quest('pulls', 'Rip your first pack', 'Packs from ' + usd(D.PACKS[0].usd), '<a class="btn btn-sm" href="#packs">Open packs</a>', 0) +
           '</ul>' +
-          (store.mode === 'local' ? '<p class="demo-note">Demo mode: X follows and posts are self-confirmed, and invites are simulated because there is no server tracking sign-ups. Run the Pokenear server with X API keys for real login and referral tracking.</p>' : '') +
+          (store.mode === 'local' ? '<p class="demo-note">Demo mode: X follows and posts are self-confirmed, and invites are simulated because there is no server tracking sign-ups. Run the Pokenear server for verified wallet sign-in and real referral tracking.</p>' : '') +
         '</section>' +
         '<div style="display:grid;gap:24px">' + pass +
           '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on sign-up. You get ' + fmt(E.inviteReward) + ' for each one.</p></div>' +
@@ -445,26 +452,26 @@
 
   /* ---------- leaderboard ---------- */
   var SAMPLE = [
-    ['Holo Hunter', 'holo_hunter', 2840, 41, true], ['Pack Ripper', 'packripper', 1915, 33, true], ['SIR Seeker', 'sirseeker', 1290, 26, true],
-    ['Vault Queen', 'vaultqueen', 948, 21, true], ['Chase Mode', 'chasemode', 612, 14, false], ['Mega Fan', 'megafan', 402, 9, false],
-    ['Foil Fanatic', 'foilfanatic', 215, 6, false], ['Daily Grinder', 'dailygrinder', 64, 3, false]
+    ['solana', '9WzD…AWWM', 2840, 41, true], ['near', 'holohunter.near', 1915, 33, true], ['solana', 'Fm3q…7Zp1', 1290, 26, true],
+    ['near', 'packripper.tg', 948, 21, true], ['solana', '4Nd1…mBkQ', 612, 14, false], ['near', 'sirseeker.near', 402, 9, false],
+    ['solana', 'HxQv…2rTe', 215, 6, false], ['near', 'dailygrind.near', 64, 3, false]
   ];
   function ranksHTML() {
     var st = store.state;
-    var me = { name: st.user.name, handle: st.user.handle, score: engine.vaultValue(st), cards: st.vault.length, wl: !!st.whitelist, me: true };
+    var me = { name: st.user.name, chain: st.user.chain, score: engine.vaultValue(st), cards: st.vault.length, wl: !!st.whitelist, me: true };
     var rows, isSample = false;
     if (ui.leaderboard) {
-      rows = ui.leaderboard.map(function (r) { return { name: r.name, handle: r.handle, score: r.score, cards: r.cards, wl: r.wl, me: r.handle === st.user.handle }; });
+      rows = ui.leaderboard.map(function (r) { return { name: r.name, chain: r.chain, score: r.score, cards: r.cards, wl: r.wl, me: r.address === st.user.address && r.chain === st.user.chain }; });
     } else {
       isSample = true;
-      rows = SAMPLE.map(function (r) { return { name: r[0], handle: r[1], score: r[2], cards: r[3], wl: r[4], sample: true }; }).concat([me]);
+      rows = SAMPLE.map(function (r) { return { name: r[1], chain: r[0], score: r[2], cards: r[3], wl: r[4], sample: true }; }).concat([me]);
     }
     rows.sort(function (a, b) { return b.score - a.score; });
     return '<section class="section-head"><div><div class="eyebrow">Vault value</div><h2 class="page-title">Ranks</h2></div><span class="muted small">Ranked by the estimated value of the cards each collector holds</span></section>' +
       (isSample ? '<p class="demo-note">Demo mode: rows marked Sample are placeholders. With the server running, this table lists real collectors.</p>' : '') +
       '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Cards</th><th class="num">Vault value</th><th>Whitelist</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
-        return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who"><span class="avatar">' + esc(r.handle.slice(0, 2).toUpperCase()) + '</span><div><b>' + esc(r.name) + (r.me ? ' (you)' : '') + '</b><div class="muted small">@' + esc(r.handle) + (r.sample ? ' <span class="sample">Sample</span>' : '') + '</div></div></div></td>' +
+        return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who">' + CHAIN_BADGE[r.chain] + '<div><b class="num">' + esc(r.name) + '</b>' + (r.me ? ' <span class="muted">(you)</span>' : '') + (r.sample ? ' <span class="sample">Sample</span>' : '') + '<div class="muted small">' + A.CHAINS[r.chain].name + '</div></div></div></td>' +
           '<td class="num">' + r.cards + '</td><td class="num"><b>' + usd(r.score) + '</b></td><td>' + (r.wl ? '<span class="done-txt">Whitelisted</span>' : '<span class="muted">Not yet</span>') + '</td></tr>';
       }).join('') + '</tbody></table></section>';
   }
@@ -492,16 +499,57 @@
   }
 
   /* ---------- modals ---------- */
+  // Wallet picker: Solana wallets are detected in the page; NEAR wallets load on demand.
   function openConnect() {
-    if (store.mode === 'live') { store.connectX(); return; }
-    $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><form class="modal" id="connect-form" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
-      '<div class="modal-title">' + X_SVG + '<h2 id="connect-title">Connect X</h2></div>' +
-      '<p class="muted small">This preview runs without X API keys, so type your handle to continue. With the Pokenear server configured, this button opens the real X sign-in page.</p>' +
-      '<div class="field"><label for="x-handle">X handle</label><div class="input-at"><span>@</span><input id="x-handle" name="handle" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="16" placeholder="yourname" required></div><div class="err" id="connect-err"></div></div>' +
+    ui.nearList = null;
+    renderConnect();
+    W.nearWallets().then(function (list) { ui.nearList = list; if ($('#wallet-modal')) renderConnect(); })
+      .catch(function (err) { ui.nearList = { error: err.message }; if ($('#wallet-modal')) renderConnect(); });
+  }
+  function renderConnect() {
+    var sol = W.solanaWallets().map(function (w) {
+      var action = w.installed
+        ? '<button class="btn btn-sm btn-gold" data-act="wallet-sol" data-id="' + w.id + '" data-name="' + esc(w.name) + '">Connect</button>'
+        : w.openUrl ? '<a class="btn btn-sm" href="' + esc(w.openUrl) + '">Open in app</a>'
+        : '<a class="btn btn-sm btn-ghost" href="' + esc(w.install) + '" target="_blank" rel="noopener">Install</a>';
+      return '<li class="wallet-row"><span class="wallet-ico" style="--wc:' + w.color + '">' + esc(w.name[0]) + '</span><span class="wallet-name">' + esc(w.name) + (w.installed ? '<small>Detected</small>' : '') + '</span>' + action + '</li>';
+    }).join('');
+    var near;
+    if (!ui.nearList) near = '<li class="wallet-row muted small">Loading NEAR wallets…</li>';
+    else if (ui.nearList.error) near = '<li class="wallet-row"><span class="err">' + esc(ui.nearList.error) + '</span></li>';
+    else near = ui.nearList.map(function (w) {
+      return '<li class="wallet-row">' + (w.iconUrl ? '<img class="wallet-ico" src="' + esc(w.iconUrl) + '" alt="">' : '<span class="wallet-ico">' + esc(w.name[0]) + '</span>') +
+        '<span class="wallet-name">' + esc(w.name) + '</span>' +
+        '<button class="btn btn-sm' + (w.available ? ' btn-gold' : '') + '" data-act="wallet-near" data-id="' + esc(w.id) + '" data-name="' + esc(w.name) + '"' + (w.available ? '' : ' disabled title="Not available in this browser"') + '>' + (w.available ? 'Connect' : 'Unavailable') + '</button></li>';
+    }).join('');
+    $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal wallet-modal" id="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
+      '<div class="modal-title">' + WALLET_SVG + '<h2 id="connect-title">Connect wallet</h2></div>' +
+      '<p class="muted small">Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
+      '<div class="wallet-cols"><section><div class="eyebrow">' + CHAIN_BADGE.solana + ' Solana</div><ul class="wallet-list">' + sol + '</ul></section>' +
+      '<section><div class="eyebrow">' + CHAIN_BADGE.near + ' NEAR</div><ul class="wallet-list">' + near + '</ul></section></div>' +
+      '<div class="err" id="connect-err" role="alert"></div>' +
       (store.ref ? '<p class="reward">' + COIN + 'Invite code ' + esc(store.ref) + ' gives +' + fmt(E.referredBonus) + ' bonus</p>' : '') +
-      '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button><button type="submit" class="btn btn-x">' + X_SVG + 'Connect</button></div>' +
-      '</form></div>';
-    $('#x-handle').focus();
+      (store.mode === 'local' ? '<div class="demo-wallet"><span class="muted small">No wallet in this browser? This preview can use a throwaway demo address.</span><button class="btn btn-sm" data-act="wallet-demo">Use demo wallet</button></div>' : '') +
+      '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button></div>' +
+      '</div></div>';
+  }
+
+  function signIn(chain, signer, label) {
+    var err = $('#connect-err');
+    if (!signer) { if (err) err.textContent = label + ' was not found in this browser.'; return; }
+    if (err) err.textContent = 'Approve the sign-in in ' + label + '…';
+    store.connectWallet(chain, signer).then(function (r) {
+      $('#modal').innerHTML = '';
+      root.location.hash = 'packs';
+      setRoute();
+      var u = store.state.user;
+      toast(r.bonus ? 'Welcome ' + u.name + '! +' + fmt(r.bonus) + ' ' + D.TOKEN + ' (' + tokenUsd(r.bonus) + ' demo credit) added.' : 'Welcome back ' + u.name + '.');
+    }).catch(function (e) {
+      var el = $('#connect-err');
+      var msg = e && (e.message || String(e));
+      if (/reject|denied|cancel|closed/i.test(msg || '')) msg = 'Sign-in was cancelled in the wallet.';
+      if (el) el.textContent = msg || 'Sign-in failed. Try again.'; else toast(msg || 'Sign-in failed. Try again.', true);
+    });
   }
 
   function openZoom(id) {
@@ -636,6 +684,9 @@
     var uid = Number(el.getAttribute('data-uid'));
     switch (act) {
       case 'connect': openConnect(); break;
+      case 'wallet-sol': signIn('solana', W.solanaSigner(id), el.getAttribute('data-name')); break;
+      case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
+      case 'wallet-demo': signIn('solana', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
       case 'logout': store.logout().then(function () { ui.clicked = {}; toast('Logged out.'); }); break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
@@ -683,20 +734,6 @@
     } catch (err) { fallback(); }
   }
 
-  function onSubmit(e) {
-    if (e.target.id !== 'connect-form') return;
-    e.preventDefault();
-    var input = $('#x-handle');
-    var handle = engine.normalizeHandle(input.value);
-    if (!handle) { $('#connect-err').textContent = 'Use 1–15 letters, numbers or underscores.'; input.focus(); return; }
-    store.connectX(handle).then(function (r) {
-      $('#modal').innerHTML = '';
-      root.location.hash = 'packs';
-      setRoute();
-      toast('Welcome @' + handle + '! +' + fmt(r.bonus) + ' ' + D.TOKEN + ' (' + tokenUsd(r.bonus) + ' demo credit) added.');
-    }).catch(function (err) { $('#connect-err').textContent = err.message; });
-  }
-
   // Holographic tilt for SR and above.
   var tilted = null;
   function onMove(e) {
@@ -719,7 +756,19 @@
 
   // Official scans: show when loaded, drop when blocked or missing.
   function onImgLoad(e) { if (e.target.classList && e.target.classList.contains('real')) e.target.classList.add('ok'); }
-  function onImgError(e) { if (e.target.classList && e.target.classList.contains('real')) e.target.remove(); }
+  function onImgError(e) {
+    var el = e.target;
+    if (!el.classList) return;
+    if (el.classList.contains('real')) el.remove();
+    else if (el.classList.contains('wallet-ico')) {
+      // Wallet logo blocked or missing: fall back to its initial.
+      var span = doc.createElement('span');
+      span.className = 'wallet-ico';
+      var name = el.parentNode && el.parentNode.querySelector('.wallet-name');
+      span.textContent = name ? name.textContent.charAt(0) : '?';
+      el.replaceWith(span);
+    }
+  }
 
   function onKey(e) {
     if (e.key !== 'Escape') return;
@@ -737,7 +786,6 @@
     });
     app.innerHTML = '<div class="wrap muted" style="padding-block:80px;text-align:center">Loading Pokenear…</div>';
     doc.addEventListener('click', onClick);
-    doc.addEventListener('submit', onSubmit);
     doc.addEventListener('pointermove', onMove);
     doc.addEventListener('keydown', onKey);
     doc.addEventListener('load', onImgLoad, true);
@@ -745,7 +793,11 @@
     root.addEventListener('hashchange', setRoute);
     store.subscribe(function () { if (!ui.opening) render(); });
     store.init().then(function () {
-      if (store.mode === 'live' && /[?&]x_error=/.test(root.location.search)) toast('X sign-in did not finish. Try again.', true);
+      // Back from a redirect-based NEAR wallet (MyNearWallet): finish the sign-in.
+      var back = W.takeNearRedirect();
+      if (back && !store.state.user) {
+        store.finishWallet('near', back.nonce, back.signed).then(function () { toast('Welcome ' + store.state.user.name + '!'); }, function (e) { toast(e.message, true); });
+      }
       setRoute();
       setInterval(tickCountdown, 1000);
     });

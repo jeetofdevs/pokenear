@@ -55,7 +55,7 @@
   ];
 
   var ECONOMY = {
-    startBonus: 2000,       // first X connect: $20 of demo credit
+    startBonus: 2000,       // first wallet connect: $20 of demo credit
     referredBonus: 500,     // extra for joining through an invite link
     inviteReward: 500,      // paid to the inviter per friend
     dailyReward: 200,
@@ -67,7 +67,7 @@
 
   // Whitelist quests. `kind: 'x'` quests open an X intent link first.
   var TASKS = [
-    { id: 'connect', title: 'Connect your X account', reward: 0, auto: true },
+    { id: 'connect', title: 'Connect your wallet', reward: 0, auto: true },
     { id: 'follow', title: 'Follow @' + X_HANDLE + ' on X', reward: 100, kind: 'x' },
     { id: 'post', title: 'Post your invite link on X', reward: 150, kind: 'x' },
     { id: 'invites', title: 'Invite 3 friends', reward: 0, auto: true },

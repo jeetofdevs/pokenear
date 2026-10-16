@@ -1,11 +1,12 @@
 /* Pokenear store: picks a backend and exposes one async API to the UI.
-   - live:  the Node server (server/server.js) is running with X OAuth configured.
-   - local: no server; the engine runs in the browser and state lives in localStorage. */
+   - live:  the Node server (server/server.js) verifies wallet signatures and owns game state.
+   - local: no server (static hosting, previews); the engine runs in the browser and state
+            lives in localStorage. Wallet signatures are still requested but not verified. */
 (function (root) {
   'use strict';
 
   var engine = root.PN.engine;
-  var STORAGE_KEY = 'pokenear:v4';
+  var STORAGE_KEY = 'pokenear:v5';
   var REF_KEY = 'pokenear:ref';
 
   function safeGet(key) {
@@ -66,7 +67,7 @@
           var raw = safeGet(STORAGE_KEY);
           var loaded = null;
           try { loaded = raw ? JSON.parse(raw) : null; } catch (e) { loaded = null; }
-          store.state = loaded && loaded.v === 4 ? loaded : engine.emptyState();
+          store.state = loaded && loaded.v === 5 ? loaded : engine.emptyState();
         })
         .then(function () { store.emit(); return store.state; });
     },
@@ -96,14 +97,36 @@
       });
     },
 
-    // Live mode hands off to X OAuth; local mode takes a typed handle.
-    connectX: function (handle) {
+    /* Sign in with a wallet.
+       signer(nonce) -> Promise<{ address | accountId, signature, publicKey?, wallet, callbackUrl? }>
+       The server issues the nonce and verifies the signature; locally a random nonce is used. */
+    connectWallet: function (chain, signer) {
+      var getNonce = store.mode === 'live'
+        ? postJSON('api/auth/nonce', {}).then(function (b) { return b.nonce; })
+        : Promise.resolve(randomHex(32));
+      return getNonce.then(function (nonce) {
+        return Promise.resolve(signer(nonce)).then(function (signed) {
+          return store.finishWallet(chain, nonce, signed);
+        });
+      });
+    },
+
+    // Second half of sign-in; also used when a NEAR wallet returns from a redirect.
+    finishWallet: function (chain, nonce, signed) {
       if (store.mode === 'live') {
-        var url = 'auth/x/login' + (store.ref ? '?ref=' + encodeURIComponent(store.ref) : '');
-        root.location.href = url;
-        return new Promise(function () {});
+        return postJSON('api/auth/wallet', {
+          chain: chain, nonce: nonce, signature: signed.signature, address: signed.address,
+          accountId: signed.accountId, publicKey: signed.publicKey, callbackUrl: signed.callbackUrl,
+          wallet: signed.wallet, ref: store.ref
+        }).then(function (body) {
+          safeRemove(REF_KEY);
+          var before = store.state.user;
+          store.state = body.state;
+          store.emit();
+          return { bonus: before ? 0 : body.state.earned };
+        });
       }
-      return store.dispatch({ type: 'connect', handle: handle, name: handle, ref: store.ref }).then(function (r) {
+      return store.dispatch({ type: 'connect', chain: chain, address: signed.address || signed.accountId, wallet: signed.wallet, ref: store.ref }).then(function (r) {
         safeRemove(REF_KEY);
         return r;
       });
@@ -111,7 +134,7 @@
 
     logout: function () {
       if (store.mode === 'live') {
-        return fetch('auth/logout', { method: 'POST', credentials: 'same-origin' }).then(function () {
+        return fetch('api/auth/logout', { method: 'POST', credentials: 'same-origin' }).then(function () {
           store.state = engine.emptyState();
           store.emit();
         });
@@ -129,6 +152,25 @@
       return Promise.resolve(null); // UI builds sample rows in demo mode
     }
   };
+
+  function randomHex(n) {
+    var b = new Uint8Array(n);
+    root.crypto.getRandomValues(b);
+    return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (b) {
+        if (!res.ok || b.error) throw new Error(b.error || 'Server error (' + res.status + '). Try again.');
+        return b;
+      });
+    });
+  }
 
   function fetchJSON(url) {
     return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(function (res) {

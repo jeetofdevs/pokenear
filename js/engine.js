@@ -5,6 +5,7 @@
   'use strict';
 
   var D = root.PN && root.PN.data ? root.PN.data : require('./data.js');
+  var A = root.PN && root.PN.auth ? root.PN.auth : require('./auth.js');
   var E = D.ECONOMY;
 
   function GameError(message) {
@@ -16,20 +17,14 @@
 
   function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-  function normalizeHandle(raw) {
-    var h = String(raw || '').trim().replace(/^@+/, '');
-    if (!/^[A-Za-z0-9_]{1,15}$/.test(h)) return null;
-    return h;
-  }
-
-  function refCodeFor(handle) {
-    var code = D.hash('pokenear:' + handle.toLowerCase()).toString(36).toUpperCase();
+  function refCodeFor(chain, address) {
+    var code = D.hash('pokenear:' + chain + ':' + address).toString(36).toUpperCase();
     return ('PN' + code).slice(0, 8);
   }
 
   function emptyState() {
     return {
-      v: 4,
+      v: 5,
       user: null,
       balance: 0,
       earned: 0,
@@ -46,9 +41,11 @@
     };
   }
 
-  // Carry an account from an older save format: keep profile, balance and quests, start a fresh vault.
+  // Carry an account from an older save format: keep balance and quests, start a fresh vault.
+  // Saves from before wallet sign-in (v4 and older, X accounts) cannot be mapped to a wallet.
   function migrate(old) {
-    if (!old || old.v === 4) return old;
+    if (!old || old.v === 5) return old;
+    if (!old.user || !old.user.chain) return emptyState();
     var st = emptyState();
     ['user', 'balance', 'earned', 'tasks', 'invites', 'lastDaily', 'whitelist'].forEach(function (k) {
       if (old[k] !== undefined) st[k] = old[k];
@@ -96,7 +93,7 @@
   }
 
   function requireUser(state) {
-    if (!state.user) throw GameError('Connect your X account first.');
+    if (!state.user) throw GameError('Connect your wallet first.');
   }
 
   /* apply(state, action, ctx) -> { state, result }
@@ -107,15 +104,17 @@
     var result = {};
     switch (action && action.type) {
       case 'connect': {
-        var handle = normalizeHandle(action.handle);
-        if (!handle) throw GameError('Enter a valid X handle: letters, numbers or _ (max 15).');
-        if (state.user) throw GameError('An X account is already connected.');
+        var chain = action.chain;
+        var address = String(action.address || '');
+        if (!A.CHAINS[chain]) throw GameError('Choose Solana or NEAR.');
+        if (!A.isValidAddress(chain, address)) throw GameError('That is not a valid ' + A.CHAINS[chain].name + ' address.');
+        if (state.user) throw GameError('A wallet is already connected.');
         state.user = {
-          handle: handle,
-          name: String(action.name || handle).slice(0, 50),
-          xId: action.xId ? String(action.xId) : null,
-          avatar: action.avatar ? String(action.avatar) : null,
-          refCode: refCodeFor(handle),
+          chain: chain,
+          address: address,
+          name: A.shortAddress(address),
+          wallet: action.wallet ? String(action.wallet).slice(0, 30) : null,
+          refCode: refCodeFor(chain, address),
           referredBy: null,
           joinedAt: now
         };
@@ -198,7 +197,7 @@
         requireUser(state);
         if (state.whitelist) throw GameError('You are already on the whitelist.');
         if (!whitelistStatus(state).eligible) throw GameError('Finish every quest to join the whitelist.');
-        var spot = ctx.nextSpot ? ctx.nextSpot() : 1 + (D.hash(state.user.handle.toLowerCase()) % 4999);
+        var spot = ctx.nextSpot ? ctx.nextSpot() : 1 + (D.hash(state.user.chain + ':' + state.user.address) % 4999);
         state.whitelist = { spot: spot, at: now };
         result.spot = spot;
         break;
@@ -222,7 +221,6 @@
     apply: apply,
     emptyState: emptyState,
     migrate: migrate,
-    normalizeHandle: normalizeHandle,
     rip: rip,
     refCodeFor: refCodeFor,
     whitelistStatus: whitelistStatus,
