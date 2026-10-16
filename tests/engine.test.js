@@ -21,162 +21,123 @@ function ctx(seed = 1, now = T) {
 function connected(extra = {}) {
   return engine.apply(engine.emptyState(), { type: 'connect', handle: '@near_fan', ...extra }, ctx()).state;
 }
-const PACK = D.productById.pack;
-const BUNDLE = D.productById.bundle;
+const STARTER = D.packById.starter;
 
-test('only Pokémon sets are live, One Piece is coming soon', () => {
-  assert.ok(D.SERIES.length >= 4);
+test('only Pokémon is live, One Piece is coming soon', () => {
   assert.ok(D.SERIES.every((s) => s.game === 'pokemon'));
   assert.ok(D.COMING_SOON.length >= 1 && D.COMING_SOON.every((s) => s.game === 'onepiece'));
 });
 
-test('cheapest product is $10 and prices convert to $POKENEAR', () => {
-  assert.equal(Math.min(...D.PRODUCTS.map((p) => p.usd)), 10);
-  assert.equal(PACK.price, Math.round(10 / D.TOKEN_USD));
-  assert.equal(BUNDLE.packs, 6);
+test('cheapest pack is $10 and prices convert to $POKENEAR', () => {
+  assert.equal(Math.min(...D.PACKS.map((p) => p.usd)), 10);
+  assert.equal(STARTER.price, Math.round(10 / D.TOKEN_USD));
 });
 
-test('cards are real, unique and have known rarities', () => {
-  const ids = new Set();
-  for (const s of D.SERIES) {
-    for (const c of s.cards) {
-      assert.ok(!ids.has(c.id), `duplicate ${c.id}`);
-      ids.add(c.id);
-      assert.ok(D.RARITY_INFO[c.rarity], `unknown rarity ${c.rarity}`);
-      assert.match(c.img, /^https:\/\//);
+test('every pack publishes odds that sum to 100% and hit the EV target', () => {
+  for (const p of D.PACKS) {
+    const sum = p.pool.reduce((n, e) => n + e.p, 0);
+    assert.ok(Math.abs(sum - 1) < 1e-9, `${p.id} odds sum ${sum}`);
+    assert.ok(Math.abs(p.ev - p.usd * D.EV_RATIO) < 0.02, `${p.id} EV ${p.ev}`);
+    for (const e of p.pool) {
+      const c = D.cardById[e.id];
+      assert.ok(c.usd >= p.min && c.usd <= p.max, `${c.id} $${c.usd} outside ${p.id}`);
     }
+    // Pricier cards are never more likely than cheaper ones.
+    for (let i = 1; i < p.pool.length; i++) assert.ok(p.pool[i].p >= p.pool[i - 1].p - 1e-12);
+    assert.ok(p.pool.length >= 20);
   }
-  assert.equal(D.cardById['mew-006'].name, 'Charizard ex');
+});
+
+test('simulated rips match the published odds and EV', () => {
+  for (const p of D.PACKS) {
+    const rng = mulberry32(11);
+    const N = 50000;
+    let total = 0;
+    let top = 0;
+    for (let i = 0; i < N; i++) {
+      const c = engine.rip(p, rng);
+      total += c.usd;
+      if (c.usd >= p.usd) top += 1;
+    }
+    const ev = total / N;
+    assert.ok(Math.abs(ev - p.ev) / p.ev < 0.05, `${p.id}: simulated EV ${ev.toFixed(2)} vs ${p.ev}`);
+    assert.ok(Math.abs(top / N - p.beat) < 0.01, `${p.id}: beat ${top / N} vs ${p.beat}`);
+  }
+});
+
+test('cards are real, unique and valued', () => {
+  const ids = new Set();
+  for (const c of D.ALL_CARDS) {
+    assert.ok(!ids.has(c.id));
+    ids.add(c.id);
+    assert.ok(c.usd > 0 && c.buyback === Math.round(c.usd * D.BUYBACK_RATE / D.TOKEN_USD));
+    assert.match(c.img, /^https:\/\//);
+  }
+  assert.equal(D.cardById['mew-199'].name, 'Charizard ex');
   assert.equal(D.cardById['mew-199'].code, 'SIR');
-});
-
-test('a pack follows the real booster layout', () => {
-  const s = D.seriesById.mew;
-  const rng = mulberry32(3);
-  for (let n = 0; n < 2000; n++) {
-    const pack = engine.openPack(s, rng).map((c) => ({ ...c, card: D.cardById[c.id] }));
-    assert.equal(pack.length, 10);
-    pack.slice(0, 4).forEach((c) => assert.equal(c.card.rarity, 'Common'));
-    pack.slice(4, 7).forEach((c) => assert.equal(c.card.rarity, 'Uncommon'));
-    assert.ok(['Common', 'Uncommon', 'Rare'].includes(pack[7].card.rarity));
-    assert.ok(pack[7].rev);
-    assert.ok(['Common', 'Uncommon', 'Rare', 'Illustration rare', 'Special illustration rare'].includes(pack[8].card.rarity));
-    assert.ok(['Rare', 'Double rare', 'Ultra Rare', 'Hyper rare'].includes(pack[9].card.rarity), pack[9].card.rarity);
-    assert.ok(pack.every((c) => c.card.series === 'mew'));
-  }
-});
-
-test('hit rates match the published 1-in-N odds', () => {
-  const s = D.seriesById.mew;
-  const rng = mulberry32(42);
-  const N = 60000;
-  const seen = {};
-  for (let n = 0; n < N; n++) {
-    const rarities = new Set(engine.openPack(s, rng).map((c) => D.cardById[c.id].rarity));
-    rarities.forEach((r) => { seen[r] = (seen[r] || 0) + 1; });
-  }
-  // A hit only gets its roll if the rarer hits before it in the same slot missed.
-  const expect = {
-    'Special illustration rare': 1 / 32,
-    'Illustration rare': (1 - 1 / 32) / 12,
-    'Hyper rare': 1 / 55,
-    'Ultra Rare': (1 - 1 / 55) / 16,
-    'Double rare': (1 - 1 / 55) * (1 - 1 / 16) / 6
-  };
-  for (const [r, p] of Object.entries(expect)) {
-    const got = seen[r] / N;
-    assert.ok(Math.abs(got - p) / p < 0.12, `${r}: got ${got.toFixed(4)} want ${p.toFixed(4)}`);
-  }
-});
-
-test('set-only hits appear only in their sets', () => {
-  const rng = mulberry32(9);
-  for (let n = 0; n < 3000; n++) {
-    engine.openPack(D.seriesById.mew, rng).forEach((c) => {
-      assert.ok(!['Black White Rare', 'Mega Hyper Rare'].includes(D.cardById[c.id].rarity));
-    });
-  }
-  assert.ok(D.seriesById.blk.odds.some((o) => o.code === 'BWR'));
-  assert.ok(D.seriesById.meg.odds.some((o) => o.code === 'MUR'));
 });
 
 test('connect validates handle and grants demo credit', () => {
   assert.throws(() => engine.apply(engine.emptyState(), { type: 'connect', handle: 'bad handle!' }, ctx()), /valid X handle/);
-  const s = connected();
-  assert.equal(s.user.handle, 'near_fan');
-  assert.equal(s.balance, D.ECONOMY.startBonus);
-});
-
-test('referral link adds bonus but not for own code', () => {
+  assert.equal(connected().balance, D.ECONOMY.startBonus);
+  assert.equal(connected({ ref: 'PNFRIEND1' }).balance, D.ECONOMY.startBonus + D.ECONOMY.referredBonus);
   assert.equal(connected({ ref: engine.refCodeFor('near_fan') }).balance, D.ECONOMY.startBonus);
-  const s = connected({ ref: 'PNFRIEND1' });
-  assert.equal(s.balance, D.ECONOMY.startBonus + D.ECONOMY.referredBonus);
 });
 
 test('actions require a connected X account', () => {
-  assert.throws(() => engine.apply(engine.emptyState(), { type: 'pull', series: 'mew', product: 'pack' }, ctx()), /Connect your X/);
+  assert.throws(() => engine.apply(engine.emptyState(), { type: 'pull', pack: 'starter' }, ctx()), /Connect your X/);
 });
 
-test('buying a pack charges $10 and adds 10 cards', () => {
-  const { state, result } = engine.apply(connected(), { type: 'pull', series: 'blk', product: 'pack' }, ctx(7));
-  assert.equal(result.packs.length, 1);
-  assert.equal(result.packs[0].length, 10);
-  assert.equal(state.balance, D.ECONOMY.startBonus - PACK.price);
-  assert.equal(state.totalPulls, 10);
-  assert.equal(state.pulls.blk.packs, 1);
-  assert.equal(Object.values(state.collection).reduce((a, b) => a + b, 0), 10);
+test('a rip charges the pack price and puts one card in the vault', () => {
+  const { state, result } = engine.apply(connected(), { type: 'pull', pack: 'starter', count: 1 }, ctx(7));
+  assert.equal(result.items.length, 1);
+  assert.equal(state.balance, D.ECONOMY.startBonus - STARTER.price);
+  assert.equal(state.vault.length, 1);
+  assert.equal(state.vault[0].uid, 1);
+  assert.ok(STARTER.pool.some((e) => e.id === state.vault[0].id));
+  assert.equal(state.totalPulls, 1);
 });
 
-test('bundle opens 6 packs', () => {
+test('5x rip costs 5 packs and gives 5 unique items', () => {
   const s = connected();
-  s.balance = BUNDLE.price;
-  const { state, result } = engine.apply(s, { type: 'pull', series: 'meg', product: 'bundle' }, ctx(5));
-  assert.equal(result.packs.length, 6);
+  s.balance = STARTER.price * 5;
+  const { state, result } = engine.apply(s, { type: 'pull', pack: 'starter', count: 5 }, ctx(5));
+  assert.equal(result.items.length, 5);
+  assert.equal(new Set(result.items.map((i) => i.uid)).size, 5);
   assert.equal(state.balance, 0);
-  assert.equal(state.totalPulls, 60);
 });
 
-test('not enough balance or unknown set is rejected without changing state', () => {
+test('not enough balance or unknown pack is rejected', () => {
   const s = connected();
   s.balance = 999;
-  assert.throws(() => engine.apply(s, { type: 'pull', series: 'mew', product: 'pack' }, ctx()), /costs \$10/);
+  assert.throws(() => engine.apply(s, { type: 'pull', pack: 'starter' }, ctx()), /costs \$10/);
+  assert.throws(() => engine.apply(s, { type: 'pull', pack: 'op01' }, ctx()), /not available/);
   assert.equal(s.balance, 999);
-  assert.throws(() => engine.apply(s, { type: 'pull', series: 'op01', product: 'pack' }, ctx()), /not available/);
+});
+
+test('buyback pays 90% of value once', () => {
+  let s = engine.apply(connected(), { type: 'pull', pack: 'starter', count: 1 }, ctx(3)).state;
+  const item = s.vault[0];
+  const before = s.balance;
+  const out = engine.apply(s, { type: 'buyback', uid: item.uid }, ctx());
+  assert.equal(out.result.amount, D.cardById[item.id].buyback);
+  assert.equal(out.state.balance, before + D.cardById[item.id].buyback);
+  assert.equal(out.state.vault.length, 0);
+  assert.throws(() => engine.apply(out.state, { type: 'buyback', uid: item.uid }, ctx()), /no longer in your vault/);
 });
 
 test('daily reward has a cooldown', () => {
   let s = connected();
   s = engine.apply(s, { type: 'daily' }, ctx(1, T)).state;
-  assert.equal(s.balance, D.ECONOMY.startBonus + D.ECONOMY.dailyReward);
   assert.throws(() => engine.apply(s, { type: 'daily' }, ctx(1, T + 1000)), /ready in/);
   s = engine.apply(s, { type: 'daily' }, ctx(1, T + D.ECONOMY.dailyCooldownMs)).state;
   assert.equal(s.balance, D.ECONOMY.startBonus + 2 * D.ECONOMY.dailyReward);
 });
 
-test('burnDupes sells extras back at their rarity value', () => {
-  const s = connected();
-  const common = D.seriesById.mew.byRarity.Common[0];
-  const sir = D.seriesById.mew.byRarity['Special illustration rare'][0];
-  s.collection = { [common.id]: 4, [sir.id]: 2 };
-  const { state, result } = engine.apply(s, { type: 'burnDupes' }, ctx());
-  assert.deepEqual(state.collection, { [common.id]: 1, [sir.id]: 1 });
-  assert.equal(result.amount, 3 * common.value + sir.value);
-  assert.throws(() => engine.apply(state, { type: 'burnDupes' }, ctx()), /No duplicate/);
-});
-
 test('quests pay once', () => {
   let s = connected();
   s = engine.apply(s, { type: 'task', id: 'follow' }, ctx()).state;
-  assert.equal(s.balance, D.ECONOMY.startBonus + 100);
   assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /already/);
-});
-
-test('set bonus requires the full set', () => {
-  const s = connected();
-  assert.throws(() => engine.apply(s, { type: 'claimSet', series: 'wht' }, ctx()), /every card/);
-  D.seriesById.wht.cards.forEach((c) => { s.collection[c.id] = 1; });
-  const { state } = engine.apply(s, { type: 'claimSet', series: 'wht' }, ctx());
-  assert.equal(state.balance, D.ECONOMY.startBonus + D.ECONOMY.setBonus);
 });
 
 test('whitelist requires every quest', () => {
@@ -185,8 +146,16 @@ test('whitelist requires every quest', () => {
   s = engine.apply(s, { type: 'task', id: 'follow' }, ctx()).state;
   s = engine.apply(s, { type: 'task', id: 'post' }, ctx()).state;
   for (let i = 0; i < 3; i++) s = engine.apply(s, { type: 'inviteJoined' }, ctx()).state;
-  s = engine.apply(s, { type: 'pull', series: 'mew', product: 'pack' }, ctx()).state;
+  s = engine.apply(s, { type: 'pull', pack: 'starter' }, ctx()).state;
   assert.equal(engine.whitelistStatus(s).eligible, true);
-  const { result } = engine.apply(s, { type: 'joinWhitelist' }, { ...ctx(), nextSpot: () => 42 });
-  assert.equal(result.spot, 42);
+  assert.equal(engine.apply(s, { type: 'joinWhitelist' }, { ...ctx(), nextSpot: () => 42 }).result.spot, 42);
+});
+
+test('old saves migrate without losing balance or quests', () => {
+  const old = { v: 3, user: { handle: 'x' }, balance: 1234, earned: 2000, tasks: { follow: 1 }, invites: 2, collection: { 'mew-001': 3 }, totalPulls: 20 };
+  const st = engine.migrate(old);
+  assert.equal(st.v, 4);
+  assert.equal(st.balance, 1234);
+  assert.equal(st.invites, 2);
+  assert.deepEqual(st.vault, []);
 });

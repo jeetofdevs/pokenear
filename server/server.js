@@ -46,6 +46,7 @@ function loadDb() {
   }
 }
 const db = loadDb();
+for (const id of Object.keys(db.users)) db.users[id] = engine.migrate(db.users[id]);
 let saveTimer = null;
 function saveDb() {
   clearTimeout(saveTimer);
@@ -175,7 +176,7 @@ async function finishLogin(req, res, url) {
 }
 
 /* ---------- API ---------- */
-const CLIENT_ACTIONS = new Set(['daily', 'pull', 'burnDupes', 'task', 'claimSet', 'joinWhitelist']);
+const CLIENT_ACTIONS = new Set(['daily', 'pull', 'buyback', 'task', 'joinWhitelist']);
 
 async function handleAction(req, res) {
   const uid = currentUserId(req);
@@ -201,8 +202,8 @@ function leaderboard() {
     .map((s) => ({
       handle: s.user.handle,
       name: s.user.name,
-      score: engine.collectionScore(s),
-      cards: Object.keys(s.collection).filter((k) => s.collection[k] > 0).length,
+      score: engine.vaultValue(s),
+      cards: s.vault.length,
       wl: Boolean(s.whitelist)
     }))
     .sort((a, b) => b.score - a.score)

@@ -568,3 +568,40 @@ footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wr
   .odds-grid { grid-template-columns: 1fr; }
   .pull-buttons .btn.buy { flex: 1 1 140px; }
 }
+
+/* ---------- Gacha packs, vault, buyback ---------- */
+.stat-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 4px; }
+.schip { display: grid; gap: 2px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.schip small { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.schip b { font: 700 20px/1.1 var(--f-mono); }
+.pt-price { font: 400 24px/1 var(--f-display); color: var(--gold); }
+.slot { display: grid; gap: 6px; align-content: start; }
+.slot-cap { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px; }
+.slot-cap b { font: 700 14px/1 var(--f-mono); }
+.slot-cap span { color: var(--muted); font: 600 12px/1 var(--f-mono); }
+.vault-item .sell { width: 100%; }
+.vault-stats { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); gap: 10px; }
+.vault-stats .stat b { font-size: 20px; }
+.nav-count { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 999px; background: var(--gold); color: var(--gold-ink); font-size: 11px; text-align: center; margin-left: 4px; }
+.linkish { all: unset; cursor: pointer; font-weight: 700; color: var(--text); }
+.linkish:hover { color: var(--gold); text-decoration: underline; }
+.linkish:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.mq-card { display: grid; gap: 6px; }
+.mq-val { font: 700 13px/1 var(--f-mono); color: var(--gold); text-align: center; }
+.reveal-grid.single { grid-template-columns: minmax(0, 300px); justify-content: center; }
+.reveal-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rip-slot { display: grid; gap: 8px; align-content: start; }
+.rip-slot .flip { width: 100%; }
+.rip-cap { display: flex; justify-content: center; gap: 8px; align-items: baseline; }
+.rip-cap b { font: 700 20px/1 var(--f-mono); }
+.rip-cap span { color: var(--muted); font: 600 12px/1 var(--f-mono); }
+.rip-cap.win b { color: var(--ok); }
+.sold-tag { text-align: center; font-size: 13px; font-weight: 800; color: var(--muted); padding: 8px 0; }
+.flip.sold { opacity: 0.45; }
+.summary .up { color: var(--ok); font-weight: 800; }
+.summary .down { color: var(--hot); font-weight: 800; }
+@media (max-width: 720px) {
+  .stat-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reveal-grid.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vault-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+}

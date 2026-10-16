@@ -29,20 +29,32 @@
 
   function emptyState() {
     return {
-      v: 3,
+      v: 4,
       user: null,
       balance: 0,
       earned: 0,
-      collection: {},
-      pulls: {},
+      vault: [],          // pulled cards you still hold: { uid, id, pack, at }
+      nextUid: 1,
+      sold: 0,            // cards sold back
+      pulls: {},          // rips per pack
       totalPulls: 0,
       tasks: {},
       invites: 0,
       lastDaily: 0,
       whitelist: null,
-      history: [],
-      claimedSets: {}
+      history: []
     };
+  }
+
+  // Carry an account from an older save format: keep profile, balance and quests, start a fresh vault.
+  function migrate(old) {
+    if (!old || old.v === 4) return old;
+    var st = emptyState();
+    ['user', 'balance', 'earned', 'tasks', 'invites', 'lastDaily', 'whitelist'].forEach(function (k) {
+      if (old[k] !== undefined) st[k] = old[k];
+    });
+    st.totalPulls = old.totalPulls ? 1 : 0;
+    return st;
   }
 
   function credit(state, amount) {
@@ -50,38 +62,12 @@
     state.earned += amount;
   }
 
-  function seriesPulls(state, seriesId) {
-    if (!state.pulls[seriesId]) state.pulls[seriesId] = { packs: 0 };
-    return state.pulls[seriesId];
-  }
-
-  function pickFrom(list, rng) {
-    return list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
-  }
-
-  // Pick a card for one slot: roll each hit this set has (rarest first), else a base card.
-  function rollSlot(series, slot, rng) {
-    var hits = slot.hits || [];
-    for (var i = 0; i < hits.length; i++) {
-      var pool = series.byRarity[hits[i][0]];
-      if (pool && rng() < 1 / hits[i][1]) return pickFrom(pool, rng);
-    }
-    var base = [];
-    slot.base.forEach(function (r) { if (series.byRarity[r]) base = base.concat(series.byRarity[r]); });
-    return pickFrom(base, rng);
-  }
-
-  // One booster pack in real pack order: commons, uncommons, reverse holos, rare slot last.
-  function openPack(series, rng) {
-    var out = [];
-    D.PACK_SLOTS.forEach(function (slot) {
-      for (var i = 0; i < slot.count; i++) {
-        var card = rollSlot(series, slot, rng);
-        // Reverse-holo slots print base cards in reverse foil; an IR/SIR hit is its own full-art card.
-        out.push({ id: card.id, rev: !!slot.reverse && (card.tier === 'C' || card.tier === 'R') });
-      }
-    });
-    return out;
+  // One rip: pick a card from the pack pool by its published chance.
+  function rip(pack, rng) {
+    var x = rng();
+    var pool = pack.pool;
+    for (var i = 0; i < pool.length; i++) if (x < pool[i].cum) return D.cardById[pool[i].id];
+    return D.cardById[pool[pool.length - 1].id];
   }
 
   function whitelistStatus(state) {
@@ -98,17 +84,15 @@
 
   function seriesProgress(state, seriesId) {
     var s = D.seriesById[seriesId];
-    var owned = s.cards.filter(function (card) { return state.collection[card.id] > 0; }).length;
-    return { owned: owned, total: s.cards.length, complete: owned === s.cards.length };
+    var have = {};
+    state.vault.forEach(function (it) { have[it.id] = true; });
+    var owned = s.cards.filter(function (card) { return have[card.id]; }).length;
+    return { owned: owned, total: s.cards.length };
   }
 
-  function collectionScore(state) {
-    var score = 0;
-    Object.keys(state.collection).forEach(function (id) {
-      var card = D.cardById[id];
-      if (card && state.collection[id] > 0) score += card.score;
-    });
-    return score;
+  // Total estimated value of the cards in the vault, in USD.
+  function vaultValue(state) {
+    return Math.round(state.vault.reduce(function (n, it) { return n + (D.cardById[it.id] ? D.cardById[it.id].usd : 0); }, 0) * 100) / 100;
   }
 
   function requireUser(state) {
@@ -158,47 +142,46 @@
       }
       case 'pull': {
         requireUser(state);
-        var series = D.seriesById[action.series];
-        if (!series) throw GameError('That set is not available.');
-        var product = D.productById[action.product || 'pack'];
-        if (!product) throw GameError('Unknown product.');
-        if (state.balance < product.price) {
-          throw GameError('Not enough ' + D.TOKEN + '. ' + product.name + ' costs $' + product.usd + ' (' + product.price.toLocaleString('en-US') + ' ' + D.TOKEN + ').');
+        var pack = D.packById[action.pack];
+        if (!pack) throw GameError('That pack is not available.');
+        var count = D.MULTI.indexOf(action.count) >= 0 ? action.count : 1;
+        var cost = pack.price * count;
+        if (state.balance < cost) {
+          throw GameError('Not enough ' + D.TOKEN + '. ' + (count > 1 ? count + '× ' : '') + pack.name + ' costs $' + pack.usd * count + ' (' + cost.toLocaleString('en-US') + ' ' + D.TOKEN + ').');
         }
-        state.balance -= product.price;
-        var packs = [];
-        for (var k = 0; k < product.packs; k++) {
-          var pack = openPack(series, ctx.rng);
-          pack.forEach(function (c) {
-            c.isNew = !state.collection[c.id];
-            state.collection[c.id] = (state.collection[c.id] || 0) + 1;
-            state.history.unshift({ id: c.id, at: now });
-          });
-          packs.push(pack);
+        state.balance -= cost;
+        var items = [];
+        for (var k = 0; k < count; k++) {
+          var card = rip(pack, ctx.rng);
+          var item = { uid: state.nextUid++, id: card.id, pack: pack.id, at: now };
+          state.vault.push(item);
+          state.history.unshift({ id: card.id, at: now });
+          items.push(item);
         }
-        seriesPulls(state, series.id).packs += product.packs;
-        state.totalPulls += product.packs * D.PACK_SIZE;
+        state.pulls[pack.id] = (state.pulls[pack.id] || 0) + count;
+        state.totalPulls += count;
         state.history = state.history.slice(0, E.historySize);
-        result.packs = packs;
-        result.spent = product.price;
+        result.items = items;
+        result.spent = cost;
         break;
       }
-      case 'burnDupes': {
+      case 'buyback': {
         requireUser(state);
-        var gained = 0, burned = 0;
-        Object.keys(state.collection).forEach(function (id) {
-          var card = D.cardById[id];
-          var extra = state.collection[id] - 1;
-          if (!card || extra <= 0) return;
-          if (action.series && card.series !== action.series) return;
-          gained += extra * card.value;
-          burned += extra;
-          state.collection[id] = 1;
+        var uids = [].concat(action.uids || action.uid || []);
+        if (!uids.length) throw GameError('Choose a card to sell back.');
+        var paid = 0, soldN = 0;
+        uids.forEach(function (uid) {
+          var idx = -1;
+          for (var i = 0; i < state.vault.length; i++) if (state.vault[i].uid === uid) { idx = i; break; }
+          if (idx < 0) throw GameError('That card is no longer in your vault.');
+          paid += D.cardById[state.vault[idx].id].buyback;
+          state.vault.splice(idx, 1);
+          soldN += 1;
         });
-        if (!burned) throw GameError('No duplicate cards to burn.');
-        credit(state, gained);
-        result.amount = gained;
-        result.burned = burned;
+        credit(state, paid);
+        state.sold += soldN;
+        result.amount = paid;
+        result.sold = soldN;
         break;
       }
       case 'task': {
@@ -209,16 +192,6 @@
         state.tasks[task.id] = now;
         credit(state, task.reward);
         result.amount = task.reward;
-        break;
-      }
-      case 'claimSet': {
-        requireUser(state);
-        if (!D.seriesById[action.series]) throw GameError('That series does not exist.');
-        if (state.claimedSets[action.series]) throw GameError('Set bonus already claimed.');
-        if (!seriesProgress(state, action.series).complete) throw GameError('Collect every card in the set first.');
-        state.claimedSets[action.series] = now;
-        credit(state, E.setBonus);
-        result.amount = E.setBonus;
         break;
       }
       case 'joinWhitelist': {
@@ -248,12 +221,13 @@
   var engine = {
     apply: apply,
     emptyState: emptyState,
+    migrate: migrate,
     normalizeHandle: normalizeHandle,
-    openPack: openPack,
+    rip: rip,
     refCodeFor: refCodeFor,
     whitelistStatus: whitelistStatus,
     seriesProgress: seriesProgress,
-    collectionScore: collectionScore
+    vaultValue: vaultValue
   };
 
   root.PN = root.PN || {};

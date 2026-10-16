@@ -1,5 +1,11 @@
-/* Pokenear static game data: prices, pack structure, rarities, quests and the card index.
-   Shared by the browser (window.PN.data) and the Node server (require). */
+/* Pokenear static game data: card values, gacha packs, quests and the card index.
+   Shared by the browser (window.PN.data) and the Node server (require).
+
+   Model (same as Courtyard / Collector Crypt / Phygitals):
+   - Each pack has a price and a pool of cards within a value range.
+   - One rip = one card. Every card in the pool has a published chance.
+   - Chances are tuned so the pack's expected value is EV_RATIO x price.
+   - Any pulled card can be sold back instantly for BUYBACK_RATE x its value. */
 (function (root) {
   'use strict';
 
@@ -12,45 +18,36 @@
   var TOKEN_USD = 0.01;
   function usdToToken(usd) { return Math.round(usd / TOKEN_USD); }
 
-  // What you can buy for each Pokémon set. Cheapest product is $10.
-  var PRODUCTS = [
-    { id: 'pack', name: 'Booster Pack', packs: 1, usd: 10 },
-    { id: 'bundle', name: 'Booster Bundle', packs: 6, usd: 54, note: '6 packs · save 10%' }
-  ];
-  PRODUCTS.forEach(function (p) { p.price = usdToToken(p.usd); });
+  var EV_RATIO = 0.98;      // expected card value / pack price
+  var BUYBACK_RATE = 0.9;   // instant sell-back as a share of card value
 
-  /* Booster structure of a modern English Pokémon TCG pack (Scarlet & Violet / Mega Evolution era).
-     10 cards in pack order. A "hit" slot rolls its hits top-down; if none land, the slot falls
-     back to `base`. Odds are community averages from opened product, written as "1 in N packs". */
-  var PACK_SLOTS = [
-    { label: 'Common', count: 4, base: ['Common'] },
-    { label: 'Uncommon', count: 3, base: ['Uncommon'] },
-    { label: 'Reverse Holo', count: 1, reverse: true, base: ['Common', 'Uncommon', 'Rare'] },
-    {
-      label: 'Reverse Holo or Illustration hit', count: 1, reverse: true, base: ['Common', 'Uncommon', 'Rare'],
-      hits: [['Special illustration rare', 32], ['Illustration rare', 12]]
-    },
-    {
-      label: 'Rare or better', count: 1, base: ['Rare'],
-      hits: [['Mega Hyper Rare', 600], ['Black White Rare', 300], ['Hyper rare', 55], ['Ultra Rare', 16], ['Double rare', 6]]
-    }
+  // Gacha packs, cheapest first. min/max bound the card values in the pool (USD).
+  var PACKS = [
+    { id: 'starter', name: 'Starter Pack', usd: 10, min: 2, max: 120, hue: 200, tag: 'Most popular' },
+    { id: 'rare', name: 'Rare Pack', usd: 25, min: 5, max: 250, hue: 150, tag: 'Value' },
+    { id: 'elite', name: 'Elite Pack', usd: 50, min: 12, max: 400, hue: 270, tag: 'Chase' },
+    { id: 'legend', name: 'Legend Pack', usd: 100, min: 30, max: 1000, hue: 40, tag: 'High roller' }
   ];
-  var PACK_SIZE = PACK_SLOTS.reduce(function (n, s) { return n + s.count; }, 0);
+  var MULTI = [1, 5];       // rips per purchase
 
-  // Real rarities: display code, visual tier (glow/holo) and instant sell-back value in $POKENEAR.
-  // Values roughly follow raw-card market prices at 1 $POKENEAR = $0.01; tune before launch.
+  // Real rarities: display code, visual tier and a base market value in USD.
   var RARITY_INFO = {
-    'Common': { code: 'C', tier: 'C', value: 5 },
-    'Uncommon': { code: 'U', tier: 'C', value: 10 },
-    'Rare': { code: 'R', tier: 'R', value: 25 },
-    'Double rare': { code: 'RR', tier: 'SR', value: 100 },
-    'Illustration rare': { code: 'IR', tier: 'UR', value: 300 },
-    'Ultra Rare': { code: 'UR', tier: 'UR', value: 500 },
-    'Hyper rare': { code: 'HR', tier: 'SEC', value: 1500 },
-    'Special illustration rare': { code: 'SIR', tier: 'SEC', value: 2500 },
-    'Black White Rare': { code: 'BWR', tier: 'SEC', value: 8000 },
-    'Mega Hyper Rare': { code: 'MUR', tier: 'SEC', value: 15000 }
+    'Common': { code: 'C', tier: 'C', usd: 0.1 },
+    'Uncommon': { code: 'U', tier: 'C', usd: 0.15 },
+    'Rare': { code: 'R', tier: 'R', usd: 0.4 },
+    'Double rare': { code: 'RR', tier: 'SR', usd: 2.5 },
+    'Illustration rare': { code: 'IR', tier: 'UR', usd: 7 },
+    'Ultra Rare': { code: 'UR', tier: 'UR', usd: 9 },
+    'Hyper rare': { code: 'HR', tier: 'SEC', usd: 28 },
+    'Special illustration rare': { code: 'SIR', tier: 'SEC', usd: 45 },
+    'Black White Rare': { code: 'BWR', tier: 'SEC', usd: 140 },
+    'Mega Hyper Rare': { code: 'MUR', tier: 'SEC', usd: 220 }
   };
+  // Fan favourites trade above their rarity's base value.
+  var POPULAR = /^(Mega )?(Charizard|Pikachu|Mew|Mewtwo|Gengar|Eevee|Umbreon|Lugia|Rayquaza|Gardevoir|Lucario|Zekrom|Reshiram|Kyurem|Blastoise|Venusaur|Alakazam|Snorlax|Dragonite|Gyarados|Zapdos|Moltres|Articuno|Victini|Genesect|Hydreigon|Serperior)\b/;
+  // Headline cards with hand-set estimates.
+  var FEATURED = { 'mew-199': 320, 'meg-188': 260, 'meg-187': 210, 'blk-172': 180, 'wht-173': 170, 'mew-205': 70, 'mew-200': 90, 'mew-201': 80 };
+
   // Visual tiers, lowest first.
   var TIERS = [
     { id: 'C', name: 'Common' }, { id: 'R', name: 'Rare' }, { id: 'SR', name: 'Double Rare' },
@@ -58,15 +55,14 @@
   ];
 
   var ECONOMY = {
-    startBonus: 2000,       // first X connect: $20 of demo credit = 2 packs
+    startBonus: 2000,       // first X connect: $20 of demo credit
     referredBonus: 500,     // extra for joining through an invite link
     inviteReward: 500,      // paid to the inviter per friend
     dailyReward: 200,
     dailyCooldownMs: 20 * 60 * 60 * 1000,
-    setBonus: 25000,        // complete a whole set
     historySize: 60,
     whitelistInvites: 3,
-    whitelistPulls: PACK_SIZE // open one pack
+    whitelistPulls: 1       // rip your first card
   };
 
   // Whitelist quests. `kind: 'x'` quests open an X intent link first.
@@ -75,7 +71,7 @@
     { id: 'follow', title: 'Follow @' + X_HANDLE + ' on X', reward: 100, kind: 'x' },
     { id: 'post', title: 'Post your invite link on X', reward: 150, kind: 'x' },
     { id: 'invites', title: 'Invite 3 friends', reward: 0, auto: true },
-    { id: 'pulls', title: 'Open your first pack', reward: 0, auto: true }
+    { id: 'pulls', title: 'Rip your first pack', reward: 0, auto: true }
   ];
 
   // Real card lists come from js/cards.js (generated by scripts/build-cards.js).
@@ -96,66 +92,102 @@
     }
     return h >>> 0;
   }
+  function round2(n) { return Math.round(n * 100) / 100; }
 
-  var FEATURED = { mew: 'mew-199', meg: 'meg-188', blk: 'blk-172', wht: 'wht-173' };
+  // Estimated value: rarity base x card-specific spread (0.6-1.6) x popularity, or a hand-set figure.
+  function estimateUsd(card) {
+    if (FEATURED[card.id]) return FEATURED[card.id];
+    var base = RARITY_INFO[card.rarity].usd;
+    var spread = 0.6 + (hash(card.id) % 1000) / 1000;
+    var popular = POPULAR.test(card.name) ? 1.8 : 1;
+    return round2(Math.max(0.05, base * spread * popular));
+  }
 
   var tierById = {};
   TIERS.forEach(function (t, i) { t.rank = i; tierById[t.id] = t; });
 
+  var ALL_CARDS = [];
   var cardById = {};
   var seriesById = {};
   SERIES.forEach(function (s) {
     seriesById[s.id] = s;
-    s.byRarity = {};
     s.cards.forEach(function (card) {
       var info = RARITY_INFO[card.rarity];
       card.series = s.id;
       card.code = info.code;
       card.tier = info.tier;
-      card.value = info.value;
-      card.score = info.value * 2 + (card.hp || 40);
+      card.usd = estimateUsd(card);
+      card.buyback = usdToToken(card.usd * BUYBACK_RATE);
       cardById[card.id] = card;
-      (s.byRarity[card.rarity] = s.byRarity[card.rarity] || []).push(card);
+      ALL_CARDS.push(card);
     });
-    // Per-pack odds for every hit this set actually has.
-    s.odds = [];
-    PACK_SLOTS.forEach(function (slot) {
-      (slot.hits || []).forEach(function (h) {
-        if (s.byRarity[h[0]]) s.odds.push({ rarity: h[0], code: RARITY_INFO[h[0]].code, oneIn: h[1], cards: s.byRarity[h[0]].length });
-      });
-    });
-    s.odds.sort(function (a, b) { return b.oneIn - a.oneIn; });
-    // Chase cards: the set's headline card, then most valuable, one per name, Pokémon before trainers.
-    var seen = {};
-    var featured = FEATURED[s.id];
-    s.chase = s.cards.filter(function (c) { return tierById[c.tier].rank >= 3; })
-      .sort(function (a, b) { return ((b.id === featured) - (a.id === featured)) || ((b.dex ? 1 : 0) - (a.dex ? 1 : 0)) || (b.value - a.value); })
-      .filter(function (c) {
-        if (seen[c.name]) return false;
-        seen[c.name] = true;
-        return true;
-      }).slice(0, 8);
   });
+
+  /* Pack odds: weight each card by value^-k and pick k so the expected value hits the target.
+     Cheaper cards are more likely; the chase cards are rare. Deterministic, so the browser
+     and the server always publish the same odds. */
+  function buildPool(pack) {
+    var target = pack.usd * EV_RATIO;
+    function inRange() { return ALL_CARDS.filter(function (c) { return c.usd >= pack.min && c.usd <= pack.max; }); }
+    function mean(list) { return list.reduce(function (n, c) { return n + c.usd; }, 0) / list.length; }
+    // Raise the floor until the pool can reach the target without favouring expensive cards.
+    var cards = inRange();
+    while (mean(cards) < target) {
+      pack.min = Math.round(pack.min * 1.1 + 1);
+      cards = inRange();
+    }
+    function ev(k) {
+      var wsum = 0, vsum = 0;
+      cards.forEach(function (c) { var w = Math.pow(c.usd, -k); wsum += w; vsum += w * c.usd; });
+      return vsum / wsum;
+    }
+    var lo = 0, hi = 8;
+    for (var i = 0; i < 80; i++) {
+      var mid = (lo + hi) / 2;
+      if (ev(mid) > target) lo = mid; else hi = mid;
+    }
+    var k = (lo + hi) / 2;
+    var total = 0;
+    var pool = cards.map(function (c) { var w = Math.pow(c.usd, -k); total += w; return { id: c.id, w: w }; });
+    var acc = 0;
+    pool.forEach(function (e) { e.p = e.w / total; acc += e.p; e.cum = acc; delete e.w; });
+    pool.sort(function (a, b) { return cardById[b.id].usd - cardById[a.id].usd; });
+    // Re-accumulate in display order (most valuable first) for sampling.
+    acc = 0;
+    pool.forEach(function (e) { acc += e.p; e.cum = acc; });
+    pack.pool = pool;
+    pack.ev = round2(pool.reduce(function (n, e) { return n + e.p * cardById[e.id].usd; }, 0));
+    pack.price = usdToToken(pack.usd);
+    pack.top = pool.slice(0, 8).map(function (e) { return cardById[e.id]; });
+    // Chance to beat the price, and to pull 3x / 10x the price.
+    function chanceAbove(x) { return pool.reduce(function (n, e) { return n + (cardById[e.id].usd >= x ? e.p : 0); }, 0); }
+    pack.beat = chanceAbove(pack.usd);
+    pack.x3 = chanceAbove(pack.usd * 3);
+    pack.x10 = chanceAbove(pack.usd * 10);
+  }
+  PACKS.forEach(buildPool);
 
   var data = {
     TOKEN: TOKEN,
     TOKEN_USD: TOKEN_USD,
+    EV_RATIO: EV_RATIO,
+    BUYBACK_RATE: BUYBACK_RATE,
     X_HANDLE: X_HANDLE,
     SEASON_END: SEASON_END,
-    PRODUCTS: PRODUCTS,
-    PACK_SLOTS: PACK_SLOTS,
-    PACK_SIZE: PACK_SIZE,
+    PACKS: PACKS,
+    MULTI: MULTI,
     RARITY_INFO: RARITY_INFO,
     TIERS: TIERS,
     ECONOMY: ECONOMY,
     TASKS: TASKS,
     SERIES: SERIES,
+    ALL_CARDS: ALL_CARDS,
     COMING_SOON: COMING_SOON,
     GAMES: GAMES,
     tierById: tierById,
     cardById: cardById,
     seriesById: seriesById,
-    productById: PRODUCTS.reduce(function (m, p) { m[p.id] = p; return m; }, {}),
+    packById: PACKS.reduce(function (m, p) { m[p.id] = p; return m; }, {}),
     usdToToken: usdToToken,
     hash: hash
   };

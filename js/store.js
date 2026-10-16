@@ -5,7 +5,7 @@
   'use strict';
 
   var engine = root.PN.engine;
-  var STORAGE_KEY = 'pokenear:v3';
+  var STORAGE_KEY = 'pokenear:v4';
   var REF_KEY = 'pokenear:ref';
 
   function safeGet(key) {
@@ -56,7 +56,7 @@
           if (cfg && cfg.mode === 'live') {
             store.mode = 'live';
             return fetchJSON('api/me').then(function (me) {
-              store.state = (me && me.state) || engine.emptyState();
+              store.state = (me && me.state && engine.migrate(me.state)) || engine.emptyState();
             });
           }
           throw new Error('local');
@@ -66,7 +66,7 @@
           var raw = safeGet(STORAGE_KEY);
           var loaded = null;
           try { loaded = raw ? JSON.parse(raw) : null; } catch (e) { loaded = null; }
-          store.state = loaded && loaded.v === 3 ? loaded : engine.emptyState();
+          store.state = loaded && loaded.v === 4 ? loaded : engine.emptyState();
         })
         .then(function () { store.emit(); return store.state; });
     },

@@ -73,24 +73,36 @@ test('X login, referral and game API', async () => {
     assert.equal(me.user.handle, 'alice_tcg');
     assert.equal(me.balance, 2000);
 
-    const pull = await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' });
+    const pull = await api(alice, '/api/action', { type: 'pull', pack: 'starter', count: 1 });
     assert.equal(pull.status, 200);
-    assert.equal(pull.body.result.packs[0].length, 10);
+    assert.equal(pull.body.result.items.length, 1);
     assert.equal(pull.body.state.balance, 1000);
-    assert.equal((await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' })).status, 200);
+    const item = pull.body.result.items[0];
+    const sold = await api(alice, '/api/action', { type: 'buyback', uid: item.uid });
+    assert.equal(sold.status, 200);
+    assert.ok(sold.body.result.amount > 0);
+    // Spend the rest so the next rip fails.
+    const left = sold.body.state.balance;
+    const s2 = await api(alice, '/api/action', { type: 'pull', pack: 'starter', count: 1 });
+    assert.equal(s2.status, 200);
+    const spend = s2.body.state.balance;
+    assert.equal(spend, left - 1000);
+    // Sell it back too, then burn the balance down with a known-cost loop is unnecessary: drain via buyback math.
+    const after = (await api(alice, '/api/me')).body.state.balance;
 
     // Clients cannot fake invites.
     assert.equal((await api(alice, '/api/action', { type: 'inviteJoined' })).status, 400);
-    const broke = await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' });
+    const broke = await api(alice, '/api/action', { type: 'pull', pack: 'legend', count: 5 });
     assert.equal(broke.status, 400);
     assert.match(broke.body.error, /Not enough/);
+    assert.equal((await api(alice, '/api/me')).body.state.balance, after);
 
     const bob = await login('code-bob', me.user.refCode);
     const bobState = (await api(bob, '/api/me')).body.state;
     assert.equal(bobState.balance, 2500);
     const aliceAfter = (await api(alice, '/api/me')).body.state;
     assert.equal(aliceAfter.invites, 1);
-    assert.equal(aliceAfter.balance, 0 + 500);
+    assert.equal(aliceAfter.balance, after + 500);
 
     // Logging in again does not reset progress or double-count the referral.
     await login('code-bob', me.user.refCode);

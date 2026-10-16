@@ -1,4 +1,5 @@
 /* Pokenear UI. Renders from store.state; all game rules live in engine.js.
+   Gacha model: tiered packs, one card per rip, published odds, instant 90% buyback.
    Cards are drawn from real set data (js/cards.js). When remote images are allowed,
    the official card scan fades in over the drawn card. */
 (function (root) {
@@ -11,14 +12,14 @@
   var doc = root.document;
   var CFG = root.PN_CONFIG || {};
 
-  var ROUTES = ['packs', 'binder', 'whitelist', 'ranks'];
+  var ROUTES = ['packs', 'vault', 'whitelist', 'ranks'];
   var ui = {
     route: 'packs',
-    series: D.SERIES[0].id,
-    binder: D.SERIES[0].id,
-    binderFilter: 'all',
+    pack: D.PACKS[0].id,
+    vaultSort: 'value',
+    showAllOdds: false,
     clicked: {},          // quests whose X link was opened, awaiting confirm
-    opening: null,        // { series, cards, stage, revealed: {}, count }
+    opening: null,        // { pack, items, stage, revealed: {}, count, sold: {} }
     busy: false,
     leaderboard: null
   };
@@ -169,32 +170,57 @@
     return face.replace(/^<div class="/, '<div class="' + cls).slice(0, -6) + extras + '</div>';
   }
 
-  function packArtHTML(s) {
-    var game = D.GAMES[s.game];
-    var art;
-    if (s.game === 'pokemon') {
-      art = '<img class="pa-img" src="' + artUrl(s.coverDex) + '" alt="" decoding="async">';
-    } else {
-      art = '<div class="pa-burst" aria-hidden="true"></div><div class="pa-op">' + esc(callName(s.coverName)) + '</div>';
-    }
-    return '<div class="pack-art ' + s.game + '" style="--h:' + s.hue + '"><div class="pa-crimp top"></div>' +
-      '<div class="pa-inner"><div class="pa-game">' + esc(game.name) + '</div>' + art +
-      '<div class="pa-name">' + esc(s.name) + '</div><div class="pa-sub">' + esc(s.short) + ' · Booster Pack</div></div>' +
+  function coverDex(p) {
+    var c = p.top.filter(function (x) { return x.dex; })[0];
+    return c ? c.dex : 25;
+  }
+  function packArtHTML(p) {
+    return '<div class="pack-art gacha" style="--h:' + p.hue + '"><div class="pa-crimp top"></div>' +
+      '<div class="pa-inner"><div class="pa-game">Pokémon TCG</div>' +
+      '<img class="pa-img" src="' + artUrl(coverDex(p)) + '" alt="" decoding="async">' +
+      '<div class="pa-name">' + esc(p.name) + '</div><div class="pa-sub">' + usd(p.usd) + ' · 1 card</div></div>' +
       '<div class="pa-crimp bottom"></div><div class="pa-shine"></div></div>';
   }
+  function soonArtHTML(s) {
+    return '<div class="pack-art onepiece" style="--h:' + s.hue + '"><div class="pa-crimp top"></div>' +
+      '<div class="pa-inner"><div class="pa-game">One Piece Card Game</div><div class="pa-burst" aria-hidden="true"></div>' +
+      '<div class="pa-op">' + esc(callName(s.coverName)) + '</div>' +
+      '<div class="pa-name">' + esc(s.name) + '</div><div class="pa-sub">' + esc(s.short) + '</div></div>' +
+      '<div class="pa-crimp bottom"></div></div>';
+  }
 
-  // Pull rates for one set: hit odds per pack plus the 10-card pack layout.
-  function oddsHTML(s) {
-    var rows = s.odds.map(function (o) {
-      var card = s.byRarity[o.rarity][0];
-      return '<tr><td><span class="rbadge" style="--rc:var(--r-' + card.tier + ')">' + esc(o.code) + '</span> ' + esc(o.rarity.replace(/\b\w/g, function (c) { return c.toUpperCase(); })) + '</td>' +
-        '<td class="num"><b>1 in ' + o.oneIn + '</b></td><td class="num">' + pct(1 / o.oneIn) + '</td><td class="num">' + o.cards + '</td><td class="num">' + tokenUsd(card.value) + '</td></tr>';
+  function chanceOf(p, cardId) {
+    var e = p.pool.filter(function (x) { return x.id === cardId; })[0];
+    return e ? e.p : 0;
+  }
+  function fmtChance(x) {
+    if (x >= 0.1) return (x * 100).toFixed(1) + '%';
+    if (x >= 0.01) return (x * 100).toFixed(2) + '%';
+    return (x * 100).toFixed(3) + '%';
+  }
+  function oneIn(x) { return x > 0 ? '1 in ' + fmt(1 / x) : '-'; }
+
+  function packStatsHTML(p) {
+    return '<div class="stat-chips">' +
+      '<span class="schip"><small>Expected value</small><b>' + usd(p.ev) + '</b></span>' +
+      '<span class="schip"><small>Instant buyback</small><b>' + Math.round(D.BUYBACK_RATE * 100) + '%</b></span>' +
+      '<span class="schip"><small>Pull ≥ ' + usd(p.usd) + '</small><b>' + fmtChance(p.beat) + '</b></span>' +
+      '<span class="schip"><small>Pull ≥ ' + usd(p.usd * 3) + '</small><b>' + fmtChance(p.x3) + '</b></span>' +
+    '</div>';
+  }
+
+  // Full odds table: every card in the pack with its value and chance.
+  function oddsHTML(p) {
+    var list = ui.showAllOdds ? p.pool : p.pool.slice(0, 25);
+    var rows = list.map(function (e) {
+      var c = D.cardById[e.id];
+      return '<tr><td><button class="linkish" data-act="zoom" data-id="' + c.id + '">' + esc(c.name) + '</button><div class="muted small">' + esc(seriesOf(c).name) + ' · ' + esc(c.no) + '</div></td>' +
+        '<td><span class="rbadge" style="--rc:var(--r-' + c.tier + ')">' + esc(c.code) + '</span></td>' +
+        '<td class="num">' + usd(c.usd) + '</td><td class="num"><b>' + fmtChance(e.p) + '</b></td><td class="num muted">' + oneIn(e.p) + '</td></tr>';
     }).join('');
-    var layout = D.PACK_SLOTS.map(function (slot) {
-      return '<li><span class="slot-n num">' + slot.count + '×</span><span>' + esc(slot.label) + '</span></li>';
-    }).join('');
-    return '<div class="odds-grid"><div class="table-scroll"><table class="rates"><thead><tr><th>Hit</th><th class="num">Odds per pack</th><th class="num">Chance</th><th class="num">Cards in set</th><th class="num">Sell-back</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="pack-layout"><div class="eyebrow">Inside every pack</div><ol>' + layout + '</ol><p class="muted small">Same layout as an English Scarlet &amp; Violet / Mega Evolution booster. Every pack has a Rare or better in the last slot. No pity and no guarantees beyond that: each pack is an independent roll, like opening real packs.</p></div></div>';
+    return '<div class="table-scroll"><table class="rates"><thead><tr><th>Card</th><th>Rarity</th><th class="num">Est. value</th><th class="num">Chance</th><th class="num">Odds</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      (p.pool.length > 25 ? '<button class="btn btn-sm" data-act="all-odds">' + (ui.showAllOdds ? 'Show top 25' : 'Show all ' + p.pool.length + ' cards') + '</button>' : '') +
+      '<p class="muted small">Every card in this pack is listed with its exact chance. Chances are set so the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the pack price (' + usd(p.ev) + ' for ' + usd(p.usd) + '). Values are estimates and will follow a live price feed at launch. Each rip is independent; there is no pity.</p>';
   }
 
   /* ---------- countdown ---------- */
@@ -221,8 +247,8 @@
     var st = store.state;
     var u = st.user;
     var nav = u ? '<nav class="nav" aria-label="Main">' +
-      [['packs', 'Packs'], ['binder', 'Binder'], ['whitelist', 'Whitelist'], ['ranks', 'Ranks']].map(function (n) {
-        return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + '</a>';
+      [['packs', 'Packs'], ['vault', 'Vault'], ['whitelist', 'Whitelist'], ['ranks', 'Ranks']].map(function (n) {
+        return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
       }).join('') + '</nav>' : '';
     var right = u
       ? '<div class="balance" title="' + D.TOKEN + ' balance">' + COIN + '<span class="num">' + fmt(st.balance) + '</span><span class="muted bal-label">' + D.TOKEN + ' · ' + tokenUsd(st.balance) + '</span></div>' +
@@ -236,78 +262,75 @@
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>' + D.TOKEN + ' rewards are off-chain points until token launch. Card data: TCGdex (Pokémon TCG) and the official One Piece Card Game card list. Pokémon and One Piece are trademarks of their owners; Pokenear is not affiliated with them.</span>' +
+    return '<footer><div class="wrap"><span>Prices in USD, paid in ' + D.TOKEN + ' (demo peg 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + '). Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
       '<span>Follow <a href="https://x.com/' + D.X_HANDLE + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a></span></div></footer>';
   }
 
-  function totalCards() { return D.SERIES.reduce(function (a, s) { return a + s.cards.length; }, 0); }
+  function step(n, title, body) {
+    return '<div class="step"><span class="n">' + n + '</span><h3>' + title + '</h3><p>' + body + '</p></div>';
+  }
+
+  function packTileHTML(p, interactive) {
+    var top = p.top[0];
+    var inner = '<span class="tag">' + esc(p.tag) + '</span>' + packArtHTML(p) +
+      '<span class="pt-body"><span class="pt-price">' + usd(p.usd) + '</span>' +
+      '<span class="pt-name">' + esc(p.name) + '</span>' +
+      '<span class="pt-hit">Top hit: <b>' + esc(top.name) + '</b> ' + esc(top.code) + ' · ' + usd(top.usd) + '</span>' +
+      '<span class="pt-meta">EV ' + usd(p.ev) + ' · ' + fmtChance(p.beat) + ' beat the price</span></span>';
+    if (!interactive) return '<div class="pack-tile static" style="--h:' + p.hue + '">' + inner + '</div>';
+    return '<button class="pack-tile" style="--h:' + p.hue + '" data-act="pack" data-id="' + p.id + '" aria-pressed="' + (p.id === ui.pack) + '">' + inner + '</button>';
+  }
+  function soonTileHTML(s) {
+    return '<div class="pack-tile static soon" style="--h:' + s.hue + '"><span class="tag">Coming soon</span>' + soonArtHTML(s) +
+      '<span class="pt-body"><span class="pt-price">One Piece</span><span class="pt-name">' + esc(s.name) + '</span>' +
+      '<span class="pt-hit">' + esc(s.short) + ' · ' + s.cardCount + ' cards · after Season 1</span></span></div>';
+  }
 
   /* ---------- landing ---------- */
   function landingHTML() {
     var fan = ['meg-188', 'mew-199', 'blk-172'].map(function (id) { return D.cardById[id] ? cardHTML(D.cardById[id]) : ''; }).join('');
     var refNote = store.ref ? '<p class="demo-note gold-note">Invite code <b class="num">' + esc(store.ref) + '</b> applied. Connect X to get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on top of the welcome credit.</p>' : '';
+    var seen = {};
     var hits = [];
-    D.SERIES.forEach(function (s) { hits = hits.concat(s.chase.slice(0, 5)); });
-    var cheapest = D.PRODUCTS[0];
+    D.PACKS.slice().reverse().forEach(function (p) { p.top.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = 1; hits.push(c); } }); });
+    hits = hits.slice(0, 14);
+    var starter = D.PACKS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
         '<span class="eyebrow"><span class="live-dot"></span>Season 1 · Pokémon packs live</span>' +
-        '<h1>Rip real Pokémon packs. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
-        '<p class="lede">' + fmt(totalCards()) + ' real cards from ' + D.SERIES.length + ' sets: Scarlet &amp; Violet 151, Mega Evolution, Black Bolt and White Flare. Packs from <b>' + usd(cheapest.usd) + '</b>, paid in ' + D.TOKEN + ', with real booster pull rates.</p>' +
+        '<h1>Rip Pokémon cards. Sell back instantly. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
+        '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         refNote +
-        '<div class="hero-cta"><button class="btn btn-x btn-lg" data-act="connect">' + X_SVG + 'Connect with X</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">Pull rates</a></div>' +
+        '<div class="hero-cta"><button class="btn btn-x btn-lg" data-act="connect">' + X_SVG + 'Connect with X</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
         '<div><div class="eyebrow" style="margin-bottom:8px">Season 1 closes in</div>' + countdownHTML() + '</div>' +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
     '</section>' +
     '<section class="hits-band" aria-label="Top hits you can pull"><div class="eyebrow">Top hits in the packs</div><div class="marquee"><div class="marquee-track">' +
-      hits.concat(hits).map(function (c) { return '<div class="mq-card">' + cardHTML(c) + '</div>'; }).join('') +
+      hits.concat(hits).map(function (c) { return '<div class="mq-card">' + cardHTML(c) + '<span class="mq-val">' + usd(c.usd) + '</span></div>'; }).join('') +
     '</div></div></section>' +
-    '<section class="view" style="gap:14px"><div class="section-head"><h2>Booster packs</h2><span class="muted">From ' + usd(cheapest.usd) + ' · ' + fmt(totalCards()) + ' cards</span></div>' +
-      '<div class="pack-grid">' + D.SERIES.map(function (s) { return packTileHTML(s, false); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
+    '<section class="view" style="gap:14px"><div class="section-head"><h2>Packs</h2><span class="muted">' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + ' · ' + fmt(D.ALL_CARDS.length) + ' real cards</span></div>' +
+      '<div class="pack-grid">' + D.PACKS.map(function (p) { return packTileHTML(p, false); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
     '<section class="panel"><div class="steps">' +
       step(1, 'Connect X', 'Your X account is your Pokenear profile and your invite code.') +
-      step(2, 'Rip packs', 'Booster packs from ' + usd(cheapest.usd) + ', paid in ' + D.TOKEN + '. Real pack layout and odds.') +
-      step(3, 'Invite friends', 'Each friend who joins with your link pays you ' + fmt(E.inviteReward) + ' ' + D.TOKEN + '.') +
-      step(4, 'Lock your spot', 'Finish every quest to claim a numbered whitelist pass.') +
+      step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
+      step(3, 'Keep or sell back', 'Hold the card in your vault or take ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value right away.') +
+      step(4, 'Lock your spot', 'Finish the quests and invite friends to claim a numbered whitelist pass.') +
     '</div></section>' +
-    '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>Pull rates · ' + esc(D.SERIES[0].name) + '</h2><span class="muted">Each set lists its own odds</span></div>' + oddsHTML(D.SERIES[0]) + '</section>';
-  }
-  function step(n, title, body) {
-    return '<div class="step"><span class="n">' + n + '</span><h3>' + title + '</h3><p>' + body + '</p></div>';
-  }
-
-  function packTileHTML(s, interactive) {
-    var p = engine.seriesProgress(store.state, s.id);
-    var top = s.chase[0];
-    var inner = '<span class="tag">' + esc(s.tag) + '</span>' + packArtHTML(s) +
-      '<span class="pt-body"><span class="pt-game">' + esc(s.short) + ' · from ' + usd(D.PRODUCTS[0].usd) + '</span>' +
-      '<span class="pt-name">' + esc(s.name) + '</span>' +
-      '<span class="pt-hit">Top hit: <b>' + esc(top.name) + '</b> ' + esc(top.code) + '</span>' +
-      '<span class="pt-meta num">' + (interactive ? p.owned + '/' : '') + s.cards.length + ' cards</span></span>';
-    if (!interactive) return '<div class="pack-tile static" style="--h:' + s.hue + '">' + inner + '</div>';
-    return '<button class="pack-tile" style="--h:' + s.hue + '" data-act="series" data-id="' + s.id + '" aria-pressed="' + (s.id === ui.series) + '">' + inner + '</button>';
-  }
-
-  function soonTileHTML(s) {
-    return '<div class="pack-tile static soon" style="--h:' + s.hue + '"><span class="tag">Coming soon</span>' + packArtHTML(s) +
-      '<span class="pt-body"><span class="pt-game">One Piece · ' + esc(s.short) + '</span><span class="pt-name">' + esc(s.name) + '</span>' +
-      '<span class="pt-hit">' + s.cardCount + ' cards · launching after Season 1</span></span></div>';
+    '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(starter.name) + ' odds</h2><span class="muted">Every pack publishes its full card list</span></div>' + packStatsHTML(starter) + oddsHTML(starter) + '</section>';
   }
 
   /* ---------- packs ---------- */
   function packsHTML() {
     var st = store.state;
-    var s = D.seriesById[ui.series];
-    var opened = (st.pulls[s.id] || { packs: 0 }).packs;
-    var prog = engine.seriesProgress(st, s.id);
+    var p = D.packById[ui.pack];
     var dailyWait = st.lastDaily + E.dailyCooldownMs - Date.now();
     var recent = st.history.slice(0, 10).filter(function (h) { return D.cardById[h.id]; });
-    var cheapest = D.PRODUCTS[0];
-    var buttons = D.PRODUCTS.map(function (p, i) {
-      return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="pull" data-id="' + p.id + '"' + (st.balance < p.price ? ' disabled' : '') + '>' +
-        '<span class="buy-name">' + esc(p.name) + '</span><span class="buy-usd">' + usd(p.usd) + '</span>' +
-        '<small>' + COIN + fmt(p.price) + ' ' + D.TOKEN + (p.note ? ' · ' + esc(p.note) : ' · 10 cards') + '</small></button>';
+    var buttons = D.MULTI.map(function (n, i) {
+      var cost = p.price * n;
+      return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="rip" data-count="' + n + '"' + (st.balance < cost ? ' disabled' : '') + '>' +
+        '<span class="buy-name">Rip ' + n + (n > 1 ? ' cards' : ' card') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
+        '<small>' + COIN + fmt(cost) + ' ' + D.TOKEN + '</small></button>';
     }).join('');
     return '<section class="season"><div><div class="eyebrow"><span class="live-dot"></span>Season 1 live</div><h2>Whitelist mint closes soon</h2></div>' +
         '<div class="season-right">' + countdownHTML() +
@@ -315,65 +338,50 @@
           ? '<button class="btn" disabled>Daily drop in ' + Math.ceil(dailyWait / 3600000) + 'h</button>'
           : '<button class="btn btn-gold" data-act="daily">' + COIN + ' Claim daily ' + fmt(E.dailyReward) + '</button>') + '</div></section>' +
       '<section class="panel pull-stage">' +
-        '<div class="stage-pack">' + packArtHTML(s) + '</div>' +
+        '<div class="stage-pack">' + packArtHTML(p) + '</div>' +
         '<div class="pull-info">' +
-          '<div><div class="eyebrow">Pokémon TCG · ' + esc(s.short) + ' · ' + prog.owned + '/' + prog.total + ' collected · ' + opened + ' packs opened</div><h2>' + esc(s.name) + '</h2></div>' +
+          '<div><div class="eyebrow">Pokémon TCG · ' + p.pool.length + ' cards from ' + usd(p.min) + ' to ' + usd(p.top[0].usd) + ' · ' + (st.pulls[p.id] || 0) + ' ripped</div><h2>' + esc(p.name) + '</h2></div>' +
           '<div class="pull-buttons">' + buttons + '</div>' +
-          (st.balance < cheapest.price ? '<p class="demo-note">You need ' + fmt(cheapest.price) + ' ' + D.TOKEN + ' (' + usd(cheapest.usd) + ') for a pack. Claim the daily drop, sell back duplicates in your binder, or invite friends.</p>' : '') +
-          '<div class="odds-chips">' + s.odds.map(function (o) {
-            return '<span class="odds-chip"><span class="rbadge" style="--rc:var(--r-' + s.byRarity[o.rarity][0].tier + ')">' + esc(o.code) + '</span>1 in ' + o.oneIn + '</span>';
-          }).join('') + '</div>' +
-          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits in this set</div><div class="chase-row">' +
-            s.chase.slice(0, 6).map(function (c) { return slotHTML(c, st.collection[c.id] || 0, false); }).join('') + '</div></div>' +
+          (st.balance < p.price ? '<p class="demo-note">You need ' + fmt(p.price) + ' ' + D.TOKEN + ' (' + usd(p.usd) + ') for this pack. Claim the daily drop, sell back cards in your vault, or invite friends.</p>' : '') +
+          packStatsHTML(p) +
+          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits</div><div class="chase-row">' +
+            p.top.slice(0, 6).map(function (c) { return slotHTML(c, { chance: chanceOf(p, c.id) }); }).join('') + '</div></div>' +
         '</div></section>' +
-      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a set</h2><span class="muted">Pokémon live now · One Piece coming soon</span></div>' +
-        '<div class="pack-grid">' + D.SERIES.map(function (x) { return packTileHTML(x, true); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
-      (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#binder" class="muted">Open binder</a></div><div class="mini-cards">' +
-        recent.map(function (h) { return slotHTML(D.cardById[h.id], 1, false); }).join('') + '</div></section>' : '') +
-      '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(s.name) + ' pull rates</h2></div>' + oddsHTML(s) + '</section>';
+      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">Pokémon live now · One Piece coming soon</span></div>' +
+        '<div class="pack-grid">' + D.PACKS.map(function (x) { return packTileHTML(x, true); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
+      (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#vault" class="muted">Open vault</a></div><div class="mini-cards">' +
+        recent.map(function (h) { return slotHTML(D.cardById[h.id], {}); }).join('') + '</div></section>' : '') +
+      '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(p.name) + ' odds</h2><span class="muted">' + p.pool.length + ' cards</span></div>' + oddsHTML(p) + '</section>';
   }
 
-  function slotHTML(card, count, showMissing) {
-    var owned = count > 0;
-    return '<div class="slot' + (!owned && showMissing ? ' missing' : '') + '" data-no="' + esc(card.no.replace(/_.*/, '')) + '">' +
-      '<button data-act="zoom" data-id="' + esc(card.id) + '" aria-label="' + esc(card.name + ', ' + card.rarity) + '">' + cardHTML(card, { count: count }) + '</button></div>';
+  // A card with its value (and optionally its chance) underneath; opens the zoom view.
+  function slotHTML(card, opts) {
+    opts = opts || {};
+    return '<div class="slot"><button data-act="zoom" data-id="' + esc(card.id) + '" aria-label="' + esc(card.name + ', ' + card.rarity) + '">' + cardHTML(card) + '</button>' +
+      '<div class="slot-cap"><b>' + usd(card.usd) + '</b>' + (opts.chance ? '<span>' + fmtChance(opts.chance) + '</span>' : '') + '</div></div>';
   }
 
-  /* ---------- binder ---------- */
-  function binderHTML() {
+  /* ---------- vault ---------- */
+  function vaultHTML() {
     var st = store.state;
-    var s = D.seriesById[ui.binder];
-    var p = engine.seriesProgress(st, s.id);
-    var dupes = 0, dupeValue = 0;
-    s.cards.forEach(function (c) {
-      var extra = (st.collection[c.id] || 0) - 1;
-      if (extra > 0) { dupes += extra; dupeValue += extra * c.value; }
-    });
-    var cards = s.cards.filter(function (c) {
-      var own = st.collection[c.id] > 0;
-      if (ui.binderFilter === 'owned') return own;
-      if (ui.binderFilter === 'missing') return !own;
-      if (ui.binderFilter === 'hits') return rar(c.tier).rank >= rar('UR').rank;
-      return true;
-    });
-    var claim;
-    if (st.claimedSets[s.id]) claim = '<span class="reward">Set bonus claimed</span>';
-    else if (p.complete) claim = '<button class="btn btn-gold btn-sm" data-act="claimSet" data-id="' + s.id + '">' + COIN + ' Claim ' + fmt(E.setBonus) + ' set bonus</button>';
-    else claim = '<span class="muted small">Complete the set for ' + fmt(E.setBonus) + ' ' + D.TOKEN + '</span>';
-    function chip(x) {
-      var pr = engine.seriesProgress(st, x.id);
-      return '<button class="chip-btn" data-act="binder" data-id="' + x.id + '" aria-pressed="' + (ui.binder === x.id) + '">' + esc(x.short === 'MEW' ? '151' : x.name) + '<span class="num">' + pr.owned + '/' + pr.total + '</span></button>';
-    }
-    var filters = [['all', 'All cards'], ['owned', 'Owned'], ['missing', 'Missing'], ['hits', 'IR, UR & up']];
-    return '<section class="section-head"><div><div class="eyebrow">Your collection</div><h2 class="page-title">Binder</h2></div>' +
-      '<button class="btn" data-act="burn"' + (dupes ? '' : ' disabled') + '>Sell back ' + dupes + ' duplicates · ' + COIN + fmt(dupeValue) + ' (' + tokenUsd(dupeValue) + ')</button></section>' +
-      '<div class="binder-groups"><div class="binder-tabs" role="group" aria-label="Pokémon sets"><span class="grp">Pokémon</span>' + D.SERIES.filter(function (x) { return x.game === 'pokemon'; }).map(chip).join('') + '</div>' +
-      '<div class="binder-tabs" role="group" aria-label="One Piece sets"><span class="grp">One Piece</span><span class="chip-btn soon-chip">Coming soon</span></div></div>' +
-      '<section class="view" style="gap:14px"><div class="binder-head"><div class="progress-line"><div class="pl-row"><h2>' + esc(s.name) + ' <span class="muted small">' + esc(s.short) + '</span></h2><span class="num muted">' + p.owned + '/' + p.total + '</span></div><div class="bar"><i style="width:' + (p.owned / p.total * 100) + '%"></i></div></div><div class="actions">' + claim + '</div></div>' +
-      '<div class="binder-tabs" role="group" aria-label="Filter cards">' + filters.map(function (f) { return '<button class="chip-btn sm" data-act="bfilter" data-id="' + f[0] + '" aria-pressed="' + (ui.binderFilter === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>' +
-      (cards.length ? '<div class="binder-grid">' + cards.map(function (c) { return slotHTML(c, st.collection[c.id] || 0, true); }).join('') + '</div>'
-        : '<div class="panel empty">' + (ui.binderFilter === 'owned' ? 'No cards from this set yet. <a href="#packs" data-act="go-pack" data-id="' + s.id + '">Rip a ' + esc(s.name) + ' pack</a>.' : 'Nothing here.') + '</div>') +
-      '</section>';
+    var items = st.vault.slice();
+    if (ui.vaultSort === 'value') items.sort(function (a, b) { return D.cardById[b.id].usd - D.cardById[a.id].usd; });
+    else items.sort(function (a, b) { return b.uid - a.uid; });
+    var total = engine.vaultValue(st);
+    var buyAll = items.reduce(function (n, it) { return n + D.cardById[it.id].buyback; }, 0);
+    var sorts = [['value', 'Highest value'], ['new', 'Newest']];
+    return '<section class="section-head"><div><div class="eyebrow">Your cards</div><h2 class="page-title">Vault</h2></div>' +
+      '<div class="vault-stats"><div class="stat"><b>' + items.length + '</b><span>Cards</span></div><div class="stat"><b>' + usd(total) + '</b><span>Est. value</span></div><div class="stat"><b>' + tokenUsd(buyAll) + '</b><span>Buyback now</span></div></div></section>' +
+      (items.length
+        ? '<div class="section-head"><div class="binder-tabs" role="group" aria-label="Sort">' + sorts.map(function (s) { return '<button class="chip-btn sm" data-act="vsort" data-id="' + s[0] + '" aria-pressed="' + (ui.vaultSort === s[0]) + '">' + s[1] + '</button>'; }).join('') + '</div>' +
+          '<p class="muted small">Redeeming the physical card opens at launch.</p></div>' +
+          '<div class="binder-grid">' + items.map(function (it) {
+            var c = D.cardById[it.id];
+            return '<div class="slot vault-item"><button data-act="zoom" data-id="' + c.id + '" aria-label="' + esc(c.name) + '">' + cardHTML(c) + '</button>' +
+              '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
+              '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '">Sell back ' + tokenUsd(c.buyback) + '</button></div>';
+          }).join('') + '</div>'
+        : '<div class="panel empty">Your vault is empty. <a href="#packs">Rip a pack</a> to pull your first card.</div>');
   }
 
   /* ---------- whitelist ---------- */
@@ -381,7 +389,7 @@
     var st = store.state;
     var wl = engine.whitelistStatus(st);
     var link = inviteLink();
-    var postText = 'Ripping real Pokémon packs on @' + D.X_HANDLE + ' and farming ' + D.TOKEN + ' for the Season 1 whitelist. Join with my link and get +' + E.referredBonus + ' bonus: ' + link;
+    var postText = 'Ripping Pokémon cards on @' + D.X_HANDLE + ' with published odds and instant buyback, farming ' + D.TOKEN + ' for the Season 1 whitelist. Join with my link and get +' + fmt(E.referredBonus) + ' bonus: ' + link;
     function quest(id, title, sub, action, reward) {
       var done = wl.checks[id];
       return '<li class="quest' + (done ? ' done' : '') + '"><span class="tick" aria-hidden="true">✓</span><div><div class="q-title">' + title + '</div><div class="q-sub">' + sub + '</div></div><div class="q-act">' +
@@ -412,13 +420,13 @@
             quest('connect', 'Connect your X account', 'Connected as @' + esc(st.user.handle), '', 0) +
             quest('follow', 'Follow @' + D.X_HANDLE + ' on X', 'Opens X in a new tab, then confirm here.', followAct, 100) +
             quest('post', 'Post your invite link on X', 'Shares a ready-made post with your code.', postAct, 150) +
-            quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + E.inviteReward + ' per friend', inviteAct, 0) +
-            quest('pulls', 'Open your first pack', '<span class="num">' + Math.min(Math.floor(st.totalPulls / D.PACK_SIZE), 1) + '/1</span> packs opened · from ' + usd(D.PRODUCTS[0].usd), '<a class="btn btn-sm" href="#packs">Buy a pack</a>', 0) +
+            quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + fmt(E.inviteReward) + ' per friend', inviteAct, 0) +
+            quest('pulls', 'Rip your first pack', 'Packs from ' + usd(D.PACKS[0].usd), '<a class="btn btn-sm" href="#packs">Open packs</a>', 0) +
           '</ul>' +
           (store.mode === 'local' ? '<p class="demo-note">Demo mode: X follows and posts are self-confirmed, and invites are simulated because there is no server tracking sign-ups. Run the Pokenear server with X API keys for real login and referral tracking.</p>' : '') +
         '</section>' +
         '<div style="display:grid;gap:24px">' + pass +
-          '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + E.referredBonus + ' ' + D.TOKEN + ' on sign-up. You get ' + E.inviteReward + ' for each one.</p></div>' +
+          '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on sign-up. You get ' + fmt(E.inviteReward) + ' for each one.</p></div>' +
             '<div class="ref-box"><input id="ref-link" readonly value="' + esc(link) + '" aria-label="Your invite link"><button class="btn" data-act="copy">Copy</button></div>' +
             '<a class="btn btn-x" href="' + intentPost(postText) + '" target="_blank" rel="noopener">' + X_SVG + 'Share invite on X</a>' +
             '<div class="stats-row"><div class="stat"><b>' + st.invites + '</b><span>Friends joined</span></div><div class="stat"><b>' + fmt(st.invites * E.inviteReward) + '</b><span>' + D.TOKEN + ' from invites</span></div><div class="stat"><b class="num">' + esc(st.user.refCode) + '</b><span>Your code</span></div></div>' +
@@ -429,14 +437,13 @@
 
   /* ---------- leaderboard ---------- */
   var SAMPLE = [
-    ['Holo Hunter', 'holo_hunter', 18420, 211, true], ['Pack Ripper', 'packripper', 15130, 187, true], ['SIR Seeker', 'sirseeker', 12900, 160, true],
-    ['Binder Queen', 'binderqueen', 9480, 131, true], ['Pity Breaker', 'pitybreaker', 7210, 98, false], ['Gear Five', 'gearfive_op', 5020, 74, false],
-    ['Foil Fanatic', 'foilfanatic', 3150, 51, false], ['Daily Grinder', 'dailygrinder', 1640, 27, false]
+    ['Holo Hunter', 'holo_hunter', 2840, 41, true], ['Pack Ripper', 'packripper', 1915, 33, true], ['SIR Seeker', 'sirseeker', 1290, 26, true],
+    ['Vault Queen', 'vaultqueen', 948, 21, true], ['Chase Mode', 'chasemode', 612, 14, false], ['Mega Fan', 'megafan', 402, 9, false],
+    ['Foil Fanatic', 'foilfanatic', 215, 6, false], ['Daily Grinder', 'dailygrinder', 64, 3, false]
   ];
   function ranksHTML() {
     var st = store.state;
-    var meOwned = Object.keys(st.collection).filter(function (k) { return st.collection[k] > 0; }).length;
-    var me = { name: st.user.name, handle: st.user.handle, score: engine.collectionScore(st), cards: meOwned, wl: !!st.whitelist, me: true };
+    var me = { name: st.user.name, handle: st.user.handle, score: engine.vaultValue(st), cards: st.vault.length, wl: !!st.whitelist, me: true };
     var rows, isSample = false;
     if (ui.leaderboard) {
       rows = ui.leaderboard.map(function (r) { return { name: r.name, handle: r.handle, score: r.score, cards: r.cards, wl: r.wl, me: r.handle === st.user.handle }; });
@@ -445,12 +452,12 @@
       rows = SAMPLE.map(function (r) { return { name: r[0], handle: r[1], score: r[2], cards: r[3], wl: r[4], sample: true }; }).concat([me]);
     }
     rows.sort(function (a, b) { return b.score - a.score; });
-    return '<section class="section-head"><div><div class="eyebrow">Collection score</div><h2 class="page-title">Ranks</h2></div><span class="muted small">Score adds up every unique card you own, weighted by rarity tier</span></section>' +
+    return '<section class="section-head"><div><div class="eyebrow">Vault value</div><h2 class="page-title">Ranks</h2></div><span class="muted small">Ranked by the estimated value of the cards each collector holds</span></section>' +
       (isSample ? '<p class="demo-note">Demo mode: rows marked Sample are placeholders. With the server running, this table lists real collectors.</p>' : '') +
-      '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Unique cards</th><th class="num">Score</th><th>Whitelist</th></tr></thead><tbody>' +
+      '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Cards</th><th class="num">Vault value</th><th>Whitelist</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
         return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who"><span class="avatar">' + esc(r.handle.slice(0, 2).toUpperCase()) + '</span><div><b>' + esc(r.name) + (r.me ? ' (you)' : '') + '</b><div class="muted small">@' + esc(r.handle) + (r.sample ? ' <span class="sample">Sample</span>' : '') + '</div></div></div></td>' +
-          '<td class="num">' + r.cards + '</td><td class="num"><b>' + fmt(r.score) + '</b></td><td>' + (r.wl ? '<span class="done-txt">Whitelisted</span>' : '<span class="muted">Not yet</span>') + '</td></tr>';
+          '<td class="num">' + r.cards + '</td><td class="num"><b>' + usd(r.score) + '</b></td><td>' + (r.wl ? '<span class="done-txt">Whitelisted</span>' : '<span class="muted">Not yet</span>') + '</td></tr>';
       }).join('') + '</tbody></table></section>';
   }
 
@@ -459,7 +466,7 @@
     var st = store.state;
     var body;
     if (!st.user) body = landingHTML();
-    else if (ui.route === 'binder') body = binderHTML();
+    else if (ui.route === 'vault') body = vaultHTML();
     else if (ui.route === 'whitelist') body = whitelistHTML();
     else if (ui.route === 'ranks') body = ranksHTML();
     else body = packsHTML();
@@ -483,7 +490,7 @@
       '<div class="modal-title">' + X_SVG + '<h2 id="connect-title">Connect X</h2></div>' +
       '<p class="muted small">This preview runs without X API keys, so type your handle to continue. With the Pokenear server configured, this button opens the real X sign-in page.</p>' +
       '<div class="field"><label for="x-handle">X handle</label><div class="input-at"><span>@</span><input id="x-handle" name="handle" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="16" placeholder="yourname" required></div><div class="err" id="connect-err"></div></div>' +
-      (store.ref ? '<p class="reward">' + COIN + 'Invite code ' + esc(store.ref) + ' gives +' + E.referredBonus + ' bonus</p>' : '') +
+      (store.ref ? '<p class="reward">' + COIN + 'Invite code ' + esc(store.ref) + ' gives +' + fmt(E.referredBonus) + ' bonus</p>' : '') +
       '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button><button type="submit" class="btn btn-x">' + X_SVG + 'Connect</button></div>' +
       '</form></div>';
     $('#x-handle').focus();
@@ -493,50 +500,41 @@
     var card = D.cardById[id];
     if (!card) return;
     var s = seriesOf(card);
-    var t = rar(card.tier);
-    var owned = store.state.collection[id] || 0;
+    var held = store.state.vault ? store.state.vault.filter(function (it) { return it.id === id; }).length : 0;
+    var inPacks = D.PACKS.filter(function (p) { return chanceOf(p, id) > 0; }).map(function (p) { return p.name + ' ' + fmtChance(chanceOf(p, id)); });
     var rows = [
       ['Set', s.name + ' (' + s.short + ')'],
-      ['Number', card.no.replace(/_/g, ' ').replace(/ p(\d)/, ' parallel $1').replace(/ r(\d)/, ' reprint $1')],
+      ['Number', card.no],
       ['Rarity', card.rarity.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) + ' (' + card.code + ')'],
-      ['Odds', oddsLine(card)],
-      ['Sell-back value', fmt(card.value) + ' ' + D.TOKEN + ' · ' + tokenUsd(card.value)],
-      ['In your binder', owned ? '×' + owned : 'Not yet']
+      ['Est. value', usd(card.usd)],
+      ['Instant buyback', fmt(card.buyback) + ' ' + D.TOKEN + ' · ' + tokenUsd(card.buyback)],
+      ['Chance', inPacks.length ? inPacks.join(' · ') : 'Not in any pack yet'],
+      ['In your vault', held ? '×' + held : 'Not yet']
     ];
     if (card.illus) rows.splice(3, 0, ['Illustrator', card.illus]);
+    var best = D.PACKS.filter(function (p) { return chanceOf(p, id) > 0; })[0];
     $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal zoom" role="dialog" aria-modal="true" aria-label="' + esc(card.name) + '">' +
-      '<div class="zoom-card">' + cardHTML(card, { count: owned }) + '</div>' +
-      '<div class="zoom-info"><div class="eyebrow">' + esc(D.GAMES[s.game].name) + '</div><h2>' + esc(card.name) + '</h2>' +
+      '<div class="zoom-card">' + cardHTML(card) + '</div>' +
+      '<div class="zoom-info"><div class="eyebrow">Pokémon TCG</div><h2>' + esc(card.name) + '</h2>' +
       '<dl>' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>' +
-      '<div class="modal-actions" style="justify-content:start"><button class="btn btn-gold" data-act="go-pack" data-id="' + s.id + '">Rip ' + esc(s.name) + '</button><button class="btn btn-ghost" data-act="close-modal">Close</button></div></div>' +
+      '<div class="modal-actions" style="justify-content:start">' + (best && store.state.user ? '<button class="btn btn-gold" data-act="go-pack" data-id="' + best.id + '">Rip the ' + esc(best.name) + '</button>' : '') + '<button class="btn btn-ghost" data-act="close-modal">Close</button></div></div>' +
       '</div></div>';
   }
   function closeModal() { $('#modal').innerHTML = ''; }
 
-  function oddsLine(card) {
-    var s = seriesOf(card);
-    var o = s.odds.filter(function (x) { return x.rarity === card.rarity; })[0];
-    if (o) return '1 in ' + o.oneIn + ' packs for any ' + card.code + ' · 1 in ' + fmt(o.oneIn * o.cards) + ' for this card';
-    if (card.rarity === 'Common') return '4 per pack';
-    if (card.rarity === 'Uncommon') return '3 per pack';
-    return 'Rare slot when no hit lands';
-  }
-
-  /* ---------- pack opening ---------- */
-  function startOpening(productId) {
+  /* ---------- rip ---------- */
+  function startRip(count) {
     if (ui.busy) return;
-    var seriesId = ui.series;
-    run({ type: 'pull', series: seriesId, product: productId }, function (result) {
-      if (!result || !result.packs) return;
-      ui.opening = { series: seriesId, product: productId, packs: result.packs, index: 0, stage: 'pack', revealed: {} };
+    var packId = ui.pack;
+    run({ type: 'pull', pack: packId, count: count }, function (result) {
+      if (!result || !result.items) return;
+      ui.opening = { pack: packId, items: result.items, count: count, stage: 'pack', revealed: {}, sold: {} };
       renderOverlay();
     });
   }
-
-  function currentPack() { return ui.opening.packs[ui.opening.index]; }
-  function packDone() {
+  function allRevealed() {
     var o = ui.opening;
-    return currentPack().every(function (c, i) { return o.revealed[i]; });
+    return o.items.every(function (it, i) { return o.revealed[i]; });
   }
 
   function renderOverlay() {
@@ -544,48 +542,46 @@
     var host = $('#overlay');
     if (!o) { host.innerHTML = ''; doc.body.style.overflow = ''; return; }
     doc.body.style.overflow = 'hidden';
-    var s = D.seriesById[o.series];
-    var many = o.packs.length > 1;
-    var packLabel = many ? 'Pack ' + (o.index + 1) + ' of ' + o.packs.length : 'Booster Pack';
+    var p = D.packById[o.pack];
     var html;
     if (o.stage === 'pack') {
-      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + ' · ' + packLabel + '</div>' +
-        '<button class="big-pack" data-act="tear" aria-label="Tear open the pack">' + packArtHTML(s) + '</button>' +
+      html = '<div class="open-stage"><div class="eyebrow">' + esc(p.name) + ' · ' + o.items.length + ' card' + (o.items.length > 1 ? 's' : '') + '</div>' +
+        '<button class="big-pack" data-act="tear" aria-label="Tear open the pack">' + packArtHTML(p) + '</button>' +
         '<h2>Tap the pack to rip it</h2></div>';
     } else {
-      var cards = currentPack();
-      var all = packDone();
-      var grid = cards.map(function (c, i) {
-        var card = D.cardById[c.id];
+      var all = allRevealed();
+      var grid = o.items.map(function (it, i) {
+        var card = D.cardById[it.id];
         var t = rar(card.tier);
-        var hint = t.rank >= rar('SR').rank ? ' hint-' + t.id : '';
-        return '<button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 60) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
-          '<div class="flip-inner"><div class="face back"><div class="card-back"><span class="brand-mark"></span></div></div><div class="face front">' + cardHTML(card, { isNew: c.isNew, rev: c.rev }) + '</div></div></button>';
+        var hint = card.usd >= p.usd ? ' hint-UR' : t.rank >= rar('SR').rank ? ' hint-SR' : '';
+        var sold = o.sold[it.uid];
+        var below = all
+          ? '<div class="rip-cap' + (card.usd >= p.usd ? ' win' : '') + '"><b>' + usd(card.usd) + '</b><span>' + esc(card.code) + '</span></div>' +
+            (sold ? '<div class="sold-tag">Sold for ' + tokenUsd(card.buyback) + '</div>'
+              : '<button class="btn btn-sm sell" data-act="sell-rip" data-uid="' + it.uid + '">Sell back ' + tokenUsd(card.buyback) + '</button>')
+          : '';
+        return '<div class="rip-slot"><button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + (sold ? ' sold' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 80) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
+          '<div class="flip-inner"><div class="face back"><div class="card-back"><span class="brand-mark"></span></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
       }).join('');
-      var summary = '';
-      var actions;
-      var last = o.index === o.packs.length - 1;
-      if (all && !last) {
-        actions = '<button class="btn btn-gold" data-act="next-pack">Open pack ' + (o.index + 2) + ' of ' + o.packs.length + '</button>' +
-          '<button class="btn" data-act="skip-packs">Reveal the rest</button>';
-      } else if (all) {
-        var everything = [].concat.apply([], o.packs);
-        var best = everything.slice().sort(function (a, b) { return D.cardById[b.id].value - D.cardById[a.id].value; })[0];
+      var summary = '', actions;
+      if (all) {
+        var total = o.items.reduce(function (n, it) { return n + D.cardById[it.id].usd; }, 0);
+        var spent = p.usd * o.items.length;
+        var best = o.items.slice().sort(function (a, b) { return D.cardById[b.id].usd - D.cardById[a.id].usd; })[0];
         var bestCard = D.cardById[best.id];
-        var news = everything.filter(function (c) { return c.isNew; }).length;
-        var value = everything.reduce(function (n, c) { return n + D.cardById[c.id].value; }, 0);
-        var product = D.productById[o.product];
-        var shareText = 'Just pulled ' + bestCard.name + ' (' + bestCard.code + ') from ' + s.name + ' on @' + D.X_HANDLE + '. Real Pokémon pack odds, paid in ' + D.TOKEN + '. Join me: ' + inviteLink();
-        summary = '<div class="summary"><span>Best pull <b>' + esc(bestCard.name) + '</b> <span class="rbadge" style="--rc:var(--r-' + bestCard.tier + ')">' + esc(bestCard.code) + '</span></span>' +
-          '<span><b>' + news + '</b> new for your binder</span><span>Sell-back value <b>' + tokenUsd(value) + '</b></span></div>';
+        var unsold = o.items.filter(function (it) { return !o.sold[it.uid]; });
+        var shareText = 'Just pulled ' + bestCard.name + ' (' + bestCard.code + ', ' + usd(bestCard.usd) + ') from a ' + usd(p.usd) + ' ' + p.name + ' on @' + D.X_HANDLE + '. Join me: ' + inviteLink();
+        summary = '<div class="summary"><span>Pulled <b>' + usd(Math.round(total * 100) / 100) + '</b> for <b>' + usd(spent) + '</b></span>' +
+          '<span class="' + (total >= spent ? 'up' : 'down') + '">' + (total >= spent ? '+' : '−') + usd(Math.abs(Math.round((total - spent) * 100) / 100)) + '</span></div>';
         actions = '<a class="btn btn-x" href="' + intentPost(shareText) + '" target="_blank" rel="noopener">' + X_SVG + 'Share pull</a>' +
-          '<button class="btn btn-gold" data-act="again"' + (store.state.balance < product.price ? ' disabled' : '') + '>Buy again · ' + usd(product.usd) + '</button>' +
-          '<button class="btn" data-act="close-open">Done</button>';
+          (unsold.length > 1 ? '<button class="btn" data-act="sell-all-rip">Sell back all · ' + tokenUsd(unsold.reduce(function (n, it) { return n + D.cardById[it.id].buyback; }, 0)) + '</button>' : '') +
+          '<button class="btn btn-gold" data-act="again"' + (store.state.balance < p.price * o.count ? ' disabled' : '') + '>Rip again · ' + usd(p.usd * o.count) + '</button>' +
+          '<button class="btn" data-act="close-open">Keep in vault</button>';
       } else {
-        actions = '<button class="btn btn-gold" data-act="reveal-all">Reveal all</button>';
+        actions = o.items.length > 1 ? '<button class="btn btn-gold" data-act="reveal-all">Reveal all</button>' : '';
       }
-      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + ' · ' + packLabel + '</div><h2>' + (all ? (last ? 'Pack opened' : 'Pack ' + (o.index + 1) + ' done') : 'Tap each card to flip') + '</h2>' +
-        '<div class="reveal-grid">' + grid + '</div>' + summary + '<div class="open-actions">' + actions + '</div></div>';
+      html = '<div class="open-stage"><div class="eyebrow">' + esc(p.name) + '</div><h2>' + (all ? 'Your pull' : 'Tap to reveal') + '</h2>' +
+        '<div class="reveal-grid' + (o.items.length === 1 ? ' single' : ' five') + '">' + grid + '</div>' + summary + '<div class="open-actions">' + actions + '</div></div>';
     }
     host.innerHTML = '<div class="overlay" role="dialog" aria-modal="true" aria-label="Pack opening">' + html + '</div><div class="flash" id="flash"></div>';
   }
@@ -596,9 +592,11 @@
     o.revealed[i] = true;
     var btn = doc.querySelector('.flip[data-i="' + i + '"]');
     if (btn) btn.classList.add('revealed');
-    var card = D.cardById[currentPack()[i].id];
-    if (rar(card.tier).rank >= rar('UR').rank) flash(card.tier === 'SEC' ? 'var(--r-SEC)' : 'var(--r-UR)');
-    if (packDone()) setTimeout(renderOverlay, 650);
+    var card = D.cardById[o.items[i].id];
+    var p = D.packById[o.pack];
+    if (card.usd >= p.usd * 3) flash('var(--r-SEC)');
+    else if (card.usd >= p.usd) flash('var(--r-UR)');
+    if (allRevealed()) setTimeout(renderOverlay, 650);
   }
   function flash(color) {
     var f = $('#flash');
@@ -609,16 +607,17 @@
   function revealAll() {
     var o = ui.opening;
     var k = 0;
-    currentPack().forEach(function (c, i) { if (!o.revealed[i]) setTimeout(function () { flip(i); }, (k++) * 130); });
-  }
-  function nextPack() {
-    var o = ui.opening;
-    o.index += 1;
-    o.revealed = {};
-    o.stage = 'pack';
-    renderOverlay();
+    o.items.forEach(function (it, i) { if (!o.revealed[i]) setTimeout(function () { flip(i); }, (k++) * 160); });
   }
   function closeOpening() { ui.opening = null; renderOverlay(); render(); }
+
+  function sellFromRip(uids) {
+    run({ type: 'buyback', uids: uids }, function (r) {
+      uids.forEach(function (u) { ui.opening.sold[u] = true; });
+      toast('Sold back for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').');
+      renderOverlay();
+    });
+  }
 
   /* ---------- events ---------- */
   function onClick(e) {
@@ -626,20 +625,22 @@
     if (!el) return;
     var act = el.getAttribute('data-act');
     var id = el.getAttribute('data-id');
+    var uid = Number(el.getAttribute('data-uid'));
     switch (act) {
       case 'connect': openConnect(); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
       case 'logout': store.logout().then(function () { ui.clicked = {}; toast('Logged out.'); }); break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
-      case 'series': ui.series = id; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
-      case 'go-pack': e.preventDefault(); closeModal(); ui.series = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
+      case 'pack': ui.pack = id; ui.showAllOdds = false; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+      case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
+      case 'all-odds': ui.showAllOdds = !ui.showAllOdds; render(); break;
       case 'zoom': openZoom(id); break;
-      case 'pull': startOpening(id); break;
+      case 'rip': startRip(Number(el.getAttribute('data-count'))); break;
       case 'daily': run({ type: 'daily' }, function (r) { toast('+' + r.amount + ' ' + D.TOKEN + ' claimed.'); }); break;
-      case 'binder': ui.binder = id; render(); break;
-      case 'bfilter': ui.binderFilter = id; render(); break;
-      case 'burn': run({ type: 'burnDupes', series: ui.binder }, function (r) { toast('Sold back ' + r.burned + ' cards for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').'); }); break;
-      case 'claimSet': run({ type: 'claimSet', series: id }, function (r) { toast('Set complete! +' + fmt(r.amount) + ' ' + D.TOKEN + '.'); }); break;
+      case 'vsort': ui.vaultSort = id; render(); break;
+      case 'sell': run({ type: 'buyback', uid: uid }, function (r) { toast('Sold back for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').'); }); break;
+      case 'sell-rip': sellFromRip([uid]); break;
+      case 'sell-all-rip': sellFromRip(ui.opening.items.filter(function (it) { return !ui.opening.sold[it.uid]; }).map(function (it) { return it.uid; })); break;
       case 'xlink': ui.clicked[id] = true; setTimeout(render, 300); break;
       case 'task': run({ type: 'task', id: id }, function (r) { toast('Quest complete. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
       case 'demoInvite': run({ type: 'inviteJoined' }, function (r) { toast('A friend joined. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
@@ -648,13 +649,16 @@
       case 'tear':
         el.classList.add('tearing');
         el.disabled = true;
-        setTimeout(function () { if (ui.opening) { ui.opening.stage = 'cards'; renderOverlay(); } }, 620);
+        setTimeout(function () {
+          if (!ui.opening) return;
+          ui.opening.stage = 'cards';
+          renderOverlay();
+          if (ui.opening.items.length === 1) setTimeout(function () { flip(0); }, 450);
+        }, 620);
         break;
       case 'flip': flip(Number(el.getAttribute('data-i'))); break;
       case 'reveal-all': revealAll(); break;
-      case 'again': var pid = ui.opening.product; ui.opening = null; renderOverlay(); startOpening(pid); break;
-      case 'next-pack': nextPack(); break;
-      case 'skip-packs': ui.opening.index = ui.opening.packs.length - 1; ui.opening.revealed = {}; ui.opening.stage = 'cards'; renderOverlay(); setTimeout(revealAll, 300); break;
+      case 'again': var n = ui.opening.count; ui.opening = null; renderOverlay(); startRip(n); break;
       case 'close-open': closeOpening(); break;
     }
   }
@@ -713,9 +717,7 @@
     if (e.key !== 'Escape') return;
     if ($('#modal').innerHTML) closeModal();
     else if (ui.opening && ui.opening.stage === 'cards') {
-      if (!packDone()) revealAll();
-      else if (ui.opening.index < ui.opening.packs.length - 1) nextPack();
-      else closeOpening();
+      if (!allRevealed()) revealAll(); else closeOpening();
     }
   }
 
@@ -733,7 +735,7 @@
     doc.addEventListener('load', onImgLoad, true);
     doc.addEventListener('error', onImgError, true);
     root.addEventListener('hashchange', setRoute);
-    store.subscribe(function () { if (!ui.opening || ui.opening.stage !== 'cards') render(); });
+    store.subscribe(function () { if (!ui.opening) render(); });
     store.init().then(function () {
       if (store.mode === 'live' && /[?&]x_error=/.test(root.location.search)) toast('X sign-in did not finish. Try again.', true);
       setRoute();
