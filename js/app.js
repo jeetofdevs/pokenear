@@ -42,6 +42,10 @@
     var whole = v / base, frac = Number((v % base) * BigInt(100) / base);
     return whole.toLocaleString('en-US') + (frac ? '.' + String(frac).padStart(2, '0').replace(/0$/, '') : '');
   }
+  // Official $POKENEAR CA with a copy button (landing, footer, docs).
+  function caChipHTML(extra) {
+    return '<button class="ca-chip' + (extra ? ' ' + extra : '') + '" data-act="copy-ca" title="Copy the ' + D.TOKEN + ' contract address"><span class="ca-label">CA</span><code>' + esc(D.TOKEN_CA) + '</code><span class="ca-copy">Copy</span></button>';
+  }
   function payReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready); }
   function buybackReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready && store.game.buyback); }
   function seriesOf(card) { return D.seriesById[card.series]; }
@@ -263,7 +267,7 @@
 
   function footerHTML() {
     return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in ' + D.TOKEN + ' to ' + D.GAME_ACCOUNT + '. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
-      '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
+      caChipHTML('small') + '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
 
@@ -295,6 +299,7 @@
         '<h1>Rip real <span class="gold">Pokémon</span> cards. Sell back instantly.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
+        caChipHTML() +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
     '</section>' +
@@ -462,7 +467,7 @@
           '<li><b>Where payments go.</b> Every pack is paid to the Pokenear interaction wallet ' + GA + '. It runs the Pokenear contract, which checks the payment and draws the randomness.</li>' +
           '<li><b>How you pay.</b> Your wallet calls <code>ft_transfer_call</code> on the ' + D.TOKEN + ' token with ' + GA + ' as receiver and the rip details as the message. One approval, one transaction.</li>' +
           '<li><b>Exact price or refund.</b> The pack price in ' + D.TOKEN + ' is stored in the contract. If the amount does not match, or anything else is wrong, the contract rejects the transfer and the token returns your ' + D.TOKEN + ' in the same transaction.</li>' +
-          '<li><b>Contract address.</b> The ' + D.TOKEN + ' contract address (CA) is set in ' + GA + ' and announced on <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a>. Only trust the address shown there and on this site.</li>' +
+          '<li><b>Contract address.</b> The official ' + D.TOKEN + ' CA is <code>' + esc(D.TOKEN_CA) + '</code> on NEAR. It is also announced on <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a>. Only trust this address.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
         '<p>Nobody at Pokenear picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
@@ -526,7 +531,7 @@
     if (!ui.admin) {
       var saved = null;
       try { saved = JSON.parse(root.sessionStorage.getItem(ADMIN_KEY_STORE) || 'null'); } catch (e) { saved = null; }
-      ui.admin = { status: null, loading: false, error: null, token: null, ca: '', usd: '', prices: null, newKey: saved, busy: null };
+      ui.admin = { status: null, loading: false, error: null, token: null, ca: D.TOKEN_CA, usd: '', prices: null, newKey: saved, busy: null };
     }
     return ui.admin;
   }
@@ -535,7 +540,7 @@
     a.loading = true; a.error = null; render();
     return store.adminStatus().then(function (st) {
       a.status = st; a.loading = false;
-      if (!a.ca && st.config && st.config.token) a.ca = st.config.token;
+      if (st.config && st.config.token && a.ca === D.TOKEN_CA) a.ca = st.config.token;
       render();
     }, function (e) { a.loading = false; a.error = e.message; render(); });
   }
@@ -575,7 +580,7 @@
       '<div class="stat"><b>' + (st.config ? st.config.prices.length : 0) + '/' + D.PACKS.length + '</b><span>Pack prices on chain</span></div></section>';
 
     // 1. Contract
-    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","token":null,"prices":null}\'';
+    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","token":"' + D.TOKEN_CA + '","prices":null}\'';
     var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account),
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
         : (st.deployed
@@ -589,8 +594,9 @@
     var priceRows = a.prices && a.token ? '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">' + esc(a.token.symbol || 'Token') + ' per pack</th></tr></thead><tbody>' +
       D.PACKS.map(function (p, i) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + usd(p.usd) + '</td><td class="num">' + fmtToken(a.prices[i], a.token.decimals) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
     var s2 = adminStep(2, Boolean(cur && st.config.prices.length >= D.PACKS.length), D.TOKEN + ' contract address and prices',
+      (cur && cur !== D.TOKEN_CA ? '<p class="err small">The contract uses ' + esc(cur) + ', but the website shows ' + esc(D.TOKEN_CA) + ' as the official CA. Save the official CA below.</p>' : '') +
       (cur ? '<p class="small">Current CA: <code>' + esc(cur) + '</code>' + (st.token ? ' (' + esc(st.token.symbol || '?') + ', ' + st.token.decimals + ' decimals)' : '') + '</p>' : '') +
-      '<div class="admin-form"><label>CA (token contract)<input id="admin-ca" value="' + esc(a.ca) + '" placeholder="pokenear.tkn.near" autocomplete="off"></label>' +
+      '<div class="admin-form"><label>CA (token contract)<input id="admin-ca" value="' + esc(a.ca) + '" placeholder="' + esc(D.TOKEN_CA) + '" autocomplete="off"></label>' +
       '<label>USD price of 1 ' + D.TOKEN + '<input id="admin-usd" value="' + esc(a.usd) + '" placeholder="0.01" inputmode="decimal" autocomplete="off"></label>' +
       '<button class="btn" data-act="admin-check">Check token</button></div>' + priceRows +
       (a.prices ? '<button class="btn btn-gold" data-act="admin-save-token"' + (st.initialized ? '' : ' disabled title="Deploy the contract first"') + busy('Save CA and prices') + '>Save CA and prices on chain</button>' : '') +
@@ -655,12 +661,12 @@
           a.busy = null;
           return adminTx('Deploy', { receiverId: GA, actions: [
             { type: 'deploy', code: new Uint8Array(buf) },
-            { type: 'call', method: 'new', args: { owner: GA, token: a.token ? a.token.id : null, prices: a.prices || null }, gas: '100000000000000' }
+            { type: 'call', method: 'new', args: { owner: GA, token: a.token ? a.token.id : D.TOKEN_CA, prices: a.prices || null }, gas: '100000000000000' }
           ] });
         }).catch(function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
       case 'admin-init':
-        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, token: null, prices: null } }] });
+        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, token: D.TOKEN_CA, prices: null } }] });
         break;
       case 'admin-save-token':
         if (!a.token || !a.prices) return;
@@ -1051,6 +1057,9 @@
     if (act.indexOf('admin-') === 0) { adminAction(act, el); return; }
     switch (act) {
       case 'connect': openConnect(); break;
+      case 'copy-ca':
+        try { navigator.clipboard.writeText(D.TOKEN_CA).then(function () { toast('CA copied: ' + D.TOKEN_CA); }, function () { toast(D.TOKEN_CA); }); } catch (err) { toast(D.TOKEN_CA); }
+        break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
       case 'wallet-demo': signIn('near', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;

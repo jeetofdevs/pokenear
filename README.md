@@ -1,6 +1,6 @@
 # Pokenear
 
-On-chain Pokémon TCG gacha on NEAR: packs are paid in `$POKENEAR` to the interaction wallet **pokenearfun.near**, whose contract draws the randomness in the same transaction.
+On-chain Pokémon TCG gacha on NEAR: packs are paid in `$POKENEAR` (CA `pokenear.nearlytrade.near`) to the interaction wallet **pokenearfun.near**, whose contract draws the randomness in the same transaction.
 
 Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 96% (paid in `$POKENEAR` by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: the only currency is the token in the player's wallet.
 

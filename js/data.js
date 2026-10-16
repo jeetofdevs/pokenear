@@ -10,12 +10,13 @@
   'use strict';
 
   var TOKEN = '$POKENEAR';
-  var VERSION = '20261017.6'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261017.7'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
   // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
   // contract at launch; the site never shows a fixed token amount.
   var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
+  var TOKEN_CA = 'pokenear.nearlytrade.near'; // official $POKENEAR contract address (NEAR)
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
 
   // On-chain pack prices for set_prices: each pack's USD price converted to the token's smallest
@@ -168,6 +169,7 @@
   var data = {
     TOKEN: TOKEN,
     GAME_ACCOUNT: GAME_ACCOUNT,
+    TOKEN_CA: TOKEN_CA,
     packPricesRaw: packPricesRaw,
     VERSION: VERSION,
     EV_RATIO: EV_RATIO,

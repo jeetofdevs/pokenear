@@ -680,3 +680,14 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
   .admin-summary { grid-template-columns: 1fr; }
   .admin-form { grid-template-columns: 1fr; }
 }
+
+/* ---------- official CA chip ---------- */
+.ca-chip { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; padding: 8px 8px 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; font: 700 14px/1 var(--f-body); }
+.ca-chip:hover { border-color: var(--gold); }
+.ca-chip .ca-label { color: var(--gold); font-weight: 900; letter-spacing: 0.06em; }
+.ca-chip code { font: 600 14px/1.2 var(--f-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ca-chip .ca-copy { flex: none; padding: 6px 10px; border-radius: 999px; background: var(--gold); color: #1a1300; font-size: 12px; font-weight: 800; }
+.hero .ca-chip { justify-self: start; align-self: flex-start; }
+.ca-chip.small { padding: 4px 4px 4px 10px; font-size: 12px; }
+.ca-chip.small code { font-size: 12px; }
+.ca-chip.small .ca-copy { padding: 4px 8px; font-size: 11px; }
