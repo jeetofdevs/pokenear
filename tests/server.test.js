@@ -71,25 +71,26 @@ test('X login, referral and game API', async () => {
     const alice = await login('code-alice');
     const me = (await api(alice, '/api/me')).body.state;
     assert.equal(me.user.handle, 'alice_tcg');
-    assert.equal(me.balance, 1000);
+    assert.equal(me.balance, 2000);
 
-    const pull = await api(alice, '/api/action', { type: 'pull', series: 'mew', count: 10 });
+    const pull = await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' });
     assert.equal(pull.status, 200);
-    assert.equal(pull.body.result.cards.length, 10);
-    assert.equal(pull.body.state.balance, 100);
+    assert.equal(pull.body.result.packs[0].length, 10);
+    assert.equal(pull.body.state.balance, 1000);
+    assert.equal((await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' })).status, 200);
 
     // Clients cannot fake invites.
     assert.equal((await api(alice, '/api/action', { type: 'inviteJoined' })).status, 400);
-    const broke = await api(alice, '/api/action', { type: 'pull', series: 'mew', count: 10 });
+    const broke = await api(alice, '/api/action', { type: 'pull', series: 'mew', product: 'pack' });
     assert.equal(broke.status, 400);
     assert.match(broke.body.error, /Not enough/);
 
     const bob = await login('code-bob', me.user.refCode);
     const bobState = (await api(bob, '/api/me')).body.state;
-    assert.equal(bobState.balance, 1200);
+    assert.equal(bobState.balance, 2500);
     const aliceAfter = (await api(alice, '/api/me')).body.state;
     assert.equal(aliceAfter.invites, 1);
-    assert.equal(aliceAfter.balance, 100 + 250);
+    assert.equal(aliceAfter.balance, 0 + 500);
 
     // Logging in again does not reset progress or double-count the referral.
     await login('code-bob', me.user.refCode);

@@ -5,7 +5,7 @@
   'use strict';
 
   var engine = root.PN.engine;
-  var STORAGE_KEY = 'pokenear:v2';
+  var STORAGE_KEY = 'pokenear:v3';
   var REF_KEY = 'pokenear:ref';
 
   function safeGet(key) {
@@ -66,7 +66,7 @@
           var raw = safeGet(STORAGE_KEY);
           var loaded = null;
           try { loaded = raw ? JSON.parse(raw) : null; } catch (e) { loaded = null; }
-          store.state = loaded && loaded.v === 2 ? loaded : engine.emptyState();
+          store.state = loaded && loaded.v === 3 ? loaded : engine.emptyState();
         })
         .then(function () { store.emit(); return store.state; });
     },

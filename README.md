@@ -2,23 +2,21 @@
 
 TCG gacha with X login, invite links and a `$POKENEAR` whitelist.
 
-Players connect X, rip real Pokémon and One Piece booster packs, complete quests, invite friends and claim a numbered Season 1 whitelist pass. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
+Players connect X, rip real Pokémon booster packs, complete quests, invite friends and claim a numbered Season 1 whitelist pass. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
 
 ## Features
 
 - **X login first.** Nothing is playable until an X account is connected (OAuth 2.0 PKCE on the server).
-- **8 real booster sets, 1,416 real cards**:
-  - Pokémon TCG: Scarlet & Violet 151, Mega Evolution, Black Bolt, White Flare
-  - One Piece Card Game: OP-01 Romance Dawn, OP-05 Awakening of the New Era, OP-09 Emperors in the New World, OP-13 Carrying On His Will
-  - Real names, numbers, rarities (IR, SIR, HR, BWR, MUR, SEC, parallels…), HP, attacks, power, cost, counter and effects.
-- **Card art**: cards are drawn in each game's frame with official Pokémon artwork bundled in `assets/art`. When the host can reach the image CDNs, the official card scan fades in on top (`remoteImages` in `index.html`).
-- **Tier rates**: C 60%, R 25%, SR 11%, UR 3.5%, SEC 0.5%. Each real rarity maps to a tier (see the rates table in the app).
-- **Pity**: UR or better guaranteed within 60 pulls per series. Every 10-pack holds at least one SR.
-- **Pack opening**: tear the pack, flip cards one by one, rarity glow on card backs, holo foil tilt on SR+.
-- **Binder**: per-series completion, burn duplicates for `$POKENEAR`, 5,000 `$POKENEAR` set bonus.
-- **Whitelist quests**: connect X, follow on X, post an invite on X, invite 3 friends, open 10 cards.
-- **Invites**: `?ref=CODE` links. New players get +200, inviters get +250 per friend.
-- **Daily drop**, season countdown, share-to-X buttons for pulls and whitelist passes, leaderboard.
+- **Pokémon TCG live, One Piece coming soon.** 740 real cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare. One Piece OP-01/05/09/13 show as "Coming soon".
+- **Real-money pricing in $POKENEAR.** Prices are set in USD and paid in `$POKENEAR` (`TOKEN_USD` in `js/data.js`, placeholder 1 $POKENEAR = $0.01):
+  - Booster Pack: **$10**, 10 cards
+  - Booster Bundle: $54, 6 packs
+- **Real booster RNG.** Every pack follows the English Scarlet & Violet / Mega Evolution layout: 4 Common, 3 Uncommon, 1 Reverse Holo, 1 Reverse Holo or IR/SIR hit, 1 Rare-or-better slot. Hit odds per pack: SIR 1 in 32, IR 1 in 12, HR 1 in 55, UR 1 in 16, RR 1 in 6, BWR 1 in 300, MUR 1 in 600 (community averages, set in `PACK_SLOTS`). No pity: every pack is an independent roll.
+- **Pack opening**: tear the pack, flip 10 cards in pack order, rare-slot glow, reverse-holo foil, bundles open pack by pack.
+- **Binder**: per-set completion, sell back duplicates at market-style values, set completion bonus.
+- **Whitelist quests**: connect X, follow on X, post an invite on X, invite 3 friends, open your first pack.
+- **Invites**: `?ref=CODE` links. New players get +500, inviters get +500 per friend.
+- **Daily drop**, season countdown, share-to-X buttons, leaderboard.
 
 ## Run it
 

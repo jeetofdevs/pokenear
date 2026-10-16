@@ -29,7 +29,7 @@
 
   function emptyState() {
     return {
-      v: 2,
+      v: 3,
       user: null,
       balance: 0,
       earned: 0,
@@ -51,48 +51,36 @@
   }
 
   function seriesPulls(state, seriesId) {
-    if (!state.pulls[seriesId]) state.pulls[seriesId] = { total: 0, sinceUR: 0 };
+    if (!state.pulls[seriesId]) state.pulls[seriesId] = { packs: 0 };
     return state.pulls[seriesId];
   }
 
-  // Pick a rarity at or above `minTier`, re-weighting the remaining rates.
-  function rollRarity(rng, minTier) {
-    var pool = D.RARITIES.filter(function (r) { return r.tier >= minTier; });
-    var total = pool.reduce(function (s, r) { return s + r.rate; }, 0);
-    var x = rng() * total;
-    for (var i = 0; i < pool.length; i++) {
-      x -= pool[i].rate;
-      if (x < 0) return pool[i];
-    }
-    return pool[pool.length - 1];
-  }
-
-  function pickCard(series, rarity, rng) {
-    var list = series.byRarity[rarity.id];
+  function pickFrom(list, rng) {
     return list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
   }
 
-  // Roll `count` cards for a series, applying pity and the 10-pull guarantee.
-  function roll(state, seriesId, count, rng) {
-    var series = D.seriesById[seriesId];
-    var p = seriesPulls(state, seriesId);
-    var UR = D.rarityById.UR.tier;
-    var SR = D.rarityById.SR.tier;
-    var out = [];
-    var hasSRplus = false;
-    for (var i = 0; i < count; i++) {
-      var minTier = 0;
-      var pity = false;
-      if (p.sinceUR >= E.pity - 1) { minTier = UR; pity = true; }
-      else if (count === 10 && i === count - 1 && !hasSRplus) { minTier = SR; }
-      var rarity = rollRarity(rng, minTier);
-      var card = pickCard(series, rarity, rng);
-      p.total += 1;
-      p.sinceUR = rarity.tier >= UR ? 0 : p.sinceUR + 1;
-      if (rarity.tier >= SR) hasSRplus = true;
-      out.push({ id: card.id, isNew: !state.collection[card.id], pity: pity });
-      state.collection[card.id] = (state.collection[card.id] || 0) + 1;
+  // Pick a card for one slot: roll each hit this set has (rarest first), else a base card.
+  function rollSlot(series, slot, rng) {
+    var hits = slot.hits || [];
+    for (var i = 0; i < hits.length; i++) {
+      var pool = series.byRarity[hits[i][0]];
+      if (pool && rng() < 1 / hits[i][1]) return pickFrom(pool, rng);
     }
+    var base = [];
+    slot.base.forEach(function (r) { if (series.byRarity[r]) base = base.concat(series.byRarity[r]); });
+    return pickFrom(base, rng);
+  }
+
+  // One booster pack in real pack order: commons, uncommons, reverse holos, rare slot last.
+  function openPack(series, rng) {
+    var out = [];
+    D.PACK_SLOTS.forEach(function (slot) {
+      for (var i = 0; i < slot.count; i++) {
+        var card = rollSlot(series, slot, rng);
+        // Reverse-holo slots print base cards in reverse foil; an IR/SIR hit is its own full-art card.
+        out.push({ id: card.id, rev: !!slot.reverse && (card.tier === 'C' || card.tier === 'R') });
+      }
+    });
     return out;
   }
 
@@ -170,17 +158,29 @@
       }
       case 'pull': {
         requireUser(state);
-        if (!D.seriesById[action.series]) throw GameError('That series does not exist.');
-        var count = action.count === 10 ? 10 : 1;
-        var price = count === 10 ? E.tenPrice : E.singlePrice;
-        if (state.balance < price) throw GameError('Not enough ' + D.TOKEN + '. You need ' + price + '.');
-        state.balance -= price;
-        var cards = roll(state, action.series, count, ctx.rng);
-        state.totalPulls += count;
-        cards.forEach(function (c) { state.history.unshift({ id: c.id, at: now }); });
+        var series = D.seriesById[action.series];
+        if (!series) throw GameError('That set is not available.');
+        var product = D.productById[action.product || 'pack'];
+        if (!product) throw GameError('Unknown product.');
+        if (state.balance < product.price) {
+          throw GameError('Not enough ' + D.TOKEN + '. ' + product.name + ' costs $' + product.usd + ' (' + product.price.toLocaleString('en-US') + ' ' + D.TOKEN + ').');
+        }
+        state.balance -= product.price;
+        var packs = [];
+        for (var k = 0; k < product.packs; k++) {
+          var pack = openPack(series, ctx.rng);
+          pack.forEach(function (c) {
+            c.isNew = !state.collection[c.id];
+            state.collection[c.id] = (state.collection[c.id] || 0) + 1;
+            state.history.unshift({ id: c.id, at: now });
+          });
+          packs.push(pack);
+        }
+        seriesPulls(state, series.id).packs += product.packs;
+        state.totalPulls += product.packs * D.PACK_SIZE;
         state.history = state.history.slice(0, E.historySize);
-        result.cards = cards;
-        result.spent = price;
+        result.packs = packs;
+        result.spent = product.price;
         break;
       }
       case 'burnDupes': {
@@ -191,7 +191,7 @@
           var extra = state.collection[id] - 1;
           if (!card || extra <= 0) return;
           if (action.series && card.series !== action.series) return;
-          gained += extra * D.rarityById[card.tier].burn;
+          gained += extra * card.value;
           burned += extra;
           state.collection[id] = 1;
         });
@@ -249,11 +249,11 @@
     apply: apply,
     emptyState: emptyState,
     normalizeHandle: normalizeHandle,
+    openPack: openPack,
     refCodeFor: refCodeFor,
     whitelistStatus: whitelistStatus,
     seriesProgress: seriesProgress,
-    collectionScore: collectionScore,
-    rollRarity: rollRarity
+    collectionScore: collectionScore
   };
 
   root.PN = root.PN || {};

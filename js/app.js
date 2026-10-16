@@ -15,7 +15,6 @@
   var ui = {
     route: 'packs',
     series: D.SERIES[0].id,
-    game: 'all',
     binder: D.SERIES[0].id,
     binderFilter: 'all',
     clicked: {},          // quests whose X link was opened, awaiting confirm
@@ -32,9 +31,11 @@
   }
   function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
   function $(sel, el) { return (el || doc).querySelector(sel); }
-  function rar(id) { return D.rarityById[id]; }
-  function tierOf(cardId) { return rar(D.cardById[cardId].tier).tier; }
+  function rar(id) { return D.tierById[id]; }
+  function rankOf(cardId) { return rar(D.cardById[cardId].tier).rank; }
   function pct(r) { var v = r * 100; return (v < 1 ? v.toFixed(1) : String(+v.toFixed(1))) + '%'; }
+  function usd(n) { return '$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+  function tokenUsd(amount) { return usd(amount * D.TOKEN_USD); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
   var X_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
@@ -96,8 +97,6 @@
     Grass: '#e6f1cf', Fire: '#f8dcc7', Water: '#d5e8f5', Lightning: '#f8efc0', Psychic: '#ecdcf2', Fighting: '#efd9c4',
     Darkness: '#c9cfd9', Metal: '#e4e7eb', Dragon: '#efe7c4', Colorless: '#f1f0ea', Fairy: '#f6dfeb', Trainer: '#e6ebf1'
   };
-  var OP_COLOR = { Red: '#d63a33', Green: '#2a9356', Blue: '#2a6ec4', Purple: '#7743b5', Black: '#2b2b30', Yellow: '#e2bb21' };
-  var OP_ATTR = { Slash: '⚔', Strike: '✊', Ranged: '◎', Special: '✦', Wisdom: '✎' };
 
   function energyIcon(type, extra) {
     var e = ENERGY[type] || ENERGY.Colorless;
@@ -124,14 +123,14 @@
     if (isPk) {
       head = '<div class="pk-head"><span class="stage">' + esc(card.stage.replace('Stage', 'Stage ')) + '</span><span class="nm">' + esc(card.name) + '</span>' +
         '<span class="hp"><small>HP</small>' + card.hp + energyIcon(type) + '</span></div>';
-      art = '<div class="art">' + (card.dex ? '<img src="' + artUrl(card.dex) + '" alt="" loading="lazy" decoding="async">' : '<span class="ph">' + esc(card.name) + '</span>') + '</div>';
+      art = '<div class="art">' + (card.dex ? '<img src="' + artUrl(card.dex) + '" alt="" loading="lazy" decoding="async">' : energyIcon(type, 'ph-ico') + '<span class="ph">' + esc(card.name.replace(/ ex$/, '')) + '</span>') + '</div>';
       var moves = (card.ab ? '<div class="ability"><b>Ability</b>' + esc(card.ab) + '</div>' : '') +
         card.atk.map(function (a) {
           var cost = '';
           for (var i = 0; i < Math.min(a.c, 4); i++) cost += energyIcon(i === 0 ? type : 'Colorless');
           return '<div class="move"><span class="cost">' + cost + '</span><span class="mn">' + esc(a.n) + '</span><span class="dmg">' + esc(a.d) + '</span></div>';
         }).join('');
-      body = (full ? '<div class="head-spacer"></div>' : '<div class="meta">NO. ' + String(card.dex || '').padStart(4, '0') + ' · ' + esc(card.stage) + ' Pokémon</div>') +
+      body = (full ? '<div class="head-spacer"></div>' : '<div class="meta">' + (card.dex ? 'NO. ' + String(card.dex).padStart(4, '0') + ' · ' : '') + esc(card.stage.replace('Stage', 'Stage ')) + ' Pokémon</div>') +
         '<div class="moves">' + moves + '</div>' +
         '<div class="foot"><span class="wk">' + (card.weak ? 'weakness ' + energyIcon(card.weak) + '×2' : '') + '</span><span>retreat ' + card.ret + '</span>' +
         '<span class="setno">' + esc(s.short) + ' ' + esc(card.no) + '<span class="rc">' + esc(card.code) + '</span></span></div>';
@@ -149,36 +148,6 @@
       (card.illus ? '<div class="illus">Illus. ' + esc(card.illus) + '</div>' : '') + '</div></div>';
   }
 
-  function onePieceCardHTML(card) {
-    var s = seriesOf(card);
-    var c1 = OP_COLOR[card.colors[0]] || '#888';
-    var c2 = OP_COLOR[card.colors[1]] || c1;
-    var isLeader = card.cat === 'LEADER';
-    var top = isLeader
-      ? '<span class="cost life"><small>LIFE</small>' + (card.life == null ? '-' : card.life) + '</span>'
-      : '<span class="cost">' + (card.cost == null ? '-' : card.cost) + '</span>';
-    var pw = card.power != null
-      ? '<div class="pw"><b>' + card.power + '</b><small>Power</small>' + (card.attr && OP_ATTR[card.attr] ? '<div><span class="attr">' + OP_ATTR[card.attr] + ' ' + esc(card.attr) + '</span></div>' : '') + '</div>'
-      : '<div class="pw"><small>' + esc(card.cat) + '</small></div>';
-    // Characters show their call name big (Monkey.D.Luffy -> LUFFY); events and stages keep the full title.
-    var isChar = card.cat === 'CHARACTER' || card.cat === 'LEADER';
-    var bigName = isChar ? callName(card.name) : card.name;
-    var sizeCls = bigName.length > 18 ? ' xs' : bigName.length > 8 ? ' sm' : '';
-    return '<div class="op' + (card.alt ? ' parallel' : '') + '" style="--c1:' + c1 + ';--c2:' + c2 + '"><div class="op-in">' +
-      '<div class="scene"></div><div class="dots"></div>' +
-      '<div class="op-top">' + top + pw + '</div>' +
-      '<div class="hero-name' + sizeCls + '"><span>' + esc(bigName) + '</span></div>' +
-      (card.counter ? '<div class="counter">+' + card.counter + '</div>' : '') +
-      '<div class="plate"><div class="kind"><span>' + esc(card.cat) + '</span></div>' +
-        '<div class="nameplate">' + esc(card.name) + '</div>' +
-        '<div class="tags">' + esc(card.tags.join(' / ')) + '</div>' +
-        (card.fx && card.fx !== '-' ? '<div class="effect">' + esc(card.fx) + '</div>' : '') +
-        '<div class="op-foot"><span>' + esc(card.no.replace(/_.*/, '')) + '</span><span>' + esc(s.short) + '</span><span class="rc">' + esc(card.code) + '</span></div>' +
-      '</div>' +
-      (card.alt ? '<div class="par-tag">PARALLEL</div>' : '') +
-      '</div></div>';
-  }
-
   function callName(name) {
     var n = name.replace(/".*?"/g, ' ').replace(/\(.*?\)/g, ' ').trim();
     if (n.indexOf('&') >= 0) return n;
@@ -189,14 +158,15 @@
   function cardHTML(card, opts) {
     opts = opts || {};
     var t = rar(card.tier);
-    var holo = t.tier >= rar('SR').tier;
-    var face = seriesOf(card).game === 'pokemon' ? pokemonCardHTML(card) : onePieceCardHTML(card);
-    var face2 = face.replace(/^<div class="/, '<div class="card t-' + t.id + (holo ? ' holo' : '') + ' ');
+    var holo = t.rank >= rar('SR').rank;
+    var face = pokemonCardHTML(card);
+    var cls = 'card t-' + t.id + (holo ? ' holo' : '') + (opts.rev ? ' rev' : '') + ' ';
     // Inject badges, official scan and foil before the outer closing tag.
     var extras = (opts.isNew ? '<span class="new-tag">NEW</span>' : '') +
       (opts.count > 1 ? '<span class="count">×' + opts.count + '</span>' : '') +
+      (opts.rev ? '<span class="rev-tag">Reverse Holo</span>' : '') +
       realImg(card) + '<div class="foil"></div>';
-    return face2.slice(0, -6) + extras + '</div>';
+    return face.replace(/^<div class="/, '<div class="' + cls).slice(0, -6) + extras + '</div>';
   }
 
   function packArtHTML(s) {
@@ -213,17 +183,18 @@
       '<div class="pa-crimp bottom"></div><div class="pa-shine"></div></div>';
   }
 
-  function ratesTable(s) {
-    var game = s ? s.game : null;
-    return '<div class="table-scroll"><table class="rates"><thead><tr><th>Tier</th><th>Real rarities</th><th class="num">Pull rate</th>' + (s ? '<th class="num">Cards in set</th>' : '') + '<th class="num">Burn</th></tr></thead><tbody>' +
-      D.RARITIES.map(function (r) {
-        var labels = game ? D.TIER_LABELS[game][r.id] : 'Pokémon: ' + D.TIER_LABELS.pokemon[r.id] + ' · One Piece: ' + D.TIER_LABELS.onepiece[r.id];
-        return '<tr><td><span class="rbadge r-' + r.id + '" style="--rc:var(--r-' + r.id + ')">' + r.id + '</span></td><td class="lbl">' + esc(labels) + '</td>' +
-          '<td class="num">' + pct(r.rate) + '</td>' + (s ? '<td class="num">' + s.byRarity[r.id].length + '</td>' : '') +
-          '<td class="num">' + fmt(r.burn) + '</td></tr>';
-      }).join('') +
-      '</tbody></table></div>' +
-      '<p class="muted small">Every 10-pack holds at least one SR or better. UR or better is guaranteed within ' + E.pity + ' pulls of each pack (pity resets on any UR or SEC). Inside a tier every card has the same chance.</p>';
+  // Pull rates for one set: hit odds per pack plus the 10-card pack layout.
+  function oddsHTML(s) {
+    var rows = s.odds.map(function (o) {
+      var card = s.byRarity[o.rarity][0];
+      return '<tr><td><span class="rbadge" style="--rc:var(--r-' + card.tier + ')">' + esc(o.code) + '</span> ' + esc(o.rarity.replace(/\b\w/g, function (c) { return c.toUpperCase(); })) + '</td>' +
+        '<td class="num"><b>1 in ' + o.oneIn + '</b></td><td class="num">' + pct(1 / o.oneIn) + '</td><td class="num">' + o.cards + '</td><td class="num">' + tokenUsd(card.value) + '</td></tr>';
+    }).join('');
+    var layout = D.PACK_SLOTS.map(function (slot) {
+      return '<li><span class="slot-n num">' + slot.count + '×</span><span>' + esc(slot.label) + '</span></li>';
+    }).join('');
+    return '<div class="odds-grid"><div class="table-scroll"><table class="rates"><thead><tr><th>Hit</th><th class="num">Odds per pack</th><th class="num">Chance</th><th class="num">Cards in set</th><th class="num">Sell-back</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="pack-layout"><div class="eyebrow">Inside every pack</div><ol>' + layout + '</ol><p class="muted small">Same layout as an English Scarlet &amp; Violet / Mega Evolution booster. Every pack has a Rare or better in the last slot. No pity and no guarantees beyond that: each pack is an independent roll, like opening real packs.</p></div></div>';
   }
 
   /* ---------- countdown ---------- */
@@ -254,7 +225,7 @@
         return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + '</a>';
       }).join('') + '</nav>' : '';
     var right = u
-      ? '<div class="balance" title="' + D.TOKEN + ' balance">' + COIN + '<span class="num">' + fmt(st.balance) + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
+      ? '<div class="balance" title="' + D.TOKEN + ' balance">' + COIN + '<span class="num">' + fmt(st.balance) + '</span><span class="muted bal-label">' + D.TOKEN + ' · ' + tokenUsd(st.balance) + '</span></div>' +
         '<div class="user-chip"><span class="avatar">' + (u.avatar ? '<img src="' + esc(u.avatar) + '" alt="">' : esc(u.handle.slice(0, 2).toUpperCase())) + '</span><span class="uh">@' + esc(u.handle) + '</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-x btn-sm" data-act="connect">' + X_SVG + 'Connect X</button>';
@@ -273,15 +244,16 @@
 
   /* ---------- landing ---------- */
   function landingHTML() {
-    var fan = ['meg-188', 'mew-199', 'op05-119'].map(function (id) { return D.cardById[id] ? cardHTML(D.cardById[id]) : ''; }).join('');
-    var refNote = store.ref ? '<p class="demo-note gold-note">Invite code <b class="num">' + esc(store.ref) + '</b> applied. Connect X to get +' + E.referredBonus + ' ' + D.TOKEN + ' on top of the welcome bonus.</p>' : '';
+    var fan = ['meg-188', 'mew-199', 'blk-172'].map(function (id) { return D.cardById[id] ? cardHTML(D.cardById[id]) : ''; }).join('');
+    var refNote = store.ref ? '<p class="demo-note gold-note">Invite code <b class="num">' + esc(store.ref) + '</b> applied. Connect X to get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on top of the welcome credit.</p>' : '';
     var hits = [];
-    D.SERIES.forEach(function (s) { hits = hits.concat(s.chase.slice(0, 3)); });
+    D.SERIES.forEach(function (s) { hits = hits.concat(s.chase.slice(0, 5)); });
+    var cheapest = D.PRODUCTS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
-        '<span class="eyebrow"><span class="live-dot"></span>Season 1 · Whitelist open</span>' +
-        '<h1>Rip real TCG packs. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
-        '<p class="lede">' + fmt(totalCards()) + ' real cards from ' + D.SERIES.length + ' booster sets: Pokémon 151, Mega Evolution, Black Bolt, White Flare and One Piece OP-01, OP-05, OP-09, OP-13. Connect X to claim ' + fmt(E.startBonus) + ' ' + D.TOKEN + ' and start ripping.</p>' +
+        '<span class="eyebrow"><span class="live-dot"></span>Season 1 · Pokémon packs live</span>' +
+        '<h1>Rip real Pokémon packs. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
+        '<p class="lede">' + fmt(totalCards()) + ' real cards from ' + D.SERIES.length + ' sets: Scarlet &amp; Violet 151, Mega Evolution, Black Bolt and White Flare. Packs from <b>' + usd(cheapest.usd) + '</b>, paid in ' + D.TOKEN + ', with real booster pull rates.</p>' +
         refNote +
         '<div class="hero-cta"><button class="btn btn-x btn-lg" data-act="connect">' + X_SVG + 'Connect with X</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">Pull rates</a></div>' +
         '<div><div class="eyebrow" style="margin-bottom:8px">Season 1 closes in</div>' + countdownHTML() + '</div>' +
@@ -291,15 +263,15 @@
     '<section class="hits-band" aria-label="Top hits you can pull"><div class="eyebrow">Top hits in the packs</div><div class="marquee"><div class="marquee-track">' +
       hits.concat(hits).map(function (c) { return '<div class="mq-card">' + cardHTML(c) + '</div>'; }).join('') +
     '</div></div></section>' +
-    '<section class="view" style="gap:14px"><div class="section-head"><h2>Booster packs live now</h2><span class="muted">' + D.SERIES.length + ' packs · ' + fmt(totalCards()) + ' cards</span></div>' +
-      '<div class="pack-grid">' + D.SERIES.map(function (s) { return packTileHTML(s, false); }).join('') + '</div></section>' +
+    '<section class="view" style="gap:14px"><div class="section-head"><h2>Booster packs</h2><span class="muted">From ' + usd(cheapest.usd) + ' · ' + fmt(totalCards()) + ' cards</span></div>' +
+      '<div class="pack-grid">' + D.SERIES.map(function (s) { return packTileHTML(s, false); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
     '<section class="panel"><div class="steps">' +
       step(1, 'Connect X', 'Your X account is your Pokenear profile and your invite code.') +
-      step(2, 'Rip packs', 'Spend ' + D.TOKEN + ' on any booster. 10-packs guarantee SR or better.') +
-      step(3, 'Invite friends', 'Each friend who joins with your link pays you ' + E.inviteReward + ' ' + D.TOKEN + '.') +
+      step(2, 'Rip packs', 'Booster packs from ' + usd(cheapest.usd) + ', paid in ' + D.TOKEN + '. Real pack layout and odds.') +
+      step(3, 'Invite friends', 'Each friend who joins with your link pays you ' + fmt(E.inviteReward) + ' ' + D.TOKEN + '.') +
       step(4, 'Lock your spot', 'Finish every quest to claim a numbered whitelist pass.') +
     '</div></section>' +
-    '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>Pull rates</h2><span class="muted">Same tier rates in every pack</span></div>' + ratesTable(null) + '</section>';
+    '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>Pull rates · ' + esc(D.SERIES[0].name) + '</h2><span class="muted">Each set lists its own odds</span></div>' + oddsHTML(D.SERIES[0]) + '</section>';
   }
   function step(n, title, body) {
     return '<div class="step"><span class="n">' + n + '</span><h3>' + title + '</h3><p>' + body + '</p></div>';
@@ -309,7 +281,7 @@
     var p = engine.seriesProgress(store.state, s.id);
     var top = s.chase[0];
     var inner = '<span class="tag">' + esc(s.tag) + '</span>' + packArtHTML(s) +
-      '<span class="pt-body"><span class="pt-game">' + esc(D.GAMES[s.game].short) + ' · ' + esc(s.short) + '</span>' +
+      '<span class="pt-body"><span class="pt-game">' + esc(s.short) + ' · from ' + usd(D.PRODUCTS[0].usd) + '</span>' +
       '<span class="pt-name">' + esc(s.name) + '</span>' +
       '<span class="pt-hit">Top hit: <b>' + esc(top.name) + '</b> ' + esc(top.code) + '</span>' +
       '<span class="pt-meta num">' + (interactive ? p.owned + '/' : '') + s.cards.length + ' cards</span></span>';
@@ -317,41 +289,48 @@
     return '<button class="pack-tile" style="--h:' + s.hue + '" data-act="series" data-id="' + s.id + '" aria-pressed="' + (s.id === ui.series) + '">' + inner + '</button>';
   }
 
+  function soonTileHTML(s) {
+    return '<div class="pack-tile static soon" style="--h:' + s.hue + '"><span class="tag">Coming soon</span>' + packArtHTML(s) +
+      '<span class="pt-body"><span class="pt-game">One Piece · ' + esc(s.short) + '</span><span class="pt-name">' + esc(s.name) + '</span>' +
+      '<span class="pt-hit">' + s.cardCount + ' cards · launching after Season 1</span></span></div>';
+  }
+
   /* ---------- packs ---------- */
   function packsHTML() {
     var st = store.state;
     var s = D.seriesById[ui.series];
-    var p = st.pulls[s.id] || { total: 0, sinceUR: 0 };
-    var left = E.pity - p.sinceUR;
+    var opened = (st.pulls[s.id] || { packs: 0 }).packs;
     var prog = engine.seriesProgress(st, s.id);
     var dailyWait = st.lastDaily + E.dailyCooldownMs - Date.now();
-    var list = D.SERIES.filter(function (x) { return ui.game === 'all' || x.game === ui.game; });
     var recent = st.history.slice(0, 10).filter(function (h) { return D.cardById[h.id]; });
-    var games = [['all', 'All packs'], ['pokemon', 'Pokémon'], ['onepiece', 'One Piece']];
+    var cheapest = D.PRODUCTS[0];
+    var buttons = D.PRODUCTS.map(function (p, i) {
+      return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="pull" data-id="' + p.id + '"' + (st.balance < p.price ? ' disabled' : '') + '>' +
+        '<span class="buy-name">' + esc(p.name) + '</span><span class="buy-usd">' + usd(p.usd) + '</span>' +
+        '<small>' + COIN + fmt(p.price) + ' ' + D.TOKEN + (p.note ? ' · ' + esc(p.note) : ' · 10 cards') + '</small></button>';
+    }).join('');
     return '<section class="season"><div><div class="eyebrow"><span class="live-dot"></span>Season 1 live</div><h2>Whitelist mint closes soon</h2></div>' +
         '<div class="season-right">' + countdownHTML() +
         (dailyWait > 0
           ? '<button class="btn" disabled>Daily drop in ' + Math.ceil(dailyWait / 3600000) + 'h</button>'
-          : '<button class="btn btn-gold" data-act="daily">' + COIN + ' Claim daily ' + E.dailyReward + '</button>') + '</div></section>' +
+          : '<button class="btn btn-gold" data-act="daily">' + COIN + ' Claim daily ' + fmt(E.dailyReward) + '</button>') + '</div></section>' +
       '<section class="panel pull-stage">' +
         '<div class="stage-pack">' + packArtHTML(s) + '</div>' +
         '<div class="pull-info">' +
-          '<div><div class="eyebrow">' + esc(D.GAMES[s.game].name) + ' · ' + esc(s.short) + ' · ' + prog.owned + '/' + prog.total + ' collected</div><h2>' + esc(s.name) + '</h2></div>' +
-          '<div class="pull-buttons">' +
-            '<button class="btn" data-act="pull" data-count="1"' + (st.balance < E.singlePrice ? ' disabled' : '') + '>Rip 1 card<small>' + COIN + fmt(E.singlePrice) + '</small></button>' +
-            '<button class="btn btn-gold" data-act="pull" data-count="10"' + (st.balance < E.tenPrice ? ' disabled' : '') + '>Rip 10-pack<small>' + COIN + fmt(E.tenPrice) + ' · SR+ inside</small></button>' +
-          '</div>' +
-          (st.balance < E.singlePrice ? '<p class="demo-note">Out of ' + D.TOKEN + '. Claim the daily drop, burn duplicates in your binder, or invite friends.</p>' : '') +
-          '<div class="pity"><div class="pity-row"><span><b>Pity</b> · UR or better guaranteed in <b class="num">' + left + '</b> pulls</span><span class="muted num">' + p.sinceUR + '/' + E.pity + '</span></div><div class="bar"><i style="width:' + (p.sinceUR / E.pity * 100) + '%"></i></div></div>' +
-          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits in this pack</div><div class="chase-row">' +
+          '<div><div class="eyebrow">Pokémon TCG · ' + esc(s.short) + ' · ' + prog.owned + '/' + prog.total + ' collected · ' + opened + ' packs opened</div><h2>' + esc(s.name) + '</h2></div>' +
+          '<div class="pull-buttons">' + buttons + '</div>' +
+          (st.balance < cheapest.price ? '<p class="demo-note">You need ' + fmt(cheapest.price) + ' ' + D.TOKEN + ' (' + usd(cheapest.usd) + ') for a pack. Claim the daily drop, sell back duplicates in your binder, or invite friends.</p>' : '') +
+          '<div class="odds-chips">' + s.odds.map(function (o) {
+            return '<span class="odds-chip"><span class="rbadge" style="--rc:var(--r-' + s.byRarity[o.rarity][0].tier + ')">' + esc(o.code) + '</span>1 in ' + o.oneIn + '</span>';
+          }).join('') + '</div>' +
+          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits in this set</div><div class="chase-row">' +
             s.chase.slice(0, 6).map(function (c) { return slotHTML(c, st.collection[c.id] || 0, false); }).join('') + '</div></div>' +
         '</div></section>' +
-      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><div class="binder-tabs" role="group" aria-label="Filter packs by game">' +
-        games.map(function (g) { return '<button class="chip-btn" data-act="game" data-id="' + g[0] + '" aria-pressed="' + (ui.game === g[0]) + '">' + g[1] + '</button>'; }).join('') +
-      '</div></div><div class="pack-grid">' + list.map(function (x) { return packTileHTML(x, true); }).join('') + '</div></section>' +
+      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a set</h2><span class="muted">Pokémon live now · One Piece coming soon</span></div>' +
+        '<div class="pack-grid">' + D.SERIES.map(function (x) { return packTileHTML(x, true); }).join('') + D.COMING_SOON.map(soonTileHTML).join('') + '</div></section>' +
       (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#binder" class="muted">Open binder</a></div><div class="mini-cards">' +
         recent.map(function (h) { return slotHTML(D.cardById[h.id], 1, false); }).join('') + '</div></section>' : '') +
-      '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(s.name) + ' pull rates</h2></div>' + ratesTable(s) + '</section>';
+      '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(s.name) + ' pull rates</h2></div>' + oddsHTML(s) + '</section>';
   }
 
   function slotHTML(card, count, showMissing) {
@@ -368,13 +347,13 @@
     var dupes = 0, dupeValue = 0;
     s.cards.forEach(function (c) {
       var extra = (st.collection[c.id] || 0) - 1;
-      if (extra > 0) { dupes += extra; dupeValue += extra * rar(c.tier).burn; }
+      if (extra > 0) { dupes += extra; dupeValue += extra * c.value; }
     });
     var cards = s.cards.filter(function (c) {
       var own = st.collection[c.id] > 0;
       if (ui.binderFilter === 'owned') return own;
       if (ui.binderFilter === 'missing') return !own;
-      if (ui.binderFilter === 'hits') return rar(c.tier).tier >= rar('UR').tier;
+      if (ui.binderFilter === 'hits') return rar(c.tier).rank >= rar('UR').rank;
       return true;
     });
     var claim;
@@ -385,11 +364,11 @@
       var pr = engine.seriesProgress(st, x.id);
       return '<button class="chip-btn" data-act="binder" data-id="' + x.id + '" aria-pressed="' + (ui.binder === x.id) + '">' + esc(x.short === 'MEW' ? '151' : x.name) + '<span class="num">' + pr.owned + '/' + pr.total + '</span></button>';
     }
-    var filters = [['all', 'All cards'], ['owned', 'Owned'], ['missing', 'Missing'], ['hits', 'UR & SEC']];
+    var filters = [['all', 'All cards'], ['owned', 'Owned'], ['missing', 'Missing'], ['hits', 'IR, UR & up']];
     return '<section class="section-head"><div><div class="eyebrow">Your collection</div><h2 class="page-title">Binder</h2></div>' +
-      '<button class="btn" data-act="burn"' + (dupes ? '' : ' disabled') + '>Burn ' + dupes + ' duplicates for ' + COIN + fmt(dupeValue) + '</button></section>' +
+      '<button class="btn" data-act="burn"' + (dupes ? '' : ' disabled') + '>Sell back ' + dupes + ' duplicates · ' + COIN + fmt(dupeValue) + ' (' + tokenUsd(dupeValue) + ')</button></section>' +
       '<div class="binder-groups"><div class="binder-tabs" role="group" aria-label="Pokémon sets"><span class="grp">Pokémon</span>' + D.SERIES.filter(function (x) { return x.game === 'pokemon'; }).map(chip).join('') + '</div>' +
-      '<div class="binder-tabs" role="group" aria-label="One Piece sets"><span class="grp">One Piece</span>' + D.SERIES.filter(function (x) { return x.game === 'onepiece'; }).map(chip).join('') + '</div></div>' +
+      '<div class="binder-tabs" role="group" aria-label="One Piece sets"><span class="grp">One Piece</span><span class="chip-btn soon-chip">Coming soon</span></div></div>' +
       '<section class="view" style="gap:14px"><div class="binder-head"><div class="progress-line"><div class="pl-row"><h2>' + esc(s.name) + ' <span class="muted small">' + esc(s.short) + '</span></h2><span class="num muted">' + p.owned + '/' + p.total + '</span></div><div class="bar"><i style="width:' + (p.owned / p.total * 100) + '%"></i></div></div><div class="actions">' + claim + '</div></div>' +
       '<div class="binder-tabs" role="group" aria-label="Filter cards">' + filters.map(function (f) { return '<button class="chip-btn sm" data-act="bfilter" data-id="' + f[0] + '" aria-pressed="' + (ui.binderFilter === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>' +
       (cards.length ? '<div class="binder-grid">' + cards.map(function (c) { return slotHTML(c, st.collection[c.id] || 0, true); }).join('') + '</div>'
@@ -402,7 +381,7 @@
     var st = store.state;
     var wl = engine.whitelistStatus(st);
     var link = inviteLink();
-    var postText = 'Ripping real Pokémon & One Piece packs on @' + D.X_HANDLE + ' and farming ' + D.TOKEN + ' for the Season 1 whitelist. Join with my link and get +' + E.referredBonus + ' bonus: ' + link;
+    var postText = 'Ripping real Pokémon packs on @' + D.X_HANDLE + ' and farming ' + D.TOKEN + ' for the Season 1 whitelist. Join with my link and get +' + E.referredBonus + ' bonus: ' + link;
     function quest(id, title, sub, action, reward) {
       var done = wl.checks[id];
       return '<li class="quest' + (done ? ' done' : '') + '"><span class="tick" aria-hidden="true">✓</span><div><div class="q-title">' + title + '</div><div class="q-sub">' + sub + '</div></div><div class="q-act">' +
@@ -434,7 +413,7 @@
             quest('follow', 'Follow @' + D.X_HANDLE + ' on X', 'Opens X in a new tab, then confirm here.', followAct, 100) +
             quest('post', 'Post your invite link on X', 'Shares a ready-made post with your code.', postAct, 150) +
             quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + E.inviteReward + ' per friend', inviteAct, 0) +
-            quest('pulls', 'Rip ' + E.whitelistPulls + ' cards', '<span class="num">' + Math.min(st.totalPulls, E.whitelistPulls) + '/' + E.whitelistPulls + '</span> opened in any pack', '<a class="btn btn-sm" href="#packs">Rip packs</a>', 0) +
+            quest('pulls', 'Open your first pack', '<span class="num">' + Math.min(Math.floor(st.totalPulls / D.PACK_SIZE), 1) + '/1</span> packs opened · from ' + usd(D.PRODUCTS[0].usd), '<a class="btn btn-sm" href="#packs">Buy a pack</a>', 0) +
           '</ul>' +
           (store.mode === 'local' ? '<p class="demo-note">Demo mode: X follows and posts are self-confirmed, and invites are simulated because there is no server tracking sign-ups. Run the Pokenear server with X API keys for real login and referral tracking.</p>' : '') +
         '</section>' +
@@ -519,9 +498,9 @@
     var rows = [
       ['Set', s.name + ' (' + s.short + ')'],
       ['Number', card.no.replace(/_/g, ' ').replace(/ p(\d)/, ' parallel $1').replace(/ r(\d)/, ' reprint $1')],
-      ['Rarity', card.rarity + (card.alt ? ' · Parallel' : '')],
-      ['Pokenear tier', t.name + ' · ' + pct(t.rate) + ' tier rate'],
-      ['Burn value', fmt(t.burn) + ' ' + D.TOKEN],
+      ['Rarity', card.rarity.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) + ' (' + card.code + ')'],
+      ['Odds', oddsLine(card)],
+      ['Sell-back value', fmt(card.value) + ' ' + D.TOKEN + ' · ' + tokenUsd(card.value)],
       ['In your binder', owned ? '×' + owned : 'Not yet']
     ];
     if (card.illus) rows.splice(3, 0, ['Illustrator', card.illus]);
@@ -534,17 +513,30 @@
   }
   function closeModal() { $('#modal').innerHTML = ''; }
 
+  function oddsLine(card) {
+    var s = seriesOf(card);
+    var o = s.odds.filter(function (x) { return x.rarity === card.rarity; })[0];
+    if (o) return '1 in ' + o.oneIn + ' packs for any ' + card.code + ' · 1 in ' + fmt(o.oneIn * o.cards) + ' for this card';
+    if (card.rarity === 'Common') return '4 per pack';
+    if (card.rarity === 'Uncommon') return '3 per pack';
+    return 'Rare slot when no hit lands';
+  }
+
   /* ---------- pack opening ---------- */
-  function startOpening(count) {
+  function startOpening(productId) {
     if (ui.busy) return;
     var seriesId = ui.series;
-    run({ type: 'pull', series: seriesId, count: count }, function (result) {
-      if (!result || !result.cards) return;
-      // Like a real pack: commons first, the hit at the back.
-      var cards = result.cards.slice().sort(function (a, b) { return tierOf(a.id) - tierOf(b.id); });
-      ui.opening = { series: seriesId, cards: cards, stage: 'pack', revealed: {}, count: count };
+    run({ type: 'pull', series: seriesId, product: productId }, function (result) {
+      if (!result || !result.packs) return;
+      ui.opening = { series: seriesId, product: productId, packs: result.packs, index: 0, stage: 'pack', revealed: {} };
       renderOverlay();
     });
+  }
+
+  function currentPack() { return ui.opening.packs[ui.opening.index]; }
+  function packDone() {
+    var o = ui.opening;
+    return currentPack().every(function (c, i) { return o.revealed[i]; });
   }
 
   function renderOverlay() {
@@ -553,50 +545,60 @@
     if (!o) { host.innerHTML = ''; doc.body.style.overflow = ''; return; }
     doc.body.style.overflow = 'hidden';
     var s = D.seriesById[o.series];
+    var many = o.packs.length > 1;
+    var packLabel = many ? 'Pack ' + (o.index + 1) + ' of ' + o.packs.length : 'Booster Pack';
     var html;
     if (o.stage === 'pack') {
-      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + ' · ' + o.cards.length + ' card' + (o.cards.length > 1 ? 's' : '') + '</div>' +
+      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + ' · ' + packLabel + '</div>' +
         '<button class="big-pack" data-act="tear" aria-label="Tear open the pack">' + packArtHTML(s) + '</button>' +
         '<h2>Tap the pack to rip it</h2></div>';
     } else {
-      var all = o.cards.every(function (c, i) { return o.revealed[i]; });
-      var grid = o.cards.map(function (c, i) {
+      var cards = currentPack();
+      var all = packDone();
+      var grid = cards.map(function (c, i) {
         var card = D.cardById[c.id];
         var t = rar(card.tier);
-        var hint = t.tier >= rar('SR').tier ? ' hint-' + t.id : '';
+        var hint = t.rank >= rar('SR').rank ? ' hint-' + t.id : '';
         return '<button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 60) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
-          '<div class="flip-inner"><div class="face back"><div class="card-back"><span class="brand-mark"></span></div></div><div class="face front">' + cardHTML(card, { isNew: c.isNew }) + '</div></div></button>';
+          '<div class="flip-inner"><div class="face back"><div class="card-back"><span class="brand-mark"></span></div></div><div class="face front">' + cardHTML(card, { isNew: c.isNew, rev: c.rev }) + '</div></div></button>';
       }).join('');
       var summary = '';
       var actions;
-      if (all) {
-        var best = o.cards[o.cards.length - 1];
+      var last = o.index === o.packs.length - 1;
+      if (all && !last) {
+        actions = '<button class="btn btn-gold" data-act="next-pack">Open pack ' + (o.index + 2) + ' of ' + o.packs.length + '</button>' +
+          '<button class="btn" data-act="skip-packs">Reveal the rest</button>';
+      } else if (all) {
+        var everything = [].concat.apply([], o.packs);
+        var best = everything.slice().sort(function (a, b) { return D.cardById[b.id].value - D.cardById[a.id].value; })[0];
         var bestCard = D.cardById[best.id];
-        var news = o.cards.filter(function (c) { return c.isNew; }).length;
-        var shareText = 'Just pulled ' + bestCard.name + ' (' + bestCard.rarity + ') from ' + s.name + ' on @' + D.X_HANDLE + '. Farming ' + D.TOKEN + ' for the whitelist, join me: ' + inviteLink();
-        summary = '<div class="summary"><span>Best pull <b>' + esc(bestCard.name) + '</b> <span class="rbadge r-' + bestCard.tier + '" style="--rc:var(--r-' + bestCard.tier + ')">' + esc(bestCard.code) + '</span></span><span><b>' + news + '</b> new for your binder</span></div>';
-        var price = o.count === 10 ? E.tenPrice : E.singlePrice;
+        var news = everything.filter(function (c) { return c.isNew; }).length;
+        var value = everything.reduce(function (n, c) { return n + D.cardById[c.id].value; }, 0);
+        var product = D.productById[o.product];
+        var shareText = 'Just pulled ' + bestCard.name + ' (' + bestCard.code + ') from ' + s.name + ' on @' + D.X_HANDLE + '. Real Pokémon pack odds, paid in ' + D.TOKEN + '. Join me: ' + inviteLink();
+        summary = '<div class="summary"><span>Best pull <b>' + esc(bestCard.name) + '</b> <span class="rbadge" style="--rc:var(--r-' + bestCard.tier + ')">' + esc(bestCard.code) + '</span></span>' +
+          '<span><b>' + news + '</b> new for your binder</span><span>Sell-back value <b>' + tokenUsd(value) + '</b></span></div>';
         actions = '<a class="btn btn-x" href="' + intentPost(shareText) + '" target="_blank" rel="noopener">' + X_SVG + 'Share pull</a>' +
-          '<button class="btn btn-gold" data-act="again"' + (store.state.balance < price ? ' disabled' : '') + '>Rip again · ' + fmt(price) + '</button>' +
+          '<button class="btn btn-gold" data-act="again"' + (store.state.balance < product.price ? ' disabled' : '') + '>Buy again · ' + usd(product.usd) + '</button>' +
           '<button class="btn" data-act="close-open">Done</button>';
       } else {
         actions = '<button class="btn btn-gold" data-act="reveal-all">Reveal all</button>';
       }
-      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + '</div><h2>' + (all ? 'Pack opened' : 'Tap each card to flip') + '</h2>' +
-        '<div class="reveal-grid' + (o.cards.length === 1 ? ' single' : '') + '">' + grid + '</div>' + summary + '<div class="open-actions">' + actions + '</div></div>';
+      html = '<div class="open-stage"><div class="eyebrow">' + esc(s.name) + ' · ' + packLabel + '</div><h2>' + (all ? (last ? 'Pack opened' : 'Pack ' + (o.index + 1) + ' done') : 'Tap each card to flip') + '</h2>' +
+        '<div class="reveal-grid">' + grid + '</div>' + summary + '<div class="open-actions">' + actions + '</div></div>';
     }
     host.innerHTML = '<div class="overlay" role="dialog" aria-modal="true" aria-label="Pack opening">' + html + '</div><div class="flash" id="flash"></div>';
   }
 
   function flip(i) {
     var o = ui.opening;
-    if (!o || o.revealed[i]) return;
+    if (!o || o.stage !== 'cards' || o.revealed[i]) return;
     o.revealed[i] = true;
     var btn = doc.querySelector('.flip[data-i="' + i + '"]');
     if (btn) btn.classList.add('revealed');
-    var card = D.cardById[o.cards[i].id];
-    if (rar(card.tier).tier >= rar('UR').tier) flash(card.tier === 'SEC' ? 'var(--r-SEC)' : 'var(--r-UR)');
-    if (o.cards.every(function (c, k) { return o.revealed[k]; })) setTimeout(renderOverlay, 650);
+    var card = D.cardById[currentPack()[i].id];
+    if (rar(card.tier).rank >= rar('UR').rank) flash(card.tier === 'SEC' ? 'var(--r-SEC)' : 'var(--r-UR)');
+    if (packDone()) setTimeout(renderOverlay, 650);
   }
   function flash(color) {
     var f = $('#flash');
@@ -607,7 +609,14 @@
   function revealAll() {
     var o = ui.opening;
     var k = 0;
-    o.cards.forEach(function (c, i) { if (!o.revealed[i]) setTimeout(function () { flip(i); }, (k++) * 130); });
+    currentPack().forEach(function (c, i) { if (!o.revealed[i]) setTimeout(function () { flip(i); }, (k++) * 130); });
+  }
+  function nextPack() {
+    var o = ui.opening;
+    o.index += 1;
+    o.revealed = {};
+    o.stage = 'pack';
+    renderOverlay();
   }
   function closeOpening() { ui.opening = null; renderOverlay(); render(); }
 
@@ -623,14 +632,13 @@
       case 'logout': store.logout().then(function () { ui.clicked = {}; toast('Logged out.'); }); break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
       case 'series': ui.series = id; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
-      case 'game': ui.game = id; render(); break;
       case 'go-pack': e.preventDefault(); closeModal(); ui.series = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
       case 'zoom': openZoom(id); break;
-      case 'pull': startOpening(Number(el.getAttribute('data-count'))); break;
+      case 'pull': startOpening(id); break;
       case 'daily': run({ type: 'daily' }, function (r) { toast('+' + r.amount + ' ' + D.TOKEN + ' claimed.'); }); break;
       case 'binder': ui.binder = id; render(); break;
       case 'bfilter': ui.binderFilter = id; render(); break;
-      case 'burn': run({ type: 'burnDupes', series: ui.binder }, function (r) { toast('Burned ' + r.burned + ' cards for ' + fmt(r.amount) + ' ' + D.TOKEN + '.'); }); break;
+      case 'burn': run({ type: 'burnDupes', series: ui.binder }, function (r) { toast('Sold back ' + r.burned + ' cards for ' + fmt(r.amount) + ' ' + D.TOKEN + ' (' + tokenUsd(r.amount) + ').'); }); break;
       case 'claimSet': run({ type: 'claimSet', series: id }, function (r) { toast('Set complete! +' + fmt(r.amount) + ' ' + D.TOKEN + '.'); }); break;
       case 'xlink': ui.clicked[id] = true; setTimeout(render, 300); break;
       case 'task': run({ type: 'task', id: id }, function (r) { toast('Quest complete. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
@@ -644,7 +652,9 @@
         break;
       case 'flip': flip(Number(el.getAttribute('data-i'))); break;
       case 'reveal-all': revealAll(); break;
-      case 'again': var c = ui.opening.count; ui.opening = null; renderOverlay(); startOpening(c); break;
+      case 'again': var pid = ui.opening.product; ui.opening = null; renderOverlay(); startOpening(pid); break;
+      case 'next-pack': nextPack(); break;
+      case 'skip-packs': ui.opening.index = ui.opening.packs.length - 1; ui.opening.revealed = {}; ui.opening.stage = 'cards'; renderOverlay(); setTimeout(revealAll, 300); break;
       case 'close-open': closeOpening(); break;
     }
   }
@@ -671,7 +681,7 @@
       $('#modal').innerHTML = '';
       root.location.hash = 'packs';
       setRoute();
-      toast('Welcome @' + handle + '! +' + fmt(r.bonus) + ' ' + D.TOKEN + ' added.');
+      toast('Welcome @' + handle + '! +' + fmt(r.bonus) + ' ' + D.TOKEN + ' (' + tokenUsd(r.bonus) + ' demo credit) added.');
     }).catch(function (err) { $('#connect-err').textContent = err.message; });
   }
 
@@ -703,7 +713,9 @@
     if (e.key !== 'Escape') return;
     if ($('#modal').innerHTML) closeModal();
     else if (ui.opening && ui.opening.stage === 'cards') {
-      if (ui.opening.cards.every(function (c, i) { return ui.opening.revealed[i]; })) closeOpening(); else revealAll();
+      if (!packDone()) revealAll();
+      else if (ui.opening.index < ui.opening.packs.length - 1) nextPack();
+      else closeOpening();
     }
   }
 

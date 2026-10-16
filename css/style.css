@@ -290,7 +290,7 @@ button.pack-tile:hover { border-color: hsl(var(--h) 90% 65% / 0.7); transform: t
 .card .real { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; opacity: 0; transition: opacity 0.3s; border-radius: inherit; }
 .card .real.ok { opacity: 1; }
 .card .count { position: absolute; top: 2.5%; right: 3%; z-index: 8; background: var(--hot); color: #fff; font: 800 clamp(9px, 7cqi, 13px)/1 var(--f-mono); padding: 0.35em 0.5em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
-.card .new-tag { position: absolute; top: 2.5%; left: 50%; transform: translateX(-50%); z-index: 8; background: var(--ok); color: #04210f; font: 900 clamp(8px, 6cqi, 11px)/1 var(--f-body); letter-spacing: 0.08em; padding: 0.4em 0.6em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
+.card .new-tag { position: absolute; top: 48%; left: 6%; z-index: 8; background: var(--ok); color: #04210f; font: 900 clamp(8px, 6cqi, 11px)/1 var(--f-body); letter-spacing: 0.08em; padding: 0.4em 0.6em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
 .ico { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; flex: none; background: var(--ec, #ccc); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.25); }
 .ico svg { width: 72%; height: 72%; fill: #fff; }
 .ico.dark svg { fill: #2a2a2a; }
@@ -306,6 +306,9 @@ button.pack-tile:hover { border-color: hsl(var(--h) 90% 65% / 0.7); transform: t
 .pk .art { position: relative; margin-top: 2.4%; height: 46%; border-radius: 1.5%; overflow: hidden; background: var(--ab); box-shadow: 0 0 0 2px #d8b84a, 0 0 0 3px #8b6d16; display: grid; place-items: center; }
 .pk .art::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.55), transparent 60%), repeating-conic-gradient(from 0deg at 50% 120%, rgba(255, 255, 255, 0.10) 0 6deg, transparent 6deg 12deg); }
 .pk .art img { position: relative; max-width: 82%; max-height: 90%; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35)); }
+.pk .art .ph-ico { position: absolute; width: 58%; height: auto; aspect-ratio: 1; opacity: 0.22; box-shadow: none; }
+.pk .art .ph-ico svg { fill: #fff; }
+.pk.full.trainer .art .ph, .pk.full .art .ph { font-size: clamp(10px, 10cqi, 24px); opacity: 0.55; }
 .pk .art .ph { position: relative; font: 400 clamp(14px, 16cqi, 40px)/1 var(--f-display); color: rgba(255, 255, 255, 0.85); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); text-align: center; padding: 0 6%; }
 .pk .meta { font: italic 700 clamp(5px, 3.4cqi, 8px)/1.2 var(--f-body); background: linear-gradient(90deg, #c9a43a, #f3df8c, #c9a43a); color: #3b2a00; text-align: center; margin: 1.6% 6% 0; padding: 0.3em; border-radius: 0 0 0.6em 0.6em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pk .moves { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4%; padding: 2% 0; min-height: 0; }
@@ -537,4 +540,31 @@ footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wr
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+/* ---------- Pokémon-only pricing & odds ---------- */
+.card.rev .foil {
+  opacity: 0.32;
+  background: repeating-linear-gradient(125deg, rgba(255, 70, 160, 0.5) 0 4%, rgba(70, 220, 255, 0.5) 8%, rgba(255, 235, 90, 0.5) 12%, rgba(120, 255, 150, 0.5) 16%, rgba(255, 70, 160, 0.5) 20%);
+  -webkit-mask-image: radial-gradient(ellipse 46% 26% at 50% 34%, transparent 92%, #000 100%);
+  mask-image: radial-gradient(ellipse 46% 26% at 50% 34%, transparent 92%, #000 100%);
+}
+.rev-tag { position: absolute; z-index: 8; bottom: 9%; left: 50%; transform: translateX(-50%); white-space: nowrap; background: linear-gradient(90deg, #ff6fd1, #4fc3ff); color: #fff; font: 900 clamp(6px, 5cqi, 10px)/1 var(--f-body); letter-spacing: 0.06em; text-transform: uppercase; padding: 0.4em 0.7em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45); }
+.pull-buttons .btn.buy { display: grid; justify-items: start; gap: 2px; min-height: 76px; padding: 10px 22px; border-radius: 16px; text-align: left; }
+.buy-name { font-size: 14px; font-weight: 800; }
+.buy-usd { font: 400 28px/1 var(--f-display); }
+.pull-buttons .btn.buy small { font-size: 12px; font-weight: 700; display: flex; gap: 6px; align-items: center; opacity: 0.85; }
+.odds-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.odds-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font: 700 13px/1 var(--f-mono); }
+.odds-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px; align-items: start; }
+.pack-layout { display: grid; gap: 10px; background: var(--panel-2); border-radius: 12px; padding: 16px; }
+.pack-layout ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pack-layout li { display: flex; gap: 10px; align-items: baseline; font-weight: 700; font-size: 14px; }
+.slot-n { color: var(--gold); min-width: 2.2em; }
+.pack-tile.soon { filter: saturate(0.55); opacity: 0.75; }
+.pack-tile.soon .tag { background: var(--muted); }
+.soon-chip { cursor: default; color: var(--muted); border-style: dashed; }
+@media (max-width: 720px) {
+  .odds-grid { grid-template-columns: 1fr; }
+  .pull-buttons .btn.buy { flex: 1 1 140px; }
 }
