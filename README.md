@@ -45,7 +45,7 @@ node scripts/near-commands.js <TOKEN_CA> <USD_PER_TOKEN> [decimals]   # prints e
 1. Deploy `contracts/near-rng/res/pokenear_game.wasm` on pokenearfun.near with `new({owner, token, prices})`.
 2. Register pokenearfun.near with the token (`storage_deposit`) so it can receive `$POKENEAR`.
 3. Later price or CA changes: `set_prices` / `set_token` (owner only). The site picks them up within a minute.
-4. Buyback: add a function-call key on pokenearfun.near limited to `payout`, put its secret key in `PAYOUT_KEY`.
+4. Buyback: run `npm run payout-key` on the server. It creates the key locally, writes `PAYOUT_KEY` to `.env` (secret never printed) and prints the `near add-key` command that lets this key call `payout` only on pokenearfun.near.
 5. Keep some NEAR on pokenearfun.near: each draw is stored in contract state (about 0.003 NEAR) and payouts pay gas.
 
 Until the token is set, players see "Packs open when $POKENEAR is live"; the dev wallet can rip anyway.
