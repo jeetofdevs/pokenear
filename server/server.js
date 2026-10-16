@@ -23,8 +23,9 @@ const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
 const LIVE = Boolean(X_CLIENT_ID && X_REDIRECT_URI);
 const SECURE_COOKIE = X_REDIRECT_URI.startsWith('https://');
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js']);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js']);
+const ART_RE = /^assets\/art\/\d{1,4}\.webp$/;
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp' };
 
 function loadDotEnv(file) {
   let text;
@@ -211,11 +212,11 @@ function leaderboard() {
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname).replace(/^\/+/, '');
   if (rel === '') rel = 'index.html';
-  if (!STATIC.has(rel)) return send(res, 404, 'Not found');
+  if (!STATIC.has(rel) && !ART_RE.test(rel)) return send(res, 404, 'Not found');
   const file = path.join(ROOT, rel);
   fs.readFile(file, (err, buf) => {
     if (err) return send(res, 404, 'Not found');
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': ART_RE.test(rel) ? 'public, max-age=604800' : 'no-cache' });
     res.end(req.method === 'HEAD' ? undefined : buf);
   });
 }

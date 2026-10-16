@@ -29,7 +29,7 @@
 
   function emptyState() {
     return {
-      v: 1,
+      v: 2,
       user: null,
       balance: 0,
       earned: 0,
@@ -118,7 +118,7 @@
     var score = 0;
     Object.keys(state.collection).forEach(function (id) {
       var card = D.cardById[id];
-      if (card && state.collection[id] > 0) score += D.rarityById[card.rarity].burn * 2 + card.power;
+      if (card && state.collection[id] > 0) score += card.score;
     });
     return score;
   }
@@ -191,7 +191,7 @@
           var extra = state.collection[id] - 1;
           if (!card || extra <= 0) return;
           if (action.series && card.series !== action.series) return;
-          gained += extra * D.rarityById[card.rarity].burn;
+          gained += extra * D.rarityById[card.tier].burn;
           burned += extra;
           state.collection[id] = 1;
         });

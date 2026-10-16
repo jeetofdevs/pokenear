@@ -7,8 +7,12 @@ Players connect X, open packs from six card series, complete quests, invite frie
 ## Features
 
 - **X login first.** Nothing is playable until an X account is connected (OAuth 2.0 PKCE on the server).
-- **Six gacha series**, 12 cards each (72 total): Pocket Near (flagship creatures), Seven Seas Saga (pirates), Shinobi Clash (ninja), Spirit Blade (slayers), Dragon Orb (fighters), Mecha Frontier (mecha). All names and art are original.
-- **Published drop rates**: C 60%, R 25%, SR 11%, UR 3.5%, Secret 0.5%.
+- **8 real booster sets, 1,416 real cards**:
+  - Pokémon TCG: Scarlet & Violet 151, Mega Evolution, Black Bolt, White Flare
+  - One Piece Card Game: OP-01 Romance Dawn, OP-05 Awakening of the New Era, OP-09 Emperors in the New World, OP-13 Carrying On His Will
+  - Real names, numbers, rarities (IR, SIR, HR, BWR, MUR, SEC, parallels…), HP, attacks, power, cost, counter and effects.
+- **Card art**: cards are drawn in each game's frame with official Pokémon artwork bundled in `assets/art`. When the host can reach the image CDNs, the official card scan fades in on top (`remoteImages` in `index.html`).
+- **Tier rates**: C 60%, R 25%, SR 11%, UR 3.5%, SEC 0.5%. Each real rarity maps to a tier (see the rates table in the app).
 - **Pity**: UR or better guaranteed within 60 pulls per series. Every 10-pack holds at least one SR.
 - **Pack opening**: tear the pack, flip cards one by one, rarity glow on card backs, holo foil tilt on SR+.
 - **Binder**: per-series completion, burn duplicates for `$POKENEAR`, 2,000 `$POKENEAR` set bonus.
@@ -43,7 +47,9 @@ To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `in
 | Path | What |
 | --- | --- |
 | `index.html`, `css/style.css` | Page and styles |
-| `js/data.js` | Rarities, economy numbers, quests, all series and cards |
+| `js/cards.js`, `assets/art/` | Generated real card data and artwork (`npm run build:cards`) |
+| `scripts/build-cards.js` | Builds them from TCGdex, the One Piece card list and PokéAPI sprites |
+| `js/data.js` | Tiers, economy numbers, quests, indexes the card data |
 | `js/engine.js` | Game rules (pulls, pity, rewards, whitelist). Shared by browser and server |
 | `js/store.js` | Picks live server or local demo backend |
 | `js/app.js` | UI |
@@ -51,6 +57,8 @@ To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `in
 | `tests/` | `node --test` suites |
 
 ## Notes before launch
+
+- Pokémon and One Piece card names, art and scans belong to Nintendo / The Pokémon Company and Bandai. A public launch with a token needs a licence or a physical-card model.
 
 - X follow and post quests are self-confirmed. Verifying them needs the paid X API tiers.
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.

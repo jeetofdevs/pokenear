@@ -1,12 +1,21 @@
 {
   "name": "pokenear",
   "version": "1.0.0",
-  "description": "Pokenear: TCG gacha with X login, invites and a $POKENEAR whitelist.",
+  "description": "Pokenear: real Pok\u00e9mon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
   "private": true,
   "license": "UNLICENSED",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test tests/engine.test.js tests/server.test.js"
+    "test": "node --test tests/engine.test.js tests/server.test.js",
+    "build:cards": "node scripts/build-cards.js"
+  },
+  "devDependencies": {
+    "@tcgdata/tcgdex-offline": "^0.0.4",
+    "one-piece-card-game-json": "^0.2.55",
+    "pokeapi-sprites": "^2.0.4",
+    "sharp": "^0.33.5"
   }
 }
