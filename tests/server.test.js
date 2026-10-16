@@ -22,10 +22,10 @@ function solanaSign(kp, message) {
   return crypto.sign(null, Buffer.from(message, 'utf8'), kp.privateKey).toString('base64');
 }
 // NEP-413, built independently of the server code.
-function nearSign(kp, { message, nonce, recipient }) {
+function nearSign(kp, { message, nonce, recipient, callbackUrl }) {
   const str = (s) => { const b = Buffer.from(s); const l = Buffer.alloc(4); l.writeUInt32LE(b.length); return Buffer.concat([l, b]); };
   const tag = Buffer.alloc(4); tag.writeUInt32LE(2147484061);
-  const payload = Buffer.concat([tag, str(message), nonce, str(recipient), Buffer.from([0])]);
+  const payload = Buffer.concat([tag, str(message), nonce, str(recipient), callbackUrl ? Buffer.concat([Buffer.from([1]), str(callbackUrl)]) : Buffer.from([0])]);
   const hash = crypto.createHash('sha256').update(payload).digest();
   return crypto.sign(null, hash, kp.privateKey).toString('base64');
 }
@@ -79,10 +79,12 @@ test('wallet sign-in, referral and game API', async () => {
     const n = await nonce();
     return post('/api/auth/wallet', { chain: 'solana', address, nonce: n, signature: solanaSign(kp, auth.loginMessage('solana', address, n)), ref, wallet: 'Phantom' });
   }
-  async function nearLogin(kp, accountId, ref) {
+  // opts.sent: callbackUrl the client sends; opts.signed: callbackUrl the wallet put in the payload.
+  async function nearLogin(kp, accountId, ref, opts = {}) {
     const n = await nonce();
-    const signature = nearSign(kp, { message: auth.loginMessage('near', null, n), nonce: Buffer.from(n, 'hex'), recipient: auth.NEAR_RECIPIENT });
-    return post('/api/auth/wallet', { chain: 'near', accountId, publicKey: 'ed25519:' + auth.base58Encode(kp.raw), nonce: n, signature, ref, wallet: 'Meteor Wallet' });
+    const signature = nearSign(kp, { message: auth.loginMessage('near', null, n), nonce: Buffer.from(n, 'hex'), recipient: auth.NEAR_RECIPIENT, callbackUrl: opts.signed });
+    const publicKey = (opts.bareKey ? '' : 'ed25519:') + auth.base58Encode(kp.raw);
+    return post('/api/auth/wallet', { chain: 'near', accountId, publicKey, nonce: n, signature, ref, wallet: opts.wallet || 'Meteor Wallet', callbackUrl: opts.sent });
   }
 
   try {
@@ -188,6 +190,15 @@ test('wallet sign-in, referral and game API', async () => {
     // Signing again does not reset progress or double-count the referral.
     await nearLogin(nk, 'bob.near', a.body.state.user.refCode);
     assert.equal((await get('/api/me', alice)).body.state.invites, 1);
+
+    // HOT / Meteor sign without callbackUrl even though the page sends one; redirect wallets may sign it.
+    const page = 'https://pokenear.fun/#packs';
+    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, wallet: 'HOT Wallet' })).status, 200);
+    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, signed: page, wallet: 'MyNearWallet' })).status, 200);
+    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, bareKey: true })).status, 200);
+    const forged = await nearLogin(nk, 'bob.near', null, { sent: page, signed: 'https://evil.example/' });
+    assert.equal(forged.status, 401);
+    assert.match(forged.body.error, /NEAR wallet signature did not match/);
 
     // NEAR: valid signature but the key is not on the account
     const stranger = keypair();

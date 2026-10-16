@@ -63,16 +63,24 @@ function nep413Hash({ message, nonce, recipient, callbackUrl }) {
 }
 
 function parseNearKey(publicKey) {
-  const m = /^ed25519:([1-9A-HJ-NP-Za-km-z]+)$/.exec(publicKey || '');
+  const m = /^(?:ed25519:)?([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(publicKey || '');
   const raw = m && auth.base58Decode(m[1]);
   return raw && raw.length === 32 ? raw : null;
 }
 
+// Wallets differ on callbackUrl: HOT and Meteor sign the payload without it, redirect wallets
+// (MyNearWallet) may include it. Accept either; the nonce still binds the signature to this login.
 function verifyNearSignature({ publicKey, signature, message, nonce, recipient, callbackUrl }) {
   const raw = parseNearKey(publicKey);
   const sig = decodeSignature(signature);
   if (!raw || !sig || !nonce || nonce.length !== 32) return false;
-  return verifyEd25519(raw, nep413Hash({ message, nonce, recipient, callbackUrl }), sig);
+  const variants = callbackUrl ? [undefined, callbackUrl] : [undefined];
+  return variants.some((cb) => verifyEd25519(raw, nep413Hash({ message, nonce, recipient, callbackUrl: cb }), sig));
+}
+
+function nearKeyString(publicKey) {
+  const raw = parseNearKey(publicKey);
+  return raw ? 'ed25519:' + auth.base58Encode(raw) : null;
 }
 
 // The key must be a full-access key of the account the wallet reported.
@@ -82,6 +90,7 @@ async function nearKeyBelongsTo(accountId, publicKey, rpcUrl) {
   if (/^[0-9a-f]{64}$/.test(accountId)) return Buffer.from(raw).toString('hex') === accountId;
   const res = await fetch(rpcUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(8000),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jsonrpc: '2.0', id: 'pokenear', method: 'query',
@@ -94,4 +103,4 @@ async function nearKeyBelongsTo(accountId, publicKey, rpcUrl) {
   return body.result.permission === 'FullAccess';
 }
 
-module.exports = { offchainMessage, verifySolana, verifyNearSignature, nearKeyBelongsTo, nep413Hash, NEP413_TAG };
+module.exports = { offchainMessage, verifySolana, verifyNearSignature, nearKeyString, nearKeyBelongsTo, nep413Hash, NEP413_TAG };

@@ -20,7 +20,19 @@ const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
 const SECURE_COOKIE = PUBLIC_URL.startsWith('https://');
 const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
-const NEAR_RPC = process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet' ? 'https://rpc.testnet.near.org' : 'https://rpc.mainnet.near.org');
+// NEAR_RPC may list several URLs (comma separated); each call falls back to the next on failure.
+// rpc.*.near.org is deprecated and heavily rate limited, so FastNEAR's free RPC goes first.
+const NEAR_RPCS = (process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet'
+  ? 'https://rpc.testnet.fastnear.com,https://rpc.testnet.near.org'
+  : 'https://rpc.mainnet.fastnear.com,https://rpc.mainnet.near.org')).split(',').map((u) => u.trim()).filter(Boolean);
+
+async function withNearRpc(fn) {
+  let last;
+  for (const url of NEAR_RPCS) {
+    try { return await fn(url); } catch (err) { last = err; console.warn('[near-rpc]', url, err.message); }
+  }
+  throw last;
+}
 // On-chain RNG: Solana players use ORAO VRF, NEAR players use the Pokenear RNG contract.
 const SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || 'mainnet-beta';
 const SOLANA_RPC = process.env.SOLANA_RPC || (SOLANA_CLUSTER === 'devnet' ? 'https://api.devnet.solana.com' : 'https://api.mainnet-beta.solana.com');
@@ -144,9 +156,12 @@ async function walletLogin(req, res) {
       publicKey: body.publicKey, signature, message: auth.loginMessage('near', null, nonce),
       nonce: Buffer.from(nonce, 'hex'), recipient: auth.NEAR_RECIPIENT, callbackUrl: body.callbackUrl || undefined
     });
-    if (!ok) return send(res, 401, { error: 'The wallet signature did not match. Try again.' });
+    if (!ok) {
+      console.warn('[near-login] signature mismatch', { address, wallet: body.wallet, hasCallback: Boolean(body.callbackUrl) });
+      return send(res, 401, { error: 'The NEAR wallet signature did not match. Try again, or pick another NEAR wallet.' });
+    }
     try {
-      if (!(await verify.nearKeyBelongsTo(address, body.publicKey, NEAR_RPC))) {
+      if (!(await withNearRpc((url) => verify.nearKeyBelongsTo(address, verify.nearKeyString(body.publicKey), url)))) {
         return send(res, 401, { error: 'That key is not a full-access key of ' + address + '.' });
       }
     } catch (err) {
@@ -210,7 +225,7 @@ async function readRandomness(user, seed) {
     return { status: r.status, randomness: r.randomness, ref: r.account, source: 'orao-vrf' };
   }
   if (!NEAR_RNG_CONTRACT) throw Object.assign(new Error('NEAR randomness is not configured on this server.'), { status: 503 });
-  const r = await onchain.nearDraw(NEAR_RPC, NEAR_RNG_CONTRACT, seed);
+  const r = await withNearRpc((url) => onchain.nearDraw(url, NEAR_RNG_CONTRACT, seed));
   if (r.status === 'fulfilled' && r.account !== user.address) throw Object.assign(new Error('That draw was made by a different NEAR account.'), { status: 400 });
   return { status: r.status, randomness: r.randomness, ref: NEAR_RNG_CONTRACT, source: 'near-rng' };
 }

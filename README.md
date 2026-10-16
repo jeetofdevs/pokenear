@@ -70,7 +70,7 @@ The server runs on Node 18+, has no runtime dependencies (no `npm install` neede
 | `PORT` | `3000` | HTTP port |
 | `PUBLIC_URL` | (empty) | Set to your `https://` URL so the session cookie is `Secure` |
 | `NEAR_NETWORK` | `mainnet` | `testnet` for NEAR testnet (also set `nearNetwork` in `index.html`) |
-| `NEAR_RPC` | official RPC | NEAR RPC used to confirm account keys and read draws |
+| `NEAR_RPC` | FastNEAR, then near.org | NEAR RPC URL(s), comma separated, used to confirm account keys and read draws |
 | `SOLANA_CLUSTER` | `mainnet-beta` | `devnet` for testing |
 | `SOLANA_RPC` | public RPC | Solana RPC the server reads ORAO accounts from (use a paid RPC in production) |
 | `SOLANA_PUBLIC_RPC` | `SOLANA_RPC` | RPC handed to browsers for sending the ORAO request |

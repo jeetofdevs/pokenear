@@ -70,6 +70,7 @@ function oraoRandomnessAddress(seedHex) {
 async function rpc(url, method, params) {
   const res = await fetch(url, {
     method: 'POST',
+    signal: AbortSignal.timeout(8000),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 'pokenear', method, params })
   });
