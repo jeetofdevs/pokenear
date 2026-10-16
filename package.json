@@ -14,6 +14,7 @@
     "build:near": "esbuild scripts/near-wallet-entry.js --bundle --minify --format=iife --platform=browser --target=es2019 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/near-wallet.js",
     "build:brand": "node scripts/build-brand.js",
     "build:x-header": "node scripts/render-x-header.js",
+    "build:x-post": "node scripts/render-x-header.js post",
     "build:solana": "esbuild scripts/solana-vrf-entry.js --bundle --minify --format=iife --platform=browser --target=es2020 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/solana-vrf.js"
   },
   "devDependencies": {

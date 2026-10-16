@@ -92,8 +92,9 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 | `pokenear-icon.svg` / `.png` | The orb: collector ball with the NEAR symbol in the centre button. Site favicon and topbar icon |
 | `x-profile.png` | 400×400 X profile picture |
 | `x-header.png` | 1500×500 X header (source: `x-header.html`) |
+| `x-post.png` | 1600×900 X post image (source: `x-post.html`) |
 
-Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-header` (needs Playwright + Chromium).
+Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header` and `npm run build:x-post` (need Playwright + Chromium).
 
 ## Layout
 
