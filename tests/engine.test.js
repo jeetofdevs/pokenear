@@ -216,15 +216,13 @@ test('daily reward has a cooldown', () => {
   assert.equal(s.balance, D.ECONOMY.startBonus + 2 * D.ECONOMY.dailyReward);
 });
 
-test('whitelist requires every quest', () => {
+test('invites pay the inviter; removed actions are rejected', () => {
   let s = connected();
-  assert.throws(() => engine.apply(s, { type: 'joinWhitelist' }, ctx()), /Finish every quest/);
-  assert.equal(engine.whitelistStatus(s).total, 3);
-  assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /Unknown action/);
   for (let i = 0; i < 3; i++) s = engine.apply(s, { type: 'inviteJoined' }, ctx()).state;
-  s = ripWith(s, 'starter', 1).state;
-  assert.equal(engine.whitelistStatus(s).eligible, true);
-  assert.equal(engine.apply(s, { type: 'joinWhitelist' }, { ...ctx(), nextSpot: () => 42 }).result.spot, 42);
+  assert.equal(s.invites, 3);
+  assert.equal(s.balance, D.ECONOMY.startBonus + 3 * D.ECONOMY.inviteReward);
+  assert.throws(() => engine.apply(s, { type: 'joinWhitelist' }, ctx()), /Unknown action/);
+  assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /Unknown action/);
 });
 
 test('saves from the X-login era reset; wallet saves are kept', () => {

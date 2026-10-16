@@ -12,7 +12,7 @@
   var doc = root.document;
   var CFG = root.PN_CONFIG || {};
 
-  var ROUTES = ['packs', 'vault', 'whitelist', 'ranks'];
+  var ROUTES = ['packs', 'vault', 'invite', 'ranks', 'docs'];
   var ui = {
     route: 'packs',
     pack: D.PACKS[0].id,
@@ -240,33 +240,14 @@
       '<p class="muted small">Every card in this pack is listed with its exact chance. Chances are set so the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the pack price (' + usd(p.ev) + ' for ' + usd(p.usd) + '). Values are estimates and will follow a live price feed at launch. Each rip is independent; there is no pity.</p>';
   }
 
-  /* ---------- countdown ---------- */
-  function countdownParts() {
-    var ms = Math.max(0, new Date(D.SEASON_END).getTime() - Date.now());
-    var s = Math.floor(ms / 1000);
-    return { d: Math.floor(s / 86400), h: Math.floor(s / 3600) % 24, m: Math.floor(s / 60) % 60, s: s % 60 };
-  }
-  function countdownHTML() {
-    var p = countdownParts();
-    function seg(v, l) { return '<div class="seg"><b data-cd="' + l + '">' + String(v).padStart(2, '0') + '</b><span>' + l + '</span></div>'; }
-    return '<div class="countdown" aria-label="Season 1 ends in">' + seg(p.d, 'days') + seg(p.h, 'hrs') + seg(p.m, 'min') + seg(p.s, 'sec') + '</div>';
-  }
-  function tickCountdown() {
-    var p = countdownParts();
-    var map = { days: p.d, hrs: p.h, min: p.m, sec: p.s };
-    doc.querySelectorAll('[data-cd]').forEach(function (el) {
-      el.textContent = String(map[el.getAttribute('data-cd')]).padStart(2, '0');
-    });
-  }
-
   /* ---------- layout ---------- */
   function topbarHTML() {
     var st = store.state;
     var u = st.user;
     var nav = u ? '<nav class="nav" aria-label="Main">' +
-      [['packs', 'Packs'], ['vault', 'Vault'], ['whitelist', 'Whitelist'], ['ranks', 'Ranks']].map(function (n) {
+      [['packs', 'Packs'], ['vault', 'Vault'], ['invite', 'Invite'], ['ranks', 'Ranks'], ['docs', 'Docs']].map(function (n) {
         return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
-      }).join('') + '</nav>' : '';
+      }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="#docs"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
     var right = u
       ? '<div class="balance" title="' + D.TOKEN + ' balance">' + COIN + '<span class="num">' + fmt(st.balance) + '</span><span class="muted bal-label">' + D.TOKEN + ' · ' + tokenUsd(st.balance) + '</span></div>' +
         '<div class="user-chip" title="' + esc(u.address) + '">' + CHAIN_BADGE[u.chain] + '<span class="uh num">' + esc(u.name) + '</span></div>' +
@@ -280,6 +261,7 @@
 
   function footerHTML() {
     return '<footer><div class="wrap"><span>Sign in with a Solana or NEAR wallet. Prices in USD, paid in ' + D.TOKEN + ' (demo peg 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + '). Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
+      '<span class="foot-links"><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
 
@@ -308,12 +290,11 @@
     var starter = D.PACKS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
-        '<span class="eyebrow"><span class="live-dot"></span>Season 1 · Pokémon packs live</span>' +
-        '<h1>Rip Pokémon cards. Sell back instantly. Earn the <span class="gold">' + D.TOKEN + '</span> whitelist.</h1>' +
+        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs live on Solana and NEAR</span>' +
+        '<h1>Rip real <span class="gold">Pokémon</span> cards. Sell back instantly.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         refNote +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
-        '<div><div class="eyebrow" style="margin-bottom:8px">Season 1 closes in</div>' + countdownHTML() + '</div>' +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
     '</section>' +
@@ -326,7 +307,7 @@
       step(1, 'Connect wallet', 'Phantom, Solflare, Backpack or any NEAR wallet. One signature, no transaction, no fee.') +
       step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
       step(3, 'Keep or sell back', 'Hold the card in your vault or take ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value right away.') +
-      step(4, 'Lock your spot', 'Finish the quests and invite friends to claim a numbered whitelist pass.') +
+      step(4, 'Invite friends', 'Share your link. Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' and you get ' + fmt(E.inviteReward) + ' for each one.') +
     '</div></section>' +
     '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(starter.name) + ' odds</h2><span class="muted">Every pack publishes its full card list</span></div>' + packStatsHTML(starter) + oddsHTML(starter) + '</section>';
   }
@@ -346,8 +327,8 @@
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an open rip</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' card' + (pr.count > 1 ? 's' : '') + ' · paid ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or refund it if no randomness was requested yet.</p></div>' +
       '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Refund</button></div></section>' : '';
-    return openRip + '<section class="season"><div><div class="eyebrow"><span class="live-dot"></span>Season 1 live</div><h2>Whitelist mint closes soon</h2></div>' +
-        '<div class="season-right">' + countdownHTML() +
+    return openRip + '<section class="daily-bar"><div><div class="eyebrow">Daily drop</div><h2>Free ' + fmt(E.dailyReward) + ' ' + D.TOKEN + ' every day</h2></div>' +
+        '<div class="daily-right">' +
         (dailyWait > 0
           ? '<button class="btn" disabled>Daily drop in ' + Math.ceil(dailyWait / 3600000) + 'h</button>'
           : '<button class="btn btn-gold" data-act="daily">' + COIN + ' Claim daily ' + fmt(E.dailyReward) + '</button>') + '</div></section>' +
@@ -398,44 +379,16 @@
         : '<div class="panel empty">Your vault is empty. <a href="#packs">Rip a pack</a> to pull your first card.</div>');
   }
 
-  /* ---------- whitelist ---------- */
-  function whitelistHTML() {
+  /* ---------- invite ---------- */
+  function inviteHTML() {
     var st = store.state;
-    var wl = engine.whitelistStatus(st);
     var link = inviteLink();
-    function quest(id, title, sub, action) {
-      var done = wl.checks[id];
-      return '<li class="quest' + (done ? ' done' : '') + '"><span class="tick" aria-hidden="true">✓</span><div><div class="q-title">' + title + '</div><div class="q-sub">' + sub + '</div></div><div class="q-act">' +
-        (done ? '<span class="done-txt">Done</span>' : action) + '</div></li>';
-    }
-    var inviteAct = store.mode === 'local'
-      ? '<button class="btn btn-sm" data-act="demoInvite" title="Demo only: no server is tracking real sign-ups">Simulate a friend joining</button>'
-      : '<button class="btn btn-sm" data-act="copy">Copy link</button>';
-    var spot = st.whitelist ? String(st.whitelist.spot).padStart(4, '0') : '';
-    var pass = st.whitelist
-      ? '<div class="wl-pass"><div class="eyebrow" style="color:inherit">Season 1 Whitelist Pass</div><h3>You are on the list</h3><div class="spot">#' + spot + '</div><div class="num">' + esc(st.user.name) + ' · ' + A.CHAINS[st.user.chain].name + ' · ' + fmt(st.earned) + ' ' + D.TOKEN + ' earned</div></div>'
-      : '<div class="panel" style="display:grid;gap:12px"><b>Claim your whitelist pass</b><p class="muted small">Finish all ' + wl.total + ' quests to get a numbered pass for the ' + D.TOKEN + ' launch.</p>' +
-        '<button class="btn btn-gold btn-lg" data-act="joinWhitelist"' + (wl.eligible ? '' : ' disabled') + '>' + (wl.eligible ? 'Join the whitelist' : (wl.total - wl.done) + ' quests left') + '</button></div>';
-
-    return '<section class="section-head"><div><div class="eyebrow">Season 1</div><h2 class="page-title">Whitelist</h2></div>' + countdownHTML() + '</section>' +
-      '<div class="wl-grid">' +
-        '<section class="panel" style="display:grid;gap:18px">' +
-          '<div class="wl-status"><div class="ring" style="--p:' + Math.round(wl.done / wl.total * 100) + '"><div><b class="num">' + wl.done + '/' + wl.total + '</b><small>quests</small></div></div>' +
-            '<div><h3 style="font-size:24px">' + (st.whitelist ? 'Whitelisted' : wl.eligible ? 'Ready to join' : 'Not whitelisted yet') + '</h3><p class="muted small" style="margin-top:4px">Quests are checked automatically as you play.</p></div></div>' +
-          '<ul class="quests">' +
-            quest('connect', 'Connect your wallet', 'Signed in with ' + esc(st.user.wallet || A.CHAINS[st.user.chain].name) + ' · ' + esc(st.user.name) + ' on ' + A.CHAINS[st.user.chain].name, '') +
-            quest('invites', 'Invite ' + E.whitelistInvites + ' friends', '<span class="num">' + Math.min(st.invites, E.whitelistInvites) + '/' + E.whitelistInvites + '</span> joined · +' + fmt(E.inviteReward) + ' ' + D.TOKEN + ' per friend', inviteAct) +
-            quest('pulls', 'Rip your first pack', 'Packs from ' + usd(D.PACKS[0].usd), '<a class="btn btn-sm" href="#packs">Open packs</a>') +
-          '</ul>' +
-          (store.mode === 'local' ? '<p class="demo-note">Demo mode: invites are simulated because there is no server tracking sign-ups. Run the Pokenear server for verified wallet sign-in and real referral tracking.</p>' : '') +
-        '</section>' +
-        '<div style="display:grid;gap:24px">' + pass +
-          '<section class="panel" style="display:grid;gap:14px"><div><b>Invite friends</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' when they connect a wallet with your link. You get ' + fmt(E.inviteReward) + ' for each one.</p></div>' +
-            '<div class="ref-box"><input id="ref-link" readonly value="' + esc(link) + '" aria-label="Your invite link"><button class="btn btn-gold" data-act="copy">Copy link</button></div>' +
-            '<div class="stats-row"><div class="stat"><b>' + st.invites + '</b><span>Friends joined</span></div><div class="stat"><b>' + fmt(st.invites * E.inviteReward) + '</b><span>' + D.TOKEN + ' from invites</span></div><div class="stat"><b class="num">' + esc(st.user.refCode) + '</b><span>Your code</span></div></div>' +
-          '</section>' +
-        '</div>' +
-      '</div>';
+    return '<section class="section-head"><div><div class="eyebrow">Referrals</div><h2 class="page-title">Invite friends</h2></div></section>' +
+      '<section class="panel invite-panel"><div><b>Your invite link</b><p class="muted small">Friends get +' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' on top of the welcome credit when they connect a wallet with your link. You get ' + fmt(E.inviteReward) + ' ' + D.TOKEN + ' for each one.</p></div>' +
+        '<div class="ref-box"><input id="ref-link" readonly value="' + esc(link) + '" aria-label="Your invite link"><button class="btn btn-gold" data-act="copy">Copy link</button></div>' +
+        '<div class="stats-row"><div class="stat"><b>' + st.invites + '</b><span>Friends joined</span></div><div class="stat"><b>' + fmt(st.invites * E.inviteReward) + '</b><span>' + D.TOKEN + ' from invites</span></div><div class="stat"><b class="num">' + esc(st.user.refCode) + '</b><span>Your code</span></div></div>' +
+        (store.mode === 'local' ? '<div class="demo-note">Demo mode: no server is tracking real sign-ups. <button class="btn btn-sm" data-act="demoInvite">Simulate a friend joining</button></div>' : '') +
+      '</section>';
   }
 
   /* ---------- leaderboard ---------- */
@@ -446,44 +399,173 @@
   ];
   function ranksHTML() {
     var st = store.state;
-    var me = { name: st.user.name, chain: st.user.chain, score: engine.vaultValue(st), cards: st.vault.length, wl: !!st.whitelist, me: true };
+    var me = { name: st.user.name, chain: st.user.chain, score: engine.vaultValue(st), cards: st.vault.length, me: true };
     var rows, isSample = false;
     if (ui.leaderboard) {
-      rows = ui.leaderboard.map(function (r) { return { name: r.name, chain: r.chain, score: r.score, cards: r.cards, wl: r.wl, me: r.address === st.user.address && r.chain === st.user.chain }; });
+      rows = ui.leaderboard.map(function (r) { return { name: r.name, chain: r.chain, score: r.score, cards: r.cards, me: r.address === st.user.address && r.chain === st.user.chain }; });
     } else {
       isSample = true;
-      rows = SAMPLE.map(function (r) { return { name: r[1], chain: r[0], score: r[2], cards: r[3], wl: r[4], sample: true }; }).concat([me]);
+      rows = SAMPLE.map(function (r) { return { name: r[1], chain: r[0], score: r[2], cards: r[3], sample: true }; }).concat([me]);
     }
     rows.sort(function (a, b) { return b.score - a.score; });
     return '<section class="section-head"><div><div class="eyebrow">Vault value</div><h2 class="page-title">Ranks</h2></div><span class="muted small">Ranked by the estimated value of the cards each collector holds</span></section>' +
       (isSample ? '<p class="demo-note">Demo mode: rows marked Sample are placeholders. With the server running, this table lists real collectors.</p>' : '') +
-      '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Cards</th><th class="num">Vault value</th><th>Whitelist</th></tr></thead><tbody>' +
+      '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Cards</th><th class="num">Vault value</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
         return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who">' + CHAIN_BADGE[r.chain] + '<div><b class="num">' + esc(r.name) + '</b>' + (r.me ? ' <span class="muted">(you)</span>' : '') + (r.sample ? ' <span class="sample">Sample</span>' : '') + '<div class="muted small">' + A.CHAINS[r.chain].name + '</div></div></div></td>' +
-          '<td class="num">' + r.cards + '</td><td class="num"><b>' + usd(r.score) + '</b></td><td>' + (r.wl ? '<span class="done-txt">Whitelisted</span>' : '<span class="muted">Not yet</span>') + '</td></tr>';
+          '<td class="num">' + r.cards + '</td><td class="num"><b>' + usd(r.score) + '</b></td></tr>';
       }).join('') + '</tbody></table></section>';
+  }
+
+  /* ---------- docs ---------- */
+  var X_URL = 'https://x.com/' + D.X_HANDLE;
+  var X_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.33l4.37 5.77L17.75 3Zm-1.08 16.17h1.7L7.4 4.73H5.58l11.09 14.44Z"/></svg>';
+  var DOC_SECTIONS = [
+    ['start', 'Getting started'],
+    ['packs', 'Packs and prices'],
+    ['odds', 'Odds and value'],
+    ['rng', 'On-chain RNG'],
+    ['verify', 'Verify a rip'],
+    ['buyback', 'Vault and buyback'],
+    ['token', D.TOKEN],
+    ['invite', 'Invites and rewards'],
+    ['fees', 'Fees'],
+    ['security', 'Wallet safety'],
+    ['faq', 'FAQ']
+  ];
+  function docSec(id, title, body) {
+    return '<section class="doc-sec panel" id="doc-' + id + '"><h2>' + title + '</h2>' + body + '</section>';
+  }
+  function docsHTML() {
+    var pct = function (x) { return Math.round(x * 100) + '%'; };
+    var BB = pct(D.BUYBACK_RATE);
+    var rarityRows = D.PACKS.map(function (p) {
+      var by = {};
+      p.pool.forEach(function (e) { var r = D.cardById[e.id].rarity; by[r] = (by[r] || 0) + e.p; });
+      return { p: p, by: by };
+    });
+    var rarities = Object.keys(D.RARITY_INFO).filter(function (r) { return rarityRows.some(function (x) { return x.by[r]; }); });
+    var toc = '<nav class="doc-toc" aria-label="Docs sections">' + DOC_SECTIONS.map(function (s) {
+      return '<a href="#docs/' + s[0] + '" data-act="doc-jump" data-to="' + s[0] + '">' + esc(s[1]) + '</a>';
+    }).join('') + '</nav>';
+    var secs = [
+      docSec('start', 'Getting started',
+        '<p>Pokenear is an on-chain Pokémon TCG gacha. You open packs of real Pokémon cards, keep them in your vault or sell them back instantly. Every card is decided by randomness from the blockchain, and you can check it yourself.</p>' +
+        '<ol class="doc-list">' +
+          '<li><b>Connect a wallet.</b> Solana (Phantom, Solflare, Backpack) or NEAR (HOT, Meteor, MyNearWallet, Sender, Intear). You sign one message to prove the wallet is yours. That message is not a transaction and costs nothing.</li>' +
+          '<li><b>Pick a pack.</b> Four tiers from ' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + '. Every card in the pack and its exact chance is listed before you buy.</li>' +
+          '<li><b>Rip it.</b> Your wallet asks the chain for randomness: ORAO VRF on Solana, or the Pokenear RNG contract on NEAR. Your card is computed from that randomness and checked in your browser.</li>' +
+          '<li><b>Keep or sell.</b> Cards go to your vault. Sell any card back for ' + BB + ' of its value at any time.</li>' +
+        '</ol>' +
+        '<p class="muted small">New wallets get ' + fmt(E.startBonus) + ' ' + D.TOKEN + ' (' + tokenUsd(E.startBonus) + ') of welcome credit. Joining through an invite link adds ' + fmt(E.referredBonus) + ' more.</p>'),
+      docSec('packs', 'Packs and prices',
+        '<p>Each pack holds one card from a published list of real cards from the Scarlet &amp; Violet era (151, Mega Evolution, Black Bolt and White Flare). Higher tiers drop the low-value cards from the list, so their floor and top hits are higher.</p>' +
+        '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">Expected value</th><th class="num">Cards</th><th class="num">Card values</th><th class="num">Beat the price</th><th class="num">3× the price</th></tr></thead><tbody>' +
+        D.PACKS.map(function (p) {
+          return '<tr><td><b>' + esc(p.name) + '</b></td><td class="num">' + usd(p.usd) + '<div class="muted small">' + fmt(p.price) + ' ' + D.TOKEN + '</div></td><td class="num">' + usd(p.ev) + '</td><td class="num">' + p.pool.length + '</td><td class="num">' + usd(D.cardById[p.pool[p.pool.length - 1].id].usd) + ' – ' + usd(D.cardById[p.pool[0].id].usd) + '</td><td class="num">' + fmtChance(p.beat) + '</td><td class="num">' + fmtChance(p.x3) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="muted small">You can rip ' + D.MULTI.join(' or ') + ' at a time. A 5-rip uses one on-chain request and gives five independent cards.</p>'),
+      docSec('odds', 'Odds and value',
+        '<p>Every card has a value in USD, estimated from market prices for its rarity and popularity. A card\'s chance falls as its value rises: each card gets a weight of <code>value<sup>−k</sup></code>, and <code>k</code> is solved per pack so the average card is worth exactly <b>' + pct(D.EV_RATIO) + '</b> of the pack price. The remaining ' + pct(1 - D.EV_RATIO) + ' is the house edge.</p>' +
+        '<p>The full list, with every card\'s chance, is shown on each pack. The chance of each rarity per pack:</p>' +
+        '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Rarity</th>' + D.PACKS.map(function (p) { return '<th class="num">' + esc(p.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        rarities.map(function (r) {
+          return '<tr><td>' + esc(r) + '</td>' + rarityRows.map(function (x) { return '<td class="num">' + (x.by[r] ? fmtChance(x.by[r]) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="muted small">Every rip is independent. There is no pity timer and no hidden adjustment: the odds you see are the odds the code uses, and the randomness comes from the chain.</p>'),
+      docSec('rng', 'On-chain RNG',
+        '<p>Nobody at Pokenear picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
+        '<ol class="doc-list">' +
+          '<li><b>Seed.</b> When you rip, the price is reserved from your balance and the server gives you a one-time 32-byte <code>seed</code>. It is shown in the rip proof.</li>' +
+          '<li><b>Request.</b> Your own wallet sends a transaction that asks the chain for randomness tied to that seed. The server never holds your keys and cannot send it for you.</li>' +
+          '<li><b>Randomness.</b> The chain answers with randomness nobody could know in advance (see below).</li>' +
+          '<li><b>Cards.</b> The server reads the randomness from the chain, computes your cards with the public formula, and your browser computes them again to check.</li>' +
+        '</ol>' +
+        '<div class="doc-cols">' +
+          '<div class="doc-box"><h3>' + CHAIN_BADGE.solana + ' Solana: ORAO VRF</h3><p>Your wallet calls <code>request_v2</code> on the ORAO VRF program <code class="break">' + 'VRFzZoJdhFWL8rkvu87LpKM3RbcVezpMEc6X5GVDr7y' + '</code>. ORAO\'s independent oracles each sign the seed with their ed25519 keys, and the program checks those signatures on chain before it stores 64 bytes of randomness in the account at PDA <code>["orao-vrf-randomness-request", seed]</code>. A seed can be fulfilled only once.</p></div>' +
+          '<div class="doc-box"><h3>' + CHAIN_BADGE.near + ' NEAR: Pokenear RNG contract</h3><p>Your wallet calls <code>draw(seed)</code> on the Pokenear RNG contract with a 0.003 NEAR storage deposit. The contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores the result. Each seed can be drawn once, and anyone can read it with <code>get_draw(seed)</code>.</p></div>' +
+        '</div>' +
+        '<h3>The formula</h3>' +
+        '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("pokenear-rip:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
+        '<p class="muted small">The pack list is ordered by value, highest first, as on the pack page. The same code runs in the server and in your browser.</p>'),
+      docSec('verify', 'Verify a rip',
+        '<p>After every rip the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness and links to the transaction and account on Solscan or NearBlocks.</p>' +
+        '<ol class="doc-list">' +
+          '<li>Open the explorer link and check that the randomness account (Solana) or the <code>draw</code> call (NEAR) shows the same seed and randomness.</li>' +
+          '<li>Your browser already re-ran the formula: <span class="done-txt">✓ Verified in your browser</span> means it got the same cards.</li>' +
+          '<li>To check it yourself, run the formula above with any SHA-256 tool and compare the result with the pack\'s published list.</li>' +
+        '</ol>'),
+      docSec('buyback', 'Vault and buyback',
+        '<p>Every card you pull goes to your vault with its proof. You can:</p>' +
+        '<ul class="doc-list"><li><b>Keep it.</b> Your vault value sets your place on the Ranks board.</li>' +
+        '<li><b>Sell it back instantly</b> for ' + BB + ' of its listed value, paid in ' + D.TOKEN + '. Sell one card, or select several and sell them together.</li></ul>' +
+        '<p class="muted small">Card values are estimates today and will follow a live market price feed at launch. The buyback price is always shown before you confirm.</p>'),
+      docSec('token', D.TOKEN,
+        '<p><b>' + D.TOKEN + '</b> is the currency of Pokenear. Pack prices are set in USD and paid in ' + D.TOKEN + ' at the current rate, and buybacks pay out in ' + D.TOKEN + '.</p>' +
+        '<ul class="doc-list"><li>Preview rate: 1 ' + D.TOKEN + ' = ' + usd(D.TOKEN_USD) + ', so the ' + usd(D.PACKS[0].usd) + ' ' + esc(D.PACKS[0].name) + ' costs ' + fmt(D.PACKS[0].price) + ' ' + D.TOKEN + '.</li>' +
+        '<li>Before launch, balances are credits used to test the game. They are not tokens yet and cannot be withdrawn.</li>' +
+        '<li>Follow <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> for the launch date and contract address. Pokenear will only ever announce the contract address there and on this site.</li></ul>'),
+      docSec('invite', 'Invites and rewards',
+        '<ul class="doc-list">' +
+          '<li><b>Welcome credit.</b> ' + fmt(E.startBonus) + ' ' + D.TOKEN + ' (' + tokenUsd(E.startBonus) + ') the first time a wallet connects.</li>' +
+          '<li><b>Invites.</b> Your invite link carries a code made from your wallet. Each friend who connects with it gets ' + fmt(E.referredBonus) + ' ' + D.TOKEN + ' extra, and you get ' + fmt(E.inviteReward) + ' ' + D.TOKEN + '.</li>' +
+          '<li><b>Daily drop.</b> Claim ' + fmt(E.dailyReward) + ' ' + D.TOKEN + ' once a day.</li>' +
+        '</ul>' +
+        '<p class="muted small">One reward per new wallet. Invites from wallets controlled by the same person may be removed.</p>'),
+      docSec('fees', 'Fees',
+        '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Action</th><th>Solana</th><th>NEAR</th></tr></thead><tbody>' +
+          '<tr><td>Connect wallet</td><td>Free (message signature)</td><td>Free (message signature)</td></tr>' +
+          '<tr><td>Rip (1 or 5 cards)</td><td>Network fee + ORAO VRF fee, a few cents</td><td>Gas + 0.003 NEAR storage deposit</td></tr>' +
+          '<tr><td>Sell back, daily reward</td><td>Free</td><td>Free</td></tr>' +
+        '</tbody></table></div>' +
+        '<p class="muted small">Chain fees are paid by your wallet to the network and the oracle, not to Pokenear. Pack prices are paid from your ' + D.TOKEN + ' balance.</p>'),
+      docSec('security', 'Wallet safety',
+        '<ul class="doc-list">' +
+          '<li>Sign-in is one plain-text message with a one-time code. It never asks for a transaction, approval or seed phrase.</li>' +
+          '<li>The only transaction Pokenear asks for is the randomness request. On Solana it calls the ORAO VRF program; on NEAR it calls <code>draw</code> on the Pokenear RNG contract. Your wallet shows both before you approve.</li>' +
+          '<li>Pokenear will never DM you, ask for your seed phrase, or ask you to send tokens to an address.</li>' +
+          '<li>The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
+        '</ul>'),
+      docSec('faq', 'FAQ',
+        [
+          ['Can Pokenear change my card after I rip?', 'No. The card follows from the on-chain randomness and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
+          ['Can Pokenear see the result before I pay?', 'No. The price is reserved before the randomness exists, and the seed is fixed before your wallet sends the request.'],
+          ['What if I reject the transaction or close the page?', 'The rip stays open. Come back and press Continue to finish it, or Refund to get the price back. A refund is only possible while no randomness exists on chain for that seed.'],
+          ['Why one card per pack?', 'It keeps every pull simple to price and to verify. Multi-rips give you five cards from one request.'],
+          ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
+          ['Is the RNG on NEAR as strong as ORAO?', 'NEAR\'s random seed comes from the validators of each block. It cannot be predicted by players or by Pokenear, but in theory a block producer could withhold a block. For card values like these that attack costs far more than it could win.'],
+          ['Which networks are supported?', 'Solana and NEAR mainnet. More chains may follow.']
+        ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
+    ];
+    return '<section class="section-head"><div><div class="eyebrow">Docs</div><h2 class="page-title">How Pokenear works</h2></div>' +
+      '<a class="btn btn-sm btn-ghost" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></section>' +
+      '<div class="docs">' + toc + '<div class="doc-body">' + secs.join('') + '</div></div>';
   }
 
   /* ---------- main render ---------- */
   function render() {
     var st = store.state;
     var body;
-    if (!st.user) body = landingHTML();
+    if (ui.route === 'docs') body = docsHTML();
+    else if (!st.user) body = landingHTML();
     else if (ui.route === 'vault') body = vaultHTML();
-    else if (ui.route === 'whitelist') body = whitelistHTML();
+    else if (ui.route === 'invite') body = inviteHTML();
     else if (ui.route === 'ranks') body = ranksHTML();
     else body = packsHTML();
     $('#app').innerHTML = topbarHTML() + '<main><div class="wrap view">' + body + '</div></main>' + footerHTML();
   }
 
   function setRoute() {
-    var h = (root.location.hash || '').replace('#', '');
+    var parts = (root.location.hash || '').replace('#', '').split('/');
+    var h = parts[0];
     ui.route = ROUTES.indexOf(h) >= 0 ? h : (ui.route || 'packs');
     if (ui.route === 'ranks' && store.mode === 'live') {
       store.leaderboard().then(function (rows) { ui.leaderboard = rows; render(); }).catch(function () { ui.leaderboard = null; });
     }
     render();
-    root.scrollTo(0, 0);
+    var sec = h === 'docs' && parts[1] && $('#doc-' + parts[1]);
+    if (sec) sec.scrollIntoView();
+    else root.scrollTo(0, 0);
   }
 
   /* ---------- modals ---------- */
@@ -810,6 +892,12 @@
       case 'wallet-demo': signIn('solana', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
       case 'logout': store.logout().then(function () { toast('Logged out.'); }); break;
+      case 'doc-jump':
+        e.preventDefault();
+        var ds = $('#doc-' + el.getAttribute('data-to'));
+        if (ds) ds.scrollIntoView({ behavior: 'smooth' });
+        try { root.history.replaceState(null, '', '#docs/' + el.getAttribute('data-to')); } catch (err) { /* ignore */ }
+        break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
       case 'pack': ui.pack = id; ui.showAllOdds = false; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
@@ -830,7 +918,6 @@
       case 'sell-rip': sellFromRip([uid]); break;
       case 'sell-all-rip': sellFromRip(ui.opening.items.filter(function (it) { return !ui.opening.sold[it.uid]; }).map(function (it) { return it.uid; })); break;
       case 'demoInvite': run({ type: 'inviteJoined' }, function (r) { toast('A friend joined. +' + r.amount + ' ' + D.TOKEN + '.'); }); break;
-      case 'joinWhitelist': run({ type: 'joinWhitelist' }, function (r) { toast('Whitelisted! Your spot is #' + r.spot + '.'); }); break;
       case 'copy': copyLink(); break;
       case 'tear':
         el.classList.add('tearing');
@@ -928,7 +1015,6 @@
         store.finishWallet('near', back.nonce, back.signed).then(function () { toast('Welcome ' + store.state.user.name + '!'); }, function (e) { toast(e.message, true); });
       }
       setRoute();
-      setInterval(tickCountdown, 1000);
     });
   }
 

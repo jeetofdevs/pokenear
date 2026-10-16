@@ -1,8 +1,8 @@
 # Pokenear
 
-TCG gacha with Solana / NEAR wallet sign-in, invite links and a `$POKENEAR` whitelist.
+On-chain Pokémon TCG gacha with Solana / NEAR wallet sign-in, on-chain randomness, instant buyback and invite links.
 
-Players connect a wallet, rip Pokémon card packs with published odds, sell pulls back instantly, complete quests, invite friends and claim a numbered Season 1 whitelist pass. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
+Players connect a wallet, rip Pokémon card packs with published odds, sell pulls back instantly and invite friends. Every card is derived from on-chain randomness (ORAO VRF on Solana, the Pokenear RNG contract on NEAR) and re-checked in the browser. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
 
 ## Features
 
@@ -26,9 +26,35 @@ Same model as Courtyard, Collector Crypt and Phygitals:
 - **Vault**: every pull is a unique item you can hold or sell back. Physical redemption is planned for launch.
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data).
 - **Card values** are estimates (rarity base × card spread × popularity, hand-set for headline cards). Connect a price feed before launch.
-- **Whitelist quests** (checked automatically): connect a wallet, invite 3 friends, rip your first pack.
 - **Invites**: `?ref=CODE` links. New players get +500, inviters get +500 per friend.
-- **Daily drop**, season countdown, leaderboard by vault value.
+- **Daily drop** and a leaderboard by vault value.
+- **Docs** at `#docs`: how it works, odds tables, on-chain RNG and verification, fees, FAQ. Official X: [@pokenearfun](https://x.com/pokenearfun).
+
+## On-chain RNG
+
+1. `POST /api/rip/start` reserves the price and issues a one-time 32-byte `seed`.
+2. The player's wallet requests randomness for that seed:
+   - **Solana**: `request_v2` on ORAO VRF (`VRFzZoJdhFWL8rkvu87LpKM3RbcVezpMEc6X5GVDr7y`); the randomness lands in the PDA `["orao-vrf-randomness-request", seed]` (`vendor/solana-vrf.js`, built from `scripts/solana-vrf-entry.js`).
+   - **NEAR**: `draw(seed)` on the `contracts/near-rng` contract with 0.003 NEAR attached.
+3. `POST /api/rip/finish` reads the randomness from the chain (`server/onchain.js`; 202 while pending) and derives the cards:
+
+   ```
+   h_i = sha256("pokenear-rip:v1" || randomness || seed || byte(i)),  u_i = first 6 bytes / 2^48
+   card_i = first card in the pack list whose cumulative chance > u_i
+   ```
+
+4. The browser re-derives the cards and shows the proof with explorer links. `POST /api/rip/cancel` refunds only while no randomness exists on chain.
+
+### Deploy the NEAR contract
+
+```bash
+cd contracts/near-rng
+cargo +stable test --release          # unit tests
+cargo build --release --target wasm32-unknown-unknown   # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/pokenear_rng.wasm
+near deploy rng.pokenear.near res/pokenear_rng.wasm --initFunction new --initArgs '{}'
+```
+
+Then set `NEAR_RNG_CONTRACT=rng.pokenear.near` on the server.
 
 ## Run it
 
@@ -44,14 +70,18 @@ The server has no runtime dependencies and needs no API keys. Optional settings 
 | `PORT` | `3000` | HTTP port |
 | `PUBLIC_URL` | (empty) | Set to your `https://` URL so the session cookie is `Secure` |
 | `NEAR_NETWORK` | `mainnet` | `testnet` for NEAR testnet (also set `nearNetwork` in `index.html`) |
-| `NEAR_RPC` | official RPC | NEAR RPC used to confirm account keys |
+| `NEAR_RPC` | official RPC | NEAR RPC used to confirm account keys and read draws |
+| `SOLANA_CLUSTER` | `mainnet-beta` | `devnet` for testing |
+| `SOLANA_RPC` | public RPC | Solana RPC the server reads ORAO accounts from (use a paid RPC in production) |
+| `SOLANA_PUBLIC_RPC` | `SOLANA_RPC` | RPC handed to browsers for sending the ORAO request |
+| `NEAR_RNG_CONTRACT` | (empty) | Account of the deployed `contracts/near-rng` contract |
 | `DB_FILE` | `data/db.json` | Where game state is stored |
 
 Opened as static files (no server), the site runs in **demo mode**: progress stays in the browser, wallet signatures are requested but not verified, and a "demo wallet" button lets people try it without a wallet.
 
 To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `index.html`.
 
-Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle).
+Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` / `npm run build:solana` (wallet and ORAO bundles).
 
 ## Brand
 
@@ -73,14 +103,17 @@ Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-he
 | `index.html`, `css/style.css` | Page and styles |
 | `js/cards.js`, `assets/art/` | Generated real card data and artwork (`npm run build:cards`) |
 | `scripts/build-cards.js` | Builds them from TCGdex and PokéAPI sprites |
-| `js/data.js` | Card values, packs and odds, economy numbers, quests |
-| `js/engine.js` | Game rules (rips, buyback, rewards, whitelist). Shared by browser and server |
+| `js/data.js` | Card values, packs and odds, economy numbers |
+| `js/engine.js` | Game rules (rips from on-chain randomness, buyback, rewards). Shared by browser and server |
 | `js/auth.js` | Sign-in message, base58, address checks (browser + server) |
 | `js/wallets.js` | Solana wallet providers and the NEAR Wallet Selector bridge |
 | `vendor/near-wallet.js` | Bundled NEAR Wallet Selector (`scripts/near-wallet-entry.js`) |
 | `js/store.js` | Picks live server or local demo backend |
 | `js/app.js` | UI |
+| `js/sha256.js` | SHA-256 used to derive cards (browser + server) |
 | `server/server.js`, `server/wallet-verify.js` | Static files, wallet sign-in and signature checks, game API |
+| `server/onchain.js` | Reads ORAO VRF accounts and NEAR draws |
+| `contracts/near-rng/` | NEAR RNG contract (Rust, near-sdk 5.11) |
 | `tests/` | `node --test` suites |
 
 ## Notes before launch
@@ -89,4 +122,6 @@ Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-he
 - The logo uses the NEAR symbol. Check the NEAR Foundation brand guidelines before using it publicly, and avoid implying an official partnership.
 
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.
+- Each rip costs the player a chain fee: Solana network fee + ORAO fee, or NEAR gas + 0.003 NEAR storage.
+- NEAR's `random_seed` comes from block producers; a producer could in theory withhold a block. Fine for these card values; use a VRF oracle on NEAR if stakes grow.
 - `$POKENEAR` balances are points. Connecting them to an on-chain token is a separate step.

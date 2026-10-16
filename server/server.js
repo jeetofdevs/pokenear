@@ -43,9 +43,9 @@ function loadDotEnv(file) {
 function loadDb() {
   try {
     const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    return { users: {}, sessions: {}, refIndex: {}, wlCounter: 0, ...db };
+    return { users: {}, sessions: {}, refIndex: {}, ...db };
   } catch {
-    return { users: {}, sessions: {}, refIndex: {}, wlCounter: 0 };
+    return { users: {}, sessions: {}, refIndex: {} };
   }
 }
 const db = loadDb();
@@ -65,7 +65,7 @@ const nonces = new Map(); // nonce -> issued at
 const NONCE_TTL = 10 * 60 * 1000;
 
 function rng() { return crypto.randomInt(0, 2 ** 32) / 2 ** 32; }
-function ctx() { return { rng, now: Date.now(), mode: 'server', nextSpot: () => ++db.wlCounter }; }
+function ctx() { return { rng, now: Date.now(), mode: 'server' }; }
 function b64url(buf) { return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 
 /* ---------- http helpers ---------- */
@@ -172,7 +172,7 @@ async function walletLogin(req, res) {
 }
 
 /* ---------- API ---------- */
-const CLIENT_ACTIONS = new Set(['daily', 'buyback', 'joinWhitelist']);
+const CLIENT_ACTIONS = new Set(['daily', 'buyback']);
 
 async function handleAction(req, res) {
   const uid = currentUserId(req);
@@ -260,8 +260,7 @@ function leaderboard() {
       address: s.user.address,
       name: s.user.name,
       score: engine.vaultValue(s),
-      cards: s.vault.length,
-      wl: Boolean(s.whitelist)
+      cards: s.vault.length
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 100);

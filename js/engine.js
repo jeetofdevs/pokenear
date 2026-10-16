@@ -34,10 +34,8 @@
       sold: 0,            // cards sold back
       pulls: {},          // rips per pack
       totalPulls: 0,
-      tasks: {},
       invites: 0,
       lastDaily: 0,
-      whitelist: null,
       history: [],
       pendingRip: null    // paid rip waiting for its on-chain randomness
     };
@@ -49,7 +47,7 @@
     if (!old || old.v === 5) return old;
     if (!old.user || !old.user.chain) return emptyState();
     var st = emptyState();
-    ['user', 'balance', 'earned', 'tasks', 'invites', 'lastDaily', 'whitelist'].forEach(function (k) {
+    ['user', 'balance', 'earned', 'invites', 'lastDaily'].forEach(function (k) {
       if (old[k] !== undefined) st[k] = old[k];
     });
     st.totalPulls = old.totalPulls ? 1 : 0;
@@ -94,16 +92,6 @@
 
   function isHex(s, bytes) { return typeof s === 'string' && new RegExp('^[0-9a-f]{' + bytes * 2 + '}$').test(s); }
 
-  function whitelistStatus(state) {
-    var checks = {
-      connect: !!state.user,
-      invites: state.invites >= E.whitelistInvites,
-      pulls: state.totalPulls >= E.whitelistPulls
-    };
-    var done = Object.keys(checks).filter(function (k) { return checks[k]; }).length;
-    return { checks: checks, done: done, total: Object.keys(checks).length, eligible: done === Object.keys(checks).length };
-  }
-
   function seriesProgress(state, seriesId) {
     var s = D.seriesById[seriesId];
     var have = {};
@@ -143,7 +131,6 @@
           referredBy: null,
           joinedAt: now
         };
-        state.tasks.connect = now;
         credit(state, E.startBonus);
         result.bonus = E.startBonus;
         var ref = String(action.ref || '').toUpperCase();
@@ -233,15 +220,6 @@
         result.sold = soldN;
         break;
       }
-      case 'joinWhitelist': {
-        requireUser(state);
-        if (state.whitelist) throw GameError('You are already on the whitelist.');
-        if (!whitelistStatus(state).eligible) throw GameError('Finish every quest to join the whitelist.');
-        var spot = ctx.nextSpot ? ctx.nextSpot() : 1 + (D.hash(state.user.chain + ':' + state.user.address) % 4999);
-        state.whitelist = { spot: spot, at: now };
-        result.spot = spot;
-        break;
-      }
       case 'inviteJoined': {
         // Server: called when a new account signs up with this user's code.
         // Local demo: there is no shared backend, so the demo button calls it.
@@ -266,7 +244,6 @@
     uniformsFromRandomness: uniformsFromRandomness,
     cardsFromRandomness: cardsFromRandomness,
     refCodeFor: refCodeFor,
-    whitelistStatus: whitelistStatus,
     seriesProgress: seriesProgress,
     vaultValue: vaultValue
   };
