@@ -1,87 +1,86 @@
 # Pokenear
 
-On-chain Pokémon TCG gacha with Solana / NEAR wallet sign-in, on-chain randomness, instant buyback and invite links.
+On-chain Pokémon TCG gacha on NEAR: packs are paid in `$POKENEAR` to the interaction wallet **pokenearfun.near**, whose contract draws the randomness in the same transaction.
 
-Players connect a wallet, rip Pokémon card packs with published odds, sell pulls back instantly and invite friends. Every card is derived from on-chain randomness (ORAO VRF on Solana, the Pokenear RNG contract on NEAR) and re-checked in the browser. Rewards are paid in `$POKENEAR` (off-chain points until token launch).
+Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 90% (paid in `$POKENEAR` by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: the only currency is the token in the player's wallet.
 
 ## Features
 
-Same model as Courtyard, Collector Crypt and Phygitals:
-
-- **Wallet sign-in first.** Nothing is playable until a wallet is connected:
-  - **Solana**: Phantom, Solflare, Backpack (injected providers; mobile users get an "Open in app" link).
-  - **NEAR**: HOT, Meteor, MyNearWallet, Sender, Intear via NEAR Wallet Selector (bundled in `vendor/near-wallet.js`, loaded only when NEAR is chosen).
-  - The wallet signs a one-time message (no transaction, no fee). The server verifies it: ed25519 for Solana; NEP-413 for NEAR, plus a NEAR RPC check that the key is a full-access key of the account.
-- **Tiered packs, one card per rip**, paid in `$POKENEAR` and priced in USD (`TOKEN_USD` peg in `js/data.js`, placeholder 1 $POKENEAR = $0.01):
+- **NEAR wallet sign-in**: HOT, Meteor, MyNearWallet, Sender, Intear via NEAR Wallet Selector (bundled in `vendor/near-wallet.js`). The wallet signs a NEP-413 message (no transaction, no fee); the server verifies it and checks the key is a full-access key of the account.
+- **Tiered packs, one card per rip**, priced in USD and paid in `$POKENEAR`. Each tier has its own value band so every pack has different chase cards:
 
   | Pack | Price | Card values in pool |
   | --- | --- | --- |
-  | Starter | **$10** | $2 – $120 |
-  | Rare | $25 | $9 – $250 |
-  | Elite | $50 | $12 – $400 |
-  | Legend | $100 | $34 – $1,000 |
+  | Starter | **$10** | $2 – $70 |
+  | Rare | $25 | $9 – $130 |
+  | Elite | $50 | $12 – $230 |
+  | Legend | $100 | $34 – $320 |
 
-- **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`). Cheaper cards are more likely, chase cards are rare. Each pack also shows the chance to pull at least the price and 3× the price.
-- **Instant buyback at 90%** (`BUYBACK_RATE`) of a card's value, right after the rip or later from the vault.
-- **Vault**: every pull is a unique item you can hold or sell back. Physical redemption is planned for launch.
-- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data).
-- **Card values** are estimates (rarity base × card spread × popularity, hand-set for headline cards). Connect a price feed before launch.
-- **Invites**: `?ref=CODE` links. New players get +500, inviters get +500 per friend.
-- **Daily drop** and a leaderboard by vault value.
-- **Docs** at `#docs`: how it works, odds tables, on-chain RNG and verification, fees, FAQ. Official X: [@pokenearfun](https://x.com/pokenearfun).
+- **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`).
+- **Buyback at 90%** (`BUYBACK_RATE`) of a card's value, paid on chain from pokenearfun.near at the same rate as the pack prices.
+- **Dev wallet**: `pokenearfun.near` (`DEV_ACCOUNTS`) rips without paying; its rips use server randomness and are recorded like any other (vault, history, ranks, database), marked as dev rips.
+- **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen).
+- **Docs** at `#docs` and a leaderboard by vault value. Official X: [@pokenearfun](https://x.com/pokenearfun).
 
-## On-chain RNG
+## Payments and on-chain RNG
 
-1. `POST /api/rip/start` reserves the price and issues a one-time 32-byte `seed`.
-2. The player's wallet requests randomness for that seed:
-   - **Solana**: `request_v2` on ORAO VRF (`VRFzZoJdhFWL8rkvu87LpKM3RbcVezpMEc6X5GVDr7y`); the randomness lands in the PDA `["orao-vrf-randomness-request", seed]` (`vendor/solana-vrf.js`, built from `scripts/solana-vrf-entry.js`).
-   - **NEAR**: `draw(seed)` on the `contracts/near-rng` contract with 0.003 NEAR attached.
-3. `POST /api/rip/finish` reads the randomness from the chain (`server/onchain.js`; 202 while pending) and derives the cards:
+1. `POST /api/rip/start` issues a one-time 32-byte `seed` and returns what to pay: `{ token, receiver: pokenearfun.near, amount, msg: {seed, pack, count} }`. Prices come from the contract (`get_config`).
+2. The player's wallet calls `ft_transfer_call` on the `$POKENEAR` token to pokenearfun.near with that `msg`. The contract's `ft_on_transfer` (contracts/near-rng) checks the token and the exact amount (`price[pack] × count`), mixes `env::random_seed()` with the seed, the player and the block height, and stores the draw. Any mismatch panics, so the token refunds the player in the same transaction.
+3. `POST /api/rip/finish` reads `get_draw(seed)` (202 until it exists), checks it was this player's payment for this pack and count, and derives the cards:
 
    ```
    h_i = sha256("pokenear-rip:v1" || randomness || seed || byte(i)),  u_i = first 6 bytes / 2^48
    card_i = first card in the pack list whose cumulative chance > u_i
    ```
 
-4. The browser re-derives the cards and shows the proof with explorer links. `POST /api/rip/cancel` refunds only while no randomness exists on chain.
+4. The browser re-derives the cards and shows the proof with NearBlocks links. `POST /api/rip/cancel` drops a rip only while nothing was paid for its seed.
+5. `POST /api/buyback` sends `payout(receiver, amount, ref_id)` to pokenearfun.near, signed with `PAYOUT_KEY` (a function-call key limited to `payout`, signed by `server/near-tx.js` without dependencies). Each `ref_id` pays once; cards leave the vault only after the payout succeeds.
 
-### Deploy the NEAR contract
+### Launch checklist (only the CA is needed)
+
+```bash
+node scripts/near-commands.js <TOKEN_CA> <USD_PER_TOKEN> [decimals]   # prints every command below with real values
+```
+
+1. Deploy `contracts/near-rng/res/pokenear_game.wasm` on pokenearfun.near with `new({owner, token, prices})`.
+2. Register pokenearfun.near with the token (`storage_deposit`) so it can receive `$POKENEAR`.
+3. Later price or CA changes: `set_prices` / `set_token` (owner only). The site picks them up within a minute.
+4. Buyback: add a function-call key on pokenearfun.near limited to `payout`, put its secret key in `PAYOUT_KEY`.
+5. Keep some NEAR on pokenearfun.near: each draw is stored in contract state (about 0.003 NEAR) and payouts pay gas.
+
+Until the token is set, players see "Packs open when $POKENEAR is live"; the dev wallet can rip anyway.
+
+Contract tests and build:
 
 ```bash
 cd contracts/near-rng
-cargo +stable test --release          # unit tests
-cargo build --release --target wasm32-unknown-unknown   # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/pokenear_rng.wasm
-near deploy rng.pokenear.near res/pokenear_rng.wasm --initFunction new --initArgs '{}'
+cargo +stable test                                       # 14 unit tests
+cargo build --release --target wasm32-unknown-unknown    # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/pokenear_game.wasm
 ```
-
-Then set `NEAR_RNG_CONTRACT=rng.pokenear.near` on the server.
 
 ## Run it
 
 ```bash
 npm start            # http://localhost:3000 (verified wallet sign-in, game state in data/db.json)
-npm test             # engine + server tests
+npm test             # engine, on-chain decoding, transaction signing and server tests
 ```
 
-The server runs on Node 18+, has no runtime dependencies (no `npm install` needed to run it) and needs no API keys. Optional settings (`.env`):
+The server runs on Node 18+ and has no runtime dependencies (no `npm install` needed to run it). Settings (`.env`):
 
 | Variable | Default | Use |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
 | `PUBLIC_URL` | (empty) | Set to your `https://` URL so the session cookie is `Secure` |
 | `NEAR_NETWORK` | `mainnet` | `testnet` for NEAR testnet (also set `nearNetwork` in `index.html`) |
-| `NEAR_RPC` | FastNEAR, then near.org | NEAR RPC URL(s), comma separated, used to confirm account keys and read draws |
-| `SOLANA_CLUSTER` | `mainnet-beta` | `devnet` for testing |
-| `SOLANA_RPC` | public RPC | Solana RPC the server reads ORAO accounts from (use a paid RPC in production) |
-| `SOLANA_PUBLIC_RPC` | `SOLANA_RPC` | RPC handed to browsers for sending the ORAO request |
-| `NEAR_RNG_CONTRACT` | (empty) | Account of the deployed `contracts/near-rng` contract |
+| `NEAR_RPC` | FastNEAR, then near.org | NEAR RPC URL(s), comma separated |
+| `GAME_ACCOUNT` | `pokenearfun.near` | Interaction wallet running the Pokenear contract |
+| `PAYOUT_KEY` | (empty) | `ed25519:...` function-call key of `GAME_ACCOUNT` for `payout`; empty = buyback closed |
+| `DEV_ACCOUNTS` | `pokenearfun.near` | Wallets that rip without paying (recorded as dev rips) |
 | `DB_FILE` | `data/db.json` | Where game state is stored |
 
-Opened as static files (no server), the site runs in **demo mode**: progress stays in the browser, wallet signatures are requested but not verified, and a "demo wallet" button lets people try it without a wallet.
+Opened as static files (no server), the site runs in **demo mode**: rips are free and use browser randomness, progress stays in the browser, and a "demo wallet" button lets people try it without a wallet.
 
-To put invite links on your public domain, set `window.PN_CONFIG.siteUrl` in `index.html`.
-
-Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` / `npm run build:solana` (wallet and ORAO bundles).
+Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle, including the `ft_transfer_call` payment).
 
 ## Brand
 
@@ -103,17 +102,18 @@ Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-he
 | `index.html`, `css/style.css` | Page and styles |
 | `js/cards.js`, `assets/art/` | Generated real card data and artwork (`npm run build:cards`) |
 | `scripts/build-cards.js` | Builds them from TCGdex and PokéAPI sprites |
-| `js/data.js` | Card values, packs and odds, economy numbers |
-| `js/engine.js` | Game rules (rips from on-chain randomness, buyback, rewards). Shared by browser and server |
+| `js/data.js` | Card values, packs and odds, interaction wallet |
+| `js/engine.js` | Game rules (rips from on-chain randomness, buyback). Shared by browser and server |
 | `js/auth.js` | Sign-in message, base58, address checks (browser + server) |
-| `js/wallets.js` | Solana wallet providers and the NEAR Wallet Selector bridge |
+| `js/wallets.js` | NEAR Wallet Selector bridge: sign-in and rip payments |
 | `vendor/near-wallet.js` | Bundled NEAR Wallet Selector (`scripts/near-wallet-entry.js`) |
 | `js/store.js` | Picks live server or local demo backend |
 | `js/app.js` | UI |
 | `js/sha256.js` | SHA-256 used to derive cards (browser + server) |
 | `server/server.js`, `server/wallet-verify.js` | Static files, wallet sign-in and signature checks, game API |
-| `server/onchain.js` | Reads ORAO VRF accounts and NEAR draws |
-| `contracts/near-rng/` | NEAR RNG contract (Rust, near-sdk 5.11) |
+| `server/onchain.js` | NEAR view calls: contract config, draws, token metadata and balances |
+| `server/near-tx.js` | Dependency-free NEAR transaction signer for buyback payouts |
+| `contracts/near-rng/` | Pokenear contract for pokenearfun.near: `$POKENEAR` payments, randomness, payouts (Rust, near-sdk 5.11) |
 | `tests/` | `node --test` suites |
 
 ## Notes before launch
@@ -122,6 +122,6 @@ Rebuild with `npm run build:brand` (logo, icon, profile) and `npm run build:x-he
 - The logo uses the NEAR symbol. Check the NEAR Foundation brand guidelines before using it publicly, and avoid implying an official partnership.
 
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.
-- Each rip costs the player a chain fee: Solana network fee + ORAO fee, or NEAR gas + 0.003 NEAR storage.
+- Each rip costs the player the pack price in `$POKENEAR` plus NEAR gas; draw storage is paid from pokenearfun.near's NEAR balance.
 - NEAR's `random_seed` comes from block producers; a producer could in theory withhold a block. Fine for these card values; use a VRF oracle on NEAR if stakes grow.
-- `$POKENEAR` balances are points. Connecting them to an on-chain token is a separate step.
+- Solana sign-in and the ORAO VRF code (`server/onchain.js`, `scripts/solana-vrf-entry.js`) are kept but switched off, since `$POKENEAR` lives on NEAR.

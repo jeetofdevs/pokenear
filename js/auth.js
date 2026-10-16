@@ -16,7 +16,7 @@
   for (var i = 0; i < ALPHABET.length; i++) MAP[ALPHABET[i]] = i;
 
   function base58Encode(bytes) {
-    var digits = [0];
+    var digits = []; // no implicit 0 digit: an all-zero input is only its leading '1's
     for (var i = 0; i < bytes.length; i++) {
       var carry = bytes[i];
       for (var j = 0; j < digits.length; j++) {
@@ -34,7 +34,7 @@
 
   function base58Decode(str) {
     if (typeof str !== 'string' || !str) return null;
-    var bytes = [0];
+    var bytes = [];
     for (var i = 0; i < str.length; i++) {
       var v = MAP[str[i]];
       if (v === undefined) return null;

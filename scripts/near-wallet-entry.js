@@ -1,6 +1,6 @@
 /* Entry for vendor/near-wallet.js (bundled by `npm run build:near`).
    Exposes window.PNNear: a thin wrapper around NEAR Wallet Selector for sign-in (signMessage)
-   and for the on-chain RNG call draw(seed) on the Pokenear RNG contract. */
+   and for paying rips in $POKENEAR (ft_transfer_call to the Pokenear interaction wallet). */
 import { Buffer } from 'buffer';
 import { setupWalletSelector, actionCreators } from '@near-wallet-selector/core';
 import { setupHotWallet } from '@near-wallet-selector/hot-wallet';
@@ -42,21 +42,22 @@ async function signIn(walletId, params) {
   });
 }
 
-// Call draw(seed) on the RNG contract from the player's account. Returns the transaction
-// outcome, or nothing when the wallet redirects away (MyNearWallet); the rip resumes on return.
-async function draw(walletId, params) {
+// Pay for a rip: ft_transfer_call on the $POKENEAR token to the Pokenear interaction wallet,
+// whose contract checks the price and draws the randomness in the same transaction.
+// Returns { tx }, or nothing when the wallet redirects away (MyNearWallet); the rip resumes on return.
+async function pay(walletId, params) {
   if (!selector) await init();
   const wallet = await selector.wallet(walletId);
   let accounts = await wallet.getAccounts().catch(() => []);
-  if (!accounts || !accounts.length) accounts = (await wallet.signIn({ contractId: params.contractId, methodNames: [] })) || [];
+  if (!accounts || !accounts.length) accounts = (await wallet.signIn({ contractId: params.receiverId, methodNames: [] })) || [];
   const signerId = params.accountId || (accounts[0] && accounts[0].accountId);
   const outcome = await wallet.signAndSendTransaction({
     signerId,
-    receiverId: params.contractId,
-    actions: [actionCreators.functionCall('draw', { seed: params.seedHex }, BigInt('30000000000000'), BigInt(params.depositYocto))]
+    receiverId: params.tokenId,
+    actions: [actionCreators.functionCall('ft_transfer_call', { receiver_id: params.receiverId, amount: params.amount, msg: params.msg }, BigInt('100000000000000'), BigInt(1))]
   });
   if (!outcome) return null;
   return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };
 }
 
-globalThis.PNNear = { init, signIn, draw };
+globalThis.PNNear = { init, signIn, pay };

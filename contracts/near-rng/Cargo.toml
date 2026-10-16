@@ -1,8 +1,8 @@
 [package]
-name = "pokenear-rng"
+name = "pokenear-game"
 version = "0.1.0"
 edition = "2021"
-description = "Pokenear on-chain randomness for card rips on NEAR"
+description = "Pokenear: $POKENEAR payments, on-chain randomness and buyback payouts on NEAR"
 publish = false
 rust-version = "1.81"
 

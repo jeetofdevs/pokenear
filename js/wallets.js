@@ -134,71 +134,38 @@
 
   /* ---------- on-chain randomness for a rip ---------- */
   var NEAR_WALLET_KEY = 'pokenear:near-wallet';
-  var NEAR_DRAW_DEPOSIT = '3000000000000000000000'; // 0.003 NEAR, storage for one draw
 
-  var solLoad = null;
-  function loadSolanaVrf() {
-    if (solLoad) return solLoad;
-    solLoad = new Promise(function (resolve, reject) {
-      if (root.PNSolVrf) return resolve(root.PNSolVrf);
-      var s = root.document.createElement('script');
-      s.src = 'vendor/solana-vrf.js';
-      s.onload = function () { root.PNSolVrf ? resolve(root.PNSolVrf) : reject(new Error('Solana VRF failed to load.')); };
-      s.onerror = function () { reject(new Error('Solana VRF failed to load. Check your connection and try again.')); };
-      root.document.head.appendChild(s);
-    });
-    solLoad.catch(function () { solLoad = null; });
-    return solLoad;
-  }
-
-  function solanaProviderFor(user) {
-    var match = SOLANA.filter(function (w) { return w.name === user.wallet && w.provider(); })[0] ||
-      SOLANA.filter(function (w) { return w.provider(); })[0];
-    return match ? { provider: match.provider(), name: match.name } : null;
-  }
-
-  // Ask the player's chain for randomness for this rip's seed. Resolves { tx, ref } once the
-  // request is on chain; the server then reads the result.
-  function requestRandomness(user, rip, rng) {
-    if (user.chain === 'solana') {
-      var w = solanaProviderFor(user);
-      if (!w) return Promise.reject(new Error('Open the Solana wallet you signed in with (' + (user.wallet || 'Phantom') + ') to request randomness.'));
-      return Promise.resolve(w.provider.connect()).then(function () {
-        return loadSolanaVrf();
-      }).then(function (vrf) {
-        return vrf.request({ provider: w.provider, rpc: rng.solana.rpc, seedHex: rip.seed });
-      }).then(function (out) { return { tx: out.tx, ref: out.account, wallet: w.name }; });
-    }
-    if (!rng.near || !rng.near.contract) return Promise.reject(new Error('NEAR randomness is not configured on this server.'));
+  /* Pay for a rip in $POKENEAR from the player's NEAR wallet. pay comes from the server:
+     { token, receiver, amount, msg }. Resolves { tx, ref } once the transaction is sent; the
+     server then reads the draw from chain. */
+  function payRip(user, pay) {
+    if (!pay || !pay.token) return Promise.reject(new Error('Packs open when ' + root.PN.data.TOKEN + ' is live.'));
     var walletId = null;
     try { walletId = root.localStorage.getItem(NEAR_WALLET_KEY); } catch (e) { /* ignore */ }
-    if (!walletId) return Promise.reject(new Error('Reconnect your NEAR wallet to request randomness.'));
+    if (!walletId) return Promise.reject(new Error('Reconnect your NEAR wallet to pay.'));
     return loadNear().then(function (x) {
-      return x.near.draw(walletId, { contractId: rng.near.contract, seedHex: rip.seed, accountId: user.address, depositYocto: NEAR_DRAW_DEPOSIT });
-    }).then(function (out) { return out ? { tx: out.tx, ref: rng.near.contract } : new Promise(function () {}); });
+      return x.near.pay(walletId, { tokenId: pay.token, receiverId: pay.receiver, amount: pay.amount, msg: pay.msg, accountId: user.address });
+    }).then(function (out) { return out ? { tx: out.tx, ref: pay.receiver } : new Promise(function () {}); });
   }
 
   // Block explorer links for a proof.
-  function explorer(proof, rng) {
+  function explorer(proof, network) {
     if (!proof) return null;
-    if (proof.source === 'orao-vrf') {
-      var c = rng && rng.solana && rng.solana.cluster && rng.solana.cluster !== 'mainnet-beta' ? '?cluster=' + rng.solana.cluster : '';
-      return { label: 'Solscan', account: proof.ref ? 'https://solscan.io/account/' + proof.ref + c : null, tx: proof.tx ? 'https://solscan.io/tx/' + proof.tx + c : null };
-    }
-    if (proof.source === 'near-rng') {
-      var host = rng && rng.near && rng.near.network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io';
+    if (proof.source === 'pokenear-near' || proof.source === 'near-rng') {
+      var host = network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io';
       return { label: 'NearBlocks', account: proof.ref ? host + '/address/' + proof.ref : null, tx: proof.tx ? host + '/txns/' + proof.tx : null };
     }
     return null;
   }
 
   /* ---------- demo ---------- */
-  // Preview only: a random Solana-format address so the app can be tried without a wallet.
+  // Preview only: a random NEAR implicit account so the app can be tried without a wallet.
   function demoSigner() {
     return function () {
       var b = new Uint8Array(32);
       root.crypto.getRandomValues(b);
-      return { address: A.base58Encode(b), signature: '', wallet: 'Demo wallet' };
+      var hex = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+      return { accountId: hex, signature: '', wallet: 'Demo wallet' };
     };
   }
 
@@ -208,7 +175,7 @@
     nearWallets: nearWallets,
     nearSigner: nearSigner,
     takeNearRedirect: takeNearRedirect,
-    requestRandomness: requestRandomness,
+    payRip: payRip,
     explorer: explorer,
     demoSigner: demoSigner
   };

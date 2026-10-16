@@ -1,13 +1,13 @@
 /* Pokenear game engine. Pure state transitions, no DOM and no storage.
    The browser runs it locally in demo mode; the Node server runs the same
-   code authoritatively when X login is configured. */
+   code authoritatively. Payments are real $POKENEAR transfers checked on chain by the
+   server, so the state holds no balance. */
 (function (root) {
   'use strict';
 
   var D = root.PN && root.PN.data ? root.PN.data : require('./data.js');
   var A = root.PN && root.PN.auth ? root.PN.auth : require('./auth.js');
   var H = root.PN && root.PN.sha256 ? root.PN.sha256 : require('./sha256.js');
-  var E = D.ECONOMY;
 
   function GameError(message) {
     var err = new Error(message);
@@ -18,48 +18,31 @@
 
   function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-  function refCodeFor(chain, address) {
-    var code = D.hash('pokenear:' + chain + ':' + address).toString(36).toUpperCase();
-    return ('PN' + code).slice(0, 8);
-  }
-
   function emptyState() {
     return {
-      v: 5,
+      v: 6,
       user: null,
-      balance: 0,
-      earned: 0,
-      vault: [],          // pulled cards you still hold: { uid, id, pack, at }
+      vault: [],          // pulled cards you still hold: { uid, id, pack, at, proof, n }
       nextUid: 1,
       sold: 0,            // cards sold back
       pulls: {},          // rips per pack
       totalPulls: 0,
-      invites: 0,
-      lastDaily: 0,
       history: [],
-      pendingRip: null    // paid rip waiting for its on-chain randomness
+      payouts: [],        // buyback payouts: { at, usd, amount, tx }
+      pendingRip: null    // rip waiting for its on-chain payment + randomness
     };
   }
 
-  // Carry an account from an older save format: keep balance and quests, start a fresh vault.
-  // Saves from before wallet sign-in (v4 and older, X accounts) cannot be mapped to a wallet.
+  // v6 replaced demo credits with real $POKENEAR payments: keep the wallet, start a fresh vault.
   function migrate(old) {
-    if (!old || old.v === 5) return old;
-    if (!old.user || !old.user.chain) return emptyState();
+    if (!old || old.v === 6) return old;
     var st = emptyState();
-    ['user', 'balance', 'earned', 'invites', 'lastDaily'].forEach(function (k) {
-      if (old[k] !== undefined) st[k] = old[k];
-    });
-    st.totalPulls = old.totalPulls ? 1 : 0;
+    if (old.user && old.user.chain) {
+      st.user = { chain: old.user.chain, address: old.user.address, name: old.user.name, wallet: old.user.wallet || null, joinedAt: old.user.joinedAt || 0 };
+    }
     return st;
   }
 
-  function credit(state, amount) {
-    state.balance += amount;
-    state.earned += amount;
-  }
-
-  // Pick a card from the pack pool for a uniform number u in [0, 1).
   function pickByU(pack, u) {
     var pool = pack.pool;
     for (var i = 0; i < pool.length; i++) if (u < pool[i].cum) return D.cardById[pool[i].id];
@@ -110,7 +93,7 @@
   }
 
   /* apply(state, action, ctx) -> { state, result }
-     ctx: { rng: () => [0,1), now: ms, mode: 'local' | 'server', nextSpot?: () => int } */
+     ctx: { now: ms, mode: 'local' | 'server' } */
   function apply(prev, action, ctx) {
     var state = clone(prev || emptyState());
     var now = ctx.now;
@@ -127,44 +110,19 @@
           address: address,
           name: A.shortAddress(address),
           wallet: action.wallet ? String(action.wallet).slice(0, 30) : null,
-          refCode: refCodeFor(chain, address),
-          referredBy: null,
           joinedAt: now
         };
-        credit(state, E.startBonus);
-        result.bonus = E.startBonus;
-        var ref = String(action.ref || '').toUpperCase();
-        if (ref && /^[A-Z0-9]{4,12}$/.test(ref) && ref !== state.user.refCode) {
-          state.user.referredBy = ref;
-          credit(state, E.referredBonus);
-          result.bonus += E.referredBonus;
-          result.referred = true;
-        }
-        break;
-      }
-      case 'daily': {
-        requireUser(state);
-        var wait = state.lastDaily + E.dailyCooldownMs - now;
-        if (wait > 0) throw GameError('Daily reward is ready in ' + Math.ceil(wait / 3600000) + 'h.');
-        state.lastDaily = now;
-        credit(state, E.dailyReward);
-        result.amount = E.dailyReward;
         break;
       }
       case 'ripStart': {
-        // Pay for a rip and reserve its seed. The cards are decided later by on-chain randomness.
+        // Reserve a seed for a rip. The player then pays on chain; the payment draws the randomness.
         requireUser(state);
         if (state.pendingRip) throw GameError('Finish or cancel your open rip first.');
         var pack = D.packById[action.pack];
         if (!pack) throw GameError('That pack is not available.');
         var count = D.MULTI.indexOf(action.count) >= 0 ? action.count : 1;
-        var cost = pack.price * count;
-        if (state.balance < cost) {
-          throw GameError('Not enough ' + D.TOKEN + '. ' + (count > 1 ? count + '× ' : '') + pack.name + ' costs $' + pack.usd * count + ' (' + cost.toLocaleString('en-US') + ' ' + D.TOKEN + ').');
-        }
         if (!isHex(action.seed, 32)) throw GameError('Bad rip seed.');
-        state.balance -= cost;
-        state.pendingRip = { seed: action.seed, pack: pack.id, count: count, cost: cost, chain: action.chain || null, source: action.source || null, at: now };
+        state.pendingRip = { seed: action.seed, pack: pack.id, count: count, amount: action.amount || null, chain: action.chain || null, source: action.source || null, at: now };
         result.rip = state.pendingRip;
         break;
       }
@@ -176,7 +134,7 @@
         var randomness = String(proof.randomness || '');
         if (!(isHex(randomness, 32) || isHex(randomness, 64))) throw GameError('Bad randomness.');
         var cards = cardsFromRandomness(pr.pack, pr.count, randomness, pr.seed);
-        var stored = { source: proof.source || pr.source, chain: pr.chain, seed: pr.seed, randomness: randomness, ref: proof.ref || null, tx: proof.tx || null };
+        var stored = { source: proof.source || pr.source, chain: pr.chain, seed: pr.seed, randomness: randomness, ref: proof.ref || null, tx: proof.tx || null, paid: proof.paid || pr.amount || null };
         var items = cards.map(function (card, k) {
           var item = { uid: state.nextUid++, id: card.id, pack: pr.pack, at: now, proof: stored, n: k };
           state.vault.push(item);
@@ -185,48 +143,42 @@
         });
         state.pulls[pr.pack] = (state.pulls[pr.pack] || 0) + pr.count;
         state.totalPulls += pr.count;
-        state.history = state.history.slice(0, E.historySize);
+        state.history = state.history.slice(0, D.HISTORY_SIZE);
         state.pendingRip = null;
         result.items = items;
-        result.spent = pr.cost;
         result.proof = stored;
         break;
       }
       case 'ripCancel': {
-        // Only allowed (by the server) when no randomness was ever requested for the seed.
+        // Drop an unpaid rip (the server checks nothing was paid for its seed).
         requireUser(state);
         if (!state.pendingRip) throw GameError('There is no open rip.');
-        state.balance += state.pendingRip.cost;
-        result.refund = state.pendingRip.cost;
         state.pendingRip = null;
+        result.cancelled = true;
         break;
       }
       case 'buyback': {
         requireUser(state);
         var uids = [].concat(action.uids || action.uid || []);
         if (!uids.length) throw GameError('Choose a card to sell back.');
-        var paid = 0, soldN = 0;
+        var usd = 0, soldN = 0;
         uids.forEach(function (uid) {
           var idx = -1;
           for (var i = 0; i < state.vault.length; i++) if (state.vault[i].uid === uid) { idx = i; break; }
           if (idx < 0) throw GameError('That card is no longer in your vault.');
-          paid += D.cardById[state.vault[idx].id].buyback;
+          usd += D.cardById[state.vault[idx].id].usd * D.BUYBACK_RATE;
           state.vault.splice(idx, 1);
           soldN += 1;
         });
-        credit(state, paid);
+        usd = Math.round(usd * 100) / 100;
+        // payout: what the server actually sent on chain ({ amount, tx }); absent in demo mode.
+        var payout = action.payout || {};
+        state.payouts.unshift({ at: now, usd: usd, amount: payout.amount || null, tx: payout.tx || null, cards: soldN });
+        state.payouts = state.payouts.slice(0, 20);
         state.sold += soldN;
-        result.amount = paid;
+        result.usd = usd;
         result.sold = soldN;
-        break;
-      }
-      case 'inviteJoined': {
-        // Server: called when a new account signs up with this user's code.
-        // Local demo: there is no shared backend, so the demo button calls it.
-        requireUser(state);
-        state.invites += 1;
-        credit(state, E.inviteReward);
-        result.amount = E.inviteReward;
+        result.payout = payout;
         break;
       }
       default:
@@ -243,7 +195,6 @@
     pickByU: pickByU,
     uniformsFromRandomness: uniformsFromRandomness,
     cardsFromRandomness: cardsFromRandomness,
-    refCodeFor: refCodeFor,
     seriesProgress: seriesProgress,
     vaultValue: vaultValue
   };

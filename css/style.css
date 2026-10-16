@@ -256,6 +256,9 @@ button.pack-tile:hover { border-color: hsl(var(--h) 90% 65% / 0.7); transform: t
 .card.t-SEC .foil { opacity: 0.55; }
 .card .real { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; opacity: 0; transition: opacity 0.3s; border-radius: inherit; }
 .card .real.ok { opacity: 1; }
+/* Over an official scan the foil only adds a soft sheen; color-dodge at full strength bleached the scan. */
+.card .real.ok ~ .foil { opacity: 0.14; mix-blend-mode: soft-light; }
+.card .real.ok ~ .foil:hover, .card.holo:hover .real.ok ~ .foil { opacity: 0.28; }
 .card .count { position: absolute; top: 2.5%; right: 3%; z-index: 8; background: var(--hot); color: #fff; font: 800 clamp(9px, 7cqi, 13px)/1 var(--f-mono); padding: 0.35em 0.5em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
 .card .new-tag { position: absolute; top: 48%; left: 6%; z-index: 8; background: var(--ok); color: #04210f; font: 900 clamp(8px, 6cqi, 11px)/1 var(--f-body); letter-spacing: 0.08em; padding: 0.4em 0.6em; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
 .ico { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; flex: none; background: var(--ec, #ccc); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.25); }
@@ -310,6 +313,10 @@ button.pack-tile:hover { border-color: hsl(var(--h) 90% 65% / 0.7); transform: t
 .pk.full.gold { background: linear-gradient(135deg, #fff1b8, #d4a62a 35%, #fff4c4 55%, #b9870f); }
 .pk.full.gold .pk-in { background: linear-gradient(160deg, #f7d778, #b5860f 55%, #f6dd8b); color: #3b2600; }
 .pk.full.gold .nm, .pk.full.gold .hp { text-shadow: none; }
+/* Black White Rare: black chrome frame with a silver etch, drawn art in full colour. */
+.pk.full.bwr { background: linear-gradient(135deg, #f4f4f6, #6d6f78 30%, #16171c 52%, #9a9ca6 75%, #f4f4f6); }
+.pk.full.bwr .pk-in { background: radial-gradient(110% 75% at 50% 32%, #f1f2f6, #b9bcc7 45%, #5d606c 85%); color: #15161b; }
+.pk.full.bwr .nm, .pk.full.bwr .hp { color: #15161b; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .pk.trainer .pk-in { background: linear-gradient(180deg, #e8ecf1, #cfd6df); }
 .pk.trainer .art { background: linear-gradient(135deg, #7d8fa9, #c5d0de); }
 .pk.trainer .tt { font: 900 clamp(6px, 4.5cqi, 10px)/1 var(--f-body); letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: #3d4f6b; padding: 0.3em 0.6em; border-radius: 0.3em; }

@@ -30,183 +30,206 @@ function nearSign(kp, { message, nonce, recipient, callbackUrl }) {
   return crypto.sign(null, hash, kp.privateKey).toString('base64');
 }
 
-test('wallet sign-in, referral and game API', async () => {
+test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () => {
+  const GAME = 'pokenearfun.near';
+  const TOKEN = 'pokenear.tkn.near';
+  const UNIT = 10n ** 18n;
   const nearKeys = {}; // account -> "ed25519:..." full-access key
-  const nearDraws = {}; // seed -> { account, randomness }
-  const solAccounts = {}; // address -> { owner, data }
-  // One mock answers both NEAR RPC (view_access_key, call_function get_draw) and Solana RPC (getAccountInfo).
+  const draws = {}; // seed -> draw as returned by get_draw
+  const paid = new Set(); // payout ref_ids
+  const sent = []; // decoded payout calls
+  let contract = null; // get_config result; null = not deployed
+  const payout = keypair();
+  const payoutPub = 'ed25519:' + auth.base58Encode(payout.raw);
+  const payoutKey = 'ed25519:' + auth.base58Encode(Buffer.concat([payout.privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32), payout.raw]));
+  const blockHash = auth.base58Encode(crypto.randomBytes(32));
+  // One mock NEAR RPC: access keys, views on the game contract and the token, broadcast_tx_commit.
   const rpc = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
       const { method, params } = JSON.parse(body);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      if (method === 'getAccountInfo') {
-        const acc = solAccounts[params[0]];
-        return res.end(JSON.stringify({ result: { value: acc ? { owner: acc.owner, data: [acc.data.toString('base64'), 'base64'] } : null } }));
+      const reply = (x) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(x)); };
+      const view = (v) => reply({ result: { result: [...Buffer.from(JSON.stringify(v))] } });
+      if (method === 'broadcast_tx_commit') {
+        const tx = Buffer.from(params[0], 'base64');
+        const bodyBytes = tx.subarray(0, tx.length - 65);
+        const ok = crypto.verify(null, crypto.createHash('sha256').update(bodyBytes).digest(), crypto.createPublicKey(payout.privateKey), tx.subarray(-64));
+        const json = /\{"receiver_id".*\}/.exec(bodyBytes.toString('latin1'));
+        const args = json && JSON.parse(json[0]);
+        sent.push({ ok, args, method: bodyBytes.includes(Buffer.from('payout')) });
+        if (!ok) return reply({ error: { name: 'INVALID_TRANSACTION' } });
+        const first = !paid.has(args.ref_id);
+        paid.add(args.ref_id);
+        return reply({ result: { status: { SuccessValue: Buffer.from(JSON.stringify(first)).toString('base64') } } });
       }
-      if (params.request_type === 'call_function') {
-        assert.equal(params.account_id, 'rng.pokenear.near');
-        const { seed } = JSON.parse(Buffer.from(params.args_base64, 'base64').toString());
-        const d = nearDraws[seed] || null;
-        return res.end(JSON.stringify({ result: { result: [...Buffer.from(JSON.stringify(d))] } }));
+      if (params.request_type === 'view_access_key') {
+        if (params.account_id === GAME && params.public_key === payoutPub) return reply({ result: { permission: { FunctionCall: {} }, nonce: 41, block_hash: blockHash } });
+        const ok = nearKeys[params.account_id] === params.public_key;
+        return reply(ok ? { result: { permission: 'FullAccess', nonce: 1, block_hash: blockHash } } : { error: { cause: { name: 'UNKNOWN_ACCESS_KEY' } } });
       }
-      const ok = nearKeys[params.account_id] === params.public_key;
-      res.end(JSON.stringify(ok ? { result: { permission: 'FullAccess', nonce: 1 } } : { error: { cause: { name: 'UNKNOWN_ACCESS_KEY' } } }));
+      const args = JSON.parse(Buffer.from(params.args_base64, 'base64').toString() || '{}');
+      if (params.account_id === GAME) {
+        if (!contract) return reply({ error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
+        if (params.method_name === 'get_config') return view(contract);
+        if (params.method_name === 'get_draw') return view(draws[args.seed] || null);
+        if (params.method_name === 'is_paid') return view(paid.has(args.ref_id));
+      }
+      if (params.account_id === TOKEN) {
+        if (params.method_name === 'ft_metadata') return view({ symbol: 'POKENEAR', decimals: 18 });
+        if (params.method_name === 'ft_balance_of') return view(String(123n * UNIT + 45n * UNIT / 100n));
+      }
+      reply({ error: { cause: { name: 'UNKNOWN' } } });
     });
   });
-  const onchain = require('../server/onchain.js');
-  // Simulate ORAO: write a RandomnessV2 account for a seed (pending or fulfilled).
-  function oraoAccount(seedHex, randomnessHex) {
-    const head = Buffer.concat([onchain.DISC_V2, Buffer.from([randomnessHex ? 1 : 0]), crypto.randomBytes(32), Buffer.from(seedHex, 'hex')]);
-    const data = randomnessHex ? Buffer.concat([head, Buffer.from(randomnessHex, 'hex')]) : Buffer.concat([head, Buffer.alloc(4)]);
-    solAccounts[onchain.oraoRandomnessAddress(seedHex)] = { owner: onchain.ORAO_PROGRAM, data };
-  }
   const rpcPort = await listen(rpc);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pokenear-'));
-  Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, SOLANA_RPC: `http://127.0.0.1:${rpcPort}`, NEAR_RNG_CONTRACT: 'rng.pokenear.near', DB_FILE: path.join(dir, 'db.json') });
-  const { server } = require('../server/server.js');
+  Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, PAYOUT_KEY: payoutKey, DB_FILE: path.join(dir, 'db.json') });
+  const srv = require('../server/server.js');
+  const { server } = srv;
   const port = await listen(server);
   const base = `http://127.0.0.1:${port}`;
+  const engine = require('../js/engine.js');
 
   const post = (p, body, cookie = '') => fetch(base + p, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(async (r) => ({ status: r.status, body: await r.json(), cookie: (r.headers.get('set-cookie') || '').split(';')[0] }));
   const get = (p, cookie = '') => fetch(base + p, { headers: { cookie } }).then(async (r) => ({ status: r.status, body: await r.json() }));
   const nonce = async () => (await post('/api/auth/nonce', {})).body.nonce;
 
-  async function solanaLogin(kp, ref) {
-    const address = auth.base58Encode(kp.raw);
-    const n = await nonce();
-    return post('/api/auth/wallet', { chain: 'solana', address, nonce: n, signature: solanaSign(kp, auth.loginMessage('solana', address, n)), ref, wallet: 'Phantom' });
-  }
   // opts.sent: callbackUrl the client sends; opts.signed: callbackUrl the wallet put in the payload.
-  async function nearLogin(kp, accountId, ref, opts = {}) {
+  async function nearLogin(kp, accountId, opts = {}) {
     const n = await nonce();
     const signature = nearSign(kp, { message: auth.loginMessage('near', null, n), nonce: Buffer.from(n, 'hex'), recipient: auth.NEAR_RECIPIENT, callbackUrl: opts.signed });
     const publicKey = (opts.bareKey ? '' : 'ed25519:') + auth.base58Encode(kp.raw);
-    return post('/api/auth/wallet', { chain: 'near', accountId, publicKey, nonce: n, signature, ref, wallet: opts.wallet || 'Meteor Wallet', callbackUrl: opts.sent });
+    return post('/api/auth/wallet', { chain: 'near', accountId, publicKey, nonce: n, signature, wallet: opts.wallet || 'Meteor Wallet', callbackUrl: opts.sent });
   }
+  const register = (account) => { const k = keypair(); nearKeys[account] = 'ed25519:' + auth.base58Encode(k.raw); return k; };
 
   try {
-    assert.equal((await get('/api/config')).body.mode, 'live');
-    assert.equal((await post('/api/action', { type: 'daily' })).status, 401);
+    const cfg0 = (await get('/api/config')).body;
+    assert.equal(cfg0.mode, 'live');
+    assert.deepEqual(cfg0.chains, ['near']);
+    assert.equal(cfg0.game.ready, false);
+    assert.deepEqual(cfg0.devAccounts, [GAME]);
 
-    // Solana
+    // Solana sign-in is closed: $POKENEAR lives on NEAR.
     const sol = keypair();
-    const a = await solanaLogin(sol);
-    assert.equal(a.status, 200, JSON.stringify(a.body));
-    assert.equal(a.body.state.user.chain, 'solana');
-    assert.equal(a.body.state.user.address, auth.base58Encode(sol.raw));
-    assert.equal(a.body.state.balance, 2000);
-    const alice = a.cookie;
+    const solAddr = auth.base58Encode(sol.raw);
+    const sn = await nonce();
+    const solTry = await post('/api/auth/wallet', { chain: 'solana', address: solAddr, nonce: sn, signature: solanaSign(sol, auth.loginMessage('solana', solAddr, sn)) });
+    assert.equal(solTry.status, 400);
+    assert.match(solTry.body.error, /NEAR wallet/);
 
-    // Ledger through Phantom signs the off-chain message format; it must also be accepted.
-    const led = keypair();
-    const ledAddr = auth.base58Encode(led.raw);
-    const ln = await nonce();
-    const lmsg = auth.loginMessage('solana', ledAddr, ln);
-    const lsig = crypto.sign(null, require('../server/wallet-verify.js').offchainMessage(lmsg, 0), led.privateKey).toString('base64');
-    assert.equal((await post('/api/auth/wallet', { chain: 'solana', address: ledAddr, nonce: ln, signature: lsig, message: lmsg })).status, 200);
-    // A message that is not our sign-in text is rejected even with a valid signature.
-    const tn = await nonce();
-    const tmsg = 'Send me your tokens ' + tn;
-    const tamper = await post('/api/auth/wallet', { chain: 'solana', address: ledAddr, nonce: tn, signature: crypto.sign(null, Buffer.from(tmsg), led.privateKey).toString('base64'), message: tmsg });
-    assert.equal(tamper.status, 400);
-
-    // Wrong signer, reused nonce, unknown nonce
-    const imposter = keypair();
-    const n1 = await nonce();
-    const victim = auth.base58Encode(sol.raw);
-    const bad = await post('/api/auth/wallet', { chain: 'solana', address: victim, nonce: n1, signature: solanaSign(imposter, auth.loginMessage('solana', victim, n1)) });
-    assert.equal(bad.status, 401);
-    const reuse = await post('/api/auth/wallet', { chain: 'solana', address: victim, nonce: n1, signature: solanaSign(sol, auth.loginMessage('solana', victim, n1)) });
-    assert.equal(reuse.status, 400);
-    assert.match(reuse.body.error, /expired/);
-
-    // On-chain rip (Solana, ORAO VRF): start -> missing -> pending -> fulfilled
-    assert.equal((await post('/api/action', { type: 'pull', pack: 'starter', count: 1 }, alice)).status, 400);
-    const start = await post('/api/rip/start', { pack: 'starter', count: 1 }, alice);
-    assert.equal(start.status, 200, JSON.stringify(start.body));
-    assert.equal(start.body.state.balance, 1000);
-    assert.equal(start.body.rng.solana.program, onchain.ORAO_PROGRAM);
-    const seed = start.body.rip.seed;
-    assert.match(seed, /^[0-9a-f]{64}$/);
-    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, alice)).status, 400); // one open rip at a time
-    assert.equal((await post('/api/rip/finish', {}, alice)).status, 202); // nothing on chain yet
-    oraoAccount(seed, null);
-    const pend = await post('/api/rip/finish', {}, alice);
-    assert.equal(pend.status, 202);
-    assert.equal(pend.body.status, 'pending');
-    assert.equal((await post('/api/rip/cancel', {}, alice)).status, 409); // randomness requested: no refund
-    const randomness = crypto.randomBytes(64).toString('hex');
-    oraoAccount(seed, randomness);
-    const fin = await post('/api/rip/finish', { tx: 'solanaTxSig' }, alice);
-    assert.equal(fin.status, 200, JSON.stringify(fin.body));
-    const item = fin.body.result.items[0];
-    assert.equal(item.id, require('../js/engine.js').cardsFromRandomness('starter', 1, randomness, seed)[0].id);
-    assert.equal(item.proof.randomness, randomness);
-    assert.equal(item.proof.source, 'orao-vrf');
-    assert.equal(item.proof.ref, onchain.oraoRandomnessAddress(seed));
-    assert.equal(fin.body.state.pendingRip, null);
-
-    // Cancel before any on-chain request refunds.
-    const s2 = await post('/api/rip/start', { pack: 'starter', count: 1 }, alice);
-    assert.equal(s2.body.state.balance, 0);
-    const cancel = await post('/api/rip/cancel', {}, alice);
-    assert.equal(cancel.status, 200);
-    assert.equal(cancel.body.state.balance, 1000);
-
-    const sold = await post('/api/action', { type: 'buyback', uid: item.uid }, alice);
-    assert.equal(sold.status, 200);
-    assert.equal((await post('/api/action', { type: 'inviteJoined' }, alice)).status, 400);
-    const broke = await post('/api/rip/start', { pack: 'legend', count: 5 }, alice);
-    assert.match(broke.body.error, /Not enough/);
-    const aliceBalance = (await get('/api/me', alice)).body.state.balance;
-
-    // NEAR named account, referred by the Solana user
-    const nk = keypair();
-    nearKeys['bob.near'] = 'ed25519:' + auth.base58Encode(nk.raw);
-    const b = await nearLogin(nk, 'bob.near', a.body.state.user.refCode);
+    const nk = register('bob.near');
+    const b = await nearLogin(nk, 'bob.near');
     assert.equal(b.status, 200, JSON.stringify(b.body));
     assert.equal(b.body.state.user.address, 'bob.near');
-    assert.equal(b.body.state.balance, 2500);
-    const aliceAfter = (await get('/api/me', alice)).body.state;
-    assert.equal(aliceAfter.invites, 1);
-    assert.equal(aliceAfter.balance, aliceBalance + 500);
-
-    // On-chain rip (NEAR contract): draw must come from the player's own account.
+    assert.equal(b.body.state.balance, undefined); // no credits
     const bob = b.cookie;
-    const ns = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
-    assert.equal(ns.status, 200);
-    assert.equal(ns.body.rng.near.contract, 'rng.pokenear.near');
-    nearDraws[ns.body.rip.seed] = { account: 'mallory.near', randomness: 'aa'.repeat(32), block_height: 1 };
-    assert.equal((await post('/api/rip/finish', {}, bob)).status, 400);
-    nearDraws[ns.body.rip.seed] = { account: 'bob.near', randomness: 'bb'.repeat(32), block_height: 7 };
-    const nf = await post('/api/rip/finish', {}, bob);
-    assert.equal(nf.status, 200, JSON.stringify(nf.body));
-    assert.equal(nf.body.result.items[0].proof.source, 'near-rng');
-    assert.equal(nf.body.result.items[0].id, require('../js/engine.js').cardsFromRandomness('starter', 1, 'bb'.repeat(32), ns.body.rip.seed)[0].id);
+    for (const type of ['daily', 'inviteJoined']) assert.equal((await fetch(base + '/api/action', { method: 'POST', headers: { cookie: bob }, body: JSON.stringify({ type }) })).status, 405);
 
-    // Signing again does not reset progress or double-count the referral.
-    await nearLogin(nk, 'bob.near', a.body.state.user.refCode);
-    assert.equal((await get('/api/me', alice)).body.state.invites, 1);
+    // Contract not deployed / token not set: rips are closed for players.
+    const closed = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
+    assert.equal(closed.status, 503);
+    assert.match(closed.body.error, /\$POKENEAR is live/);
+
+    // Launch: the owner sets the CA and prices on pokenearfun.near.
+    contract = { owner: GAME, token: TOKEN, prices: ['1000', '2500', '5000', '10000'].map((x) => String(BigInt(x) * UNIT)), max_per_rip: 5 };
+    srv.resetGameCache();
+    const cfg = (await get('/api/config')).body.game;
+    assert.equal(cfg.ready, true);
+    assert.equal(cfg.token, TOKEN);
+    assert.equal(cfg.decimals, 18);
+    assert.equal(cfg.buyback, true);
+    const bal = await get('/api/balance', bob);
+    assert.equal(bal.body.amount, String(123n * UNIT + 45n * UNIT / 100n));
+
+    // Paid rip: start -> pay instructions -> nothing on chain (202) -> draw -> cards.
+    const start = await post('/api/rip/start', { pack: 'rare', count: 5 }, bob);
+    assert.equal(start.status, 200, JSON.stringify(start.body));
+    const seed = start.body.rip.seed;
+    assert.deepEqual(start.body.pay, { token: TOKEN, receiver: GAME, amount: String(5n * 2500n * UNIT), msg: JSON.stringify({ seed, pack: 1, count: 5 }) });
+    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 400); // one open rip at a time
+    const wait = await post('/api/rip/finish', {}, bob);
+    assert.equal(wait.status, 202);
+    assert.equal(wait.body.pay.msg, start.body.pay.msg);
+    // A draw paid by someone else, or for another pack, does not count.
+    draws[seed] = { account: 'mallory.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 1, count: 5, amount: start.body.pay.amount };
+    assert.equal((await post('/api/rip/finish', {}, bob)).status, 400);
+    draws[seed] = { account: 'bob.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 0, count: 5, amount: start.body.pay.amount };
+    assert.equal((await post('/api/rip/finish', {}, bob)).status, 400);
+    assert.equal((await post('/api/rip/cancel', {}, bob)).status, 409); // paid: cannot cancel
+    draws[seed] = { account: 'bob.near', randomness: 'bb'.repeat(32), block_height: 7, pack: 1, count: 5, amount: start.body.pay.amount };
+    const fin = await post('/api/rip/finish', { tx: 'H1' }, bob);
+    assert.equal(fin.status, 200, JSON.stringify(fin.body));
+    const items = fin.body.result.items;
+    assert.deepEqual(items.map((i) => i.id), engine.cardsFromRandomness('rare', 5, 'bb'.repeat(32), seed).map((c) => c.id));
+    assert.deepEqual(items[0].proof, { source: 'pokenear-near', chain: 'near', seed, randomness: 'bb'.repeat(32), ref: GAME, tx: 'H1', paid: start.body.pay.amount });
+
+    // Unpaid rip can be cancelled.
+    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 200);
+    const cancel = await post('/api/rip/cancel', {}, bob);
+    assert.equal(cancel.status, 200);
+    assert.equal(cancel.body.state.pendingRip, null);
+
+    // Buyback: pokenearfun.near pays 90% of value at the on-chain Starter rate (1000 tokens = $10).
+    const sell = items.slice(0, 2).map((i) => i.uid);
+    const usd = Math.round(items.slice(0, 2).reduce((n, i) => n + require('../js/data.js').cardById[i.id].usd, 0) * 0.9 * 100) / 100;
+    const sold = await post('/api/buyback', { uids: sell }, bob);
+    assert.equal(sold.status, 200, JSON.stringify(sold.body));
+    const expected = 1000n * UNIT * BigInt(Math.round(usd * 100)) / 1000n;
+    assert.equal(sold.body.result.payout.amount, expected.toString());
+    assert.equal(sent.length, 1);
+    assert.ok(sent[0].ok && sent[0].method);
+    assert.deepEqual(Object.keys(sent[0].args), ['receiver_id', 'amount', 'ref_id']);
+    assert.equal(sent[0].args.receiver_id, 'bob.near');
+    assert.equal(sent[0].args.amount, expected.toString());
+    assert.equal(sold.body.state.vault.length, 3);
+    assert.equal((await post('/api/buyback', { uids: sell }, bob)).status, 400); // already sold
+
+    // Dev wallet: rips without paying, recorded like any rip; buyback records without a payout.
+    const dk = register(GAME);
+    const dev = (await nearLogin(dk, GAME)).cookie;
+    const dr = await post('/api/rip/start', { pack: 'legend', count: 5 }, dev);
+    assert.equal(dr.status, 200, JSON.stringify(dr.body));
+    assert.equal(dr.body.pay, null);
+    assert.equal(dr.body.result.items.length, 5);
+    assert.equal(dr.body.result.items[0].proof.source, 'dev');
+    const devState = (await get('/api/me', dev)).body.state;
+    assert.equal(devState.vault.length, 5);
+    assert.equal(devState.totalPulls, 5);
+    assert.equal(devState.pendingRip, null);
+    const devSell = await post('/api/buyback', { uids: [devState.vault[0].uid] }, dev);
+    assert.equal(devSell.status, 200);
+    assert.equal(devSell.body.result.payout.dev, true);
+    assert.equal(sent.length, 1); // no payout transaction for the dev wallet
+    // The dev wallet still rips while the contract is unreachable.
+    contract = null;
+    srv.resetGameCache();
+    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, dev)).status, 200);
+    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 503);
 
     // HOT / Meteor sign without callbackUrl even though the page sends one; redirect wallets may sign it.
     const page = 'https://pokenear.fun/#packs';
-    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, wallet: 'HOT Wallet' })).status, 200);
-    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, signed: page, wallet: 'MyNearWallet' })).status, 200);
-    assert.equal((await nearLogin(nk, 'bob.near', null, { sent: page, bareKey: true })).status, 200);
-    const forged = await nearLogin(nk, 'bob.near', null, { sent: page, signed: 'https://evil.example/' });
+    assert.equal((await nearLogin(nk, 'bob.near', { sent: page, wallet: 'HOT Wallet' })).status, 200);
+    assert.equal((await nearLogin(nk, 'bob.near', { sent: page, signed: page, wallet: 'MyNearWallet' })).status, 200);
+    assert.equal((await nearLogin(nk, 'bob.near', { sent: page, bareKey: true })).status, 200);
+    const forged = await nearLogin(nk, 'bob.near', { sent: page, signed: 'https://evil.example/' });
     assert.equal(forged.status, 401);
     assert.match(forged.body.error, /NEAR wallet signature did not match/);
+    assert.equal((await get('/api/me', bob)).body.state.vault.length, 3); // signing again keeps progress
 
-    // NEAR: valid signature but the key is not on the account
-    const stranger = keypair();
-    const c = await nearLogin(stranger, 'bob.near');
+    // Reused nonce, key not on the account, implicit accounts.
+    const n1 = await nonce();
+    const sig1 = nearSign(nk, { message: auth.loginMessage('near', null, n1), nonce: Buffer.from(n1, 'hex'), recipient: auth.NEAR_RECIPIENT });
+    const pk1 = 'ed25519:' + auth.base58Encode(nk.raw);
+    assert.equal((await post('/api/auth/wallet', { chain: 'near', accountId: 'bob.near', publicKey: pk1, nonce: n1, signature: sig1 })).status, 200);
+    const reuse = await post('/api/auth/wallet', { chain: 'near', accountId: 'bob.near', publicKey: pk1, nonce: n1, signature: sig1 });
+    assert.equal(reuse.status, 400);
+    assert.match(reuse.body.error, /expired/);
+    const c = await nearLogin(keypair(), 'bob.near');
     assert.equal(c.status, 401);
     assert.match(c.body.error, /full-access key/);
-
-    // NEAR implicit account: the account id is the key in hex, no RPC needed
     const ik = keypair();
     const implicit = Buffer.from(ik.raw).toString('hex');
     assert.equal((await nearLogin(ik, implicit)).status, 200);
@@ -214,13 +237,14 @@ test('wallet sign-in, referral and game API', async () => {
 
     const lb = (await get('/api/leaderboard')).body.rows;
     assert.ok(lb.some((r) => r.address === 'bob.near'));
+    assert.ok(lb.some((r) => r.address === GAME));
 
-    assert.equal((await post('/api/auth/logout', {}, alice)).status, 200);
-    assert.equal((await get('/api/me', alice)).body.state, null);
+    assert.equal((await post('/api/auth/logout', {}, bob)).status, 200);
+    assert.equal((await get('/api/me', bob)).body.state, null);
 
     assert.equal((await fetch(`${base}/server/server.js`)).status, 404);
     assert.equal((await fetch(`${base}/vendor/near-wallet.js`)).status, 200);
-    for (const f of ['js/auth.js', 'js/wallets.js', 'js/cards.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js', 'css/style.css']) assert.equal((await fetch(`${base}/${f}`)).status, 200, f);
+    for (const f of ['js/auth.js', 'js/wallets.js', 'js/cards.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/app.js', 'js/sha256.js', 'css/style.css']) assert.equal((await fetch(`${base}/${f}`)).status, 200, f);
     assert.equal((await fetch(`${base}/`)).status, 200);
     assert.equal((await fetch(`${base}/assets/brand/pokenear-icon.svg`)).headers.get('content-type'), 'image/svg+xml');
     assert.equal((await fetch(`${base}/assets/brand/x-header.html`)).status, 404);

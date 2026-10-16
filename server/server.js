@@ -1,16 +1,21 @@
 'use strict';
-/* Pokenear server: static files + wallet sign-in (Solana, NEAR) + authoritative game API.
-   No runtime dependencies. Sign-in is a signed message with a one-time nonce; no keys,
-   no transactions. Game state lives in a JSON file (DB_FILE). */
+/* Pokenear server: static files + NEAR wallet sign-in + authoritative game API.
+   No runtime dependencies. Sign-in is a signed message with a one-time nonce.
+   Rips are paid in $POKENEAR (NEP-141) to the interaction wallet (GAME_ACCOUNT, pokenearfun.near),
+   whose contract draws the randomness in the same transaction; the server reads it back.
+   Buybacks are paid by that contract, called with a function-call key (PAYOUT_KEY).
+   Game state lives in a JSON file (DB_FILE). */
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
 const engine = require('../js/engine.js');
+const D = require('../js/data.js');
 const auth = require('../js/auth.js');
 const verify = require('./wallet-verify.js');
 const onchain = require('./onchain.js');
+const nearTx = require('./near-tx.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
@@ -33,10 +38,16 @@ async function withNearRpc(fn) {
   }
   throw last;
 }
-// On-chain RNG: Solana players use ORAO VRF, NEAR players use the Pokenear RNG contract.
-const SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || 'mainnet-beta';
-const SOLANA_RPC = process.env.SOLANA_RPC || (SOLANA_CLUSTER === 'devnet' ? 'https://api.devnet.solana.com' : 'https://api.mainnet-beta.solana.com');
-const NEAR_RNG_CONTRACT = process.env.NEAR_RNG_CONTRACT || '';
+// Interaction wallet running contracts/near-rng. The $POKENEAR contract address (CA) and the pack
+// prices are read from it (set_token / set_prices), so launching needs no server change.
+const GAME_ACCOUNT = process.env.GAME_ACCOUNT || D.GAME_ACCOUNT;
+// Function-call access key of GAME_ACCOUNT allowed to call payout() only. Empty = buyback closed.
+const PAYOUT_KEY = process.env.PAYOUT_KEY || '';
+// Dev wallets rip without paying (server randomness), still recorded like any rip.
+const DEV_ACCOUNTS = (process.env.DEV_ACCOUNTS || D.GAME_ACCOUNT).split(',').map((a) => a.trim()).filter(Boolean);
+const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_ACCOUNTS.includes(st.user.address));
+// $POKENEAR lives on NEAR, so sign-in is NEAR only.
+const CHAINS = ['near'];
 
 const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
@@ -55,9 +66,9 @@ function loadDotEnv(file) {
 function loadDb() {
   try {
     const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    return { users: {}, sessions: {}, refIndex: {}, ...db };
+    return { users: {}, sessions: {}, ...db };
   } catch {
-    return { users: {}, sessions: {}, refIndex: {} };
+    return { users: {}, sessions: {} };
   }
 }
 const db = loadDb();
@@ -76,8 +87,7 @@ function saveDb() {
 const nonces = new Map(); // nonce -> issued at
 const NONCE_TTL = 10 * 60 * 1000;
 
-function rng() { return crypto.randomInt(0, 2 ** 32) / 2 ** 32; }
-function ctx() { return { rng, now: Date.now(), mode: 'server' }; }
+function ctx() { return { now: Date.now(), mode: 'server' }; }
 function b64url(buf) { return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 
 /* ---------- http helpers ---------- */
@@ -135,7 +145,7 @@ async function walletLogin(req, res) {
   const issued = nonces.get(nonce);
   nonces.delete(nonce);
   if (!issued || Date.now() - issued > NONCE_TTL) return send(res, 400, { error: 'Sign-in expired. Try again.' });
-  if (!auth.CHAINS[chain]) return send(res, 400, { error: 'Choose Solana or NEAR.' });
+  if (!CHAINS.includes(chain)) return send(res, 400, { error: 'Sign in with a NEAR wallet. ' + D.TOKEN + ' lives on NEAR.' });
 
   let address;
   if (chain === 'solana') {
@@ -172,13 +182,7 @@ async function walletLogin(req, res) {
 
   const id = chain + ':' + address;
   let state0 = db.users[id];
-  if (!state0) {
-    const ref = String(body.ref || '').toUpperCase();
-    const referrerId = ref && db.refIndex[ref] && db.refIndex[ref] !== id ? db.refIndex[ref] : null;
-    state0 = engine.apply(engine.emptyState(), { type: 'connect', chain, address, wallet: body.wallet, ref: referrerId ? ref : '' }, ctx()).state;
-    db.refIndex[state0.user.refCode] = id;
-    if (referrerId) db.users[referrerId] = engine.apply(db.users[referrerId], { type: 'inviteJoined' }, ctx()).state;
-  }
+  if (!state0) state0 = engine.apply(engine.emptyState(), { type: 'connect', chain, address, wallet: body.wallet }, ctx()).state;
   db.users[id] = state0;
   const sid = b64url(crypto.randomBytes(32));
   db.sessions[sid] = id;
@@ -186,48 +190,40 @@ async function walletLogin(req, res) {
   send(res, 200, { state: state0 }, { 'Set-Cookie': sessionCookie(sid, 60 * 60 * 24 * 30) });
 }
 
-/* ---------- API ---------- */
-const CLIENT_ACTIONS = new Set(['daily', 'buyback']);
-
-async function handleAction(req, res) {
-  const uid = currentUserId(req);
-  if (!uid || !db.users[uid]) return send(res, 401, { error: 'Connect your wallet first.' });
-  let action;
-  try { action = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
-  if (!action || !CLIENT_ACTIONS.has(action.type)) return send(res, 400, { error: 'Unknown action.' });
+/* ---------- game config (read from the interaction wallet's contract) ---------- */
+let gameCache = { at: 0, ttl: 0, value: null };
+async function gameConfig() {
+  if (gameCache.value && Date.now() - gameCache.at < gameCache.ttl) return gameCache.value;
+  let value;
   try {
-    const out = engine.apply(db.users[uid], action, ctx());
-    db.users[uid] = out.state;
-    saveDb();
-    send(res, 200, { state: out.state, result: out.result });
+    const cfg = await withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'get_config', {}));
+    const token = (cfg && cfg.token) || null;
+    const meta = token ? await withNearRpc((url) => onchain.nearView(url, token, 'ft_metadata', {})) : null;
+    const prices = ((cfg && cfg.prices) || []).map(String);
+    value = {
+      account: GAME_ACCOUNT, token, symbol: (meta && meta.symbol) || null, decimals: meta ? Number(meta.decimals) : null,
+      prices, maxPerRip: (cfg && cfg.max_per_rip) || 5,
+      ready: Boolean(token && meta && prices.length >= D.PACKS.length), buyback: Boolean(PAYOUT_KEY)
+    };
+    gameCache = { at: Date.now(), ttl: 60000, value };
   } catch (err) {
-    if (err.isGameError) return send(res, 400, { error: err.message });
-    console.error('[action]', err);
-    send(res, 500, { error: 'Server error. Try again.' });
+    console.warn('[game-config]', err.message);
+    value = { account: GAME_ACCOUNT, token: null, symbol: null, decimals: null, prices: [], ready: false, buyback: false, error: 'not deployed' };
+    gameCache = { at: Date.now(), ttl: 15000, value };
   }
+  return value;
 }
+const notReady = () => ({ error: 'Packs open when ' + D.TOKEN + ' is live. Follow @' + D.X_HANDLE + ' for the launch.' });
 
 /* ---------- on-chain rips ----------
-   start:  pay with $POKENEAR, get a one-time seed. The player then requests randomness on their
-           chain with that seed (ORAO VRF on Solana, draw(seed) on NEAR) from their own wallet.
-   finish: the server reads the randomness from chain and derives the cards (engine.cardsFromRandomness).
-   cancel: refund, only while no randomness exists for the seed (so a bad roll can never be undone). */
-function rngInfo() {
-  return {
-    solana: { source: 'orao-vrf', program: onchain.ORAO_PROGRAM, cluster: SOLANA_CLUSTER, rpc: process.env.SOLANA_PUBLIC_RPC || SOLANA_RPC },
-    near: { source: 'near-rng', contract: NEAR_RNG_CONTRACT || null, network: NEAR_NETWORK }
-  };
-}
-
-async function readRandomness(user, seed) {
-  if (user.chain === 'solana') {
-    const r = await onchain.solanaRandomness(SOLANA_RPC, seed);
-    return { status: r.status, randomness: r.randomness, ref: r.account, source: 'orao-vrf' };
-  }
-  if (!NEAR_RNG_CONTRACT) throw Object.assign(new Error('NEAR randomness is not configured on this server.'), { status: 503 });
-  const r = await withNearRpc((url) => onchain.nearDraw(url, NEAR_RNG_CONTRACT, seed));
-  if (r.status === 'fulfilled' && r.account !== user.address) throw Object.assign(new Error('That draw was made by a different NEAR account.'), { status: 400 });
-  return { status: r.status, randomness: r.randomness, ref: NEAR_RNG_CONTRACT, source: 'near-rng' };
+   start:  reserve a one-time seed. The player pays with ft_transfer_call on the $POKENEAR token to
+           GAME_ACCOUNT with msg {seed, pack, count}; the contract checks the price and draws the
+           randomness in that same transaction (a wrong amount is refunded by the token).
+   finish: read the draw from chain, check it is this player's payment for this rip, derive the cards.
+   cancel: drop the rip, only while nothing was paid for its seed. */
+function payFor(game, pr) {
+  const pack = D.PACKS.findIndex((p) => p.id === pr.pack);
+  return { token: game.token, receiver: GAME_ACCOUNT, amount: pr.amount, msg: JSON.stringify({ seed: pr.seed, pack, count: pr.count }) };
 }
 
 async function ripRoute(req, res, step) {
@@ -237,33 +233,133 @@ async function ripRoute(req, res, step) {
   let body = {};
   try { body = JSON.parse((await readBody(req)) || '{}'); } catch { return send(res, 400, { error: 'Invalid request.' }); }
   try {
-    if (step === 'start') {
-      if (st.user.chain === 'near' && !NEAR_RNG_CONTRACT) return send(res, 503, { error: 'NEAR randomness is not configured on this server.' });
+    const game = await gameConfig();
+    if (step === 'start' && isDev(st)) {
+      // Dev wallet: no payment; the server draws the randomness and the rip is recorded as a dev rip.
       const seed = crypto.randomBytes(32).toString('hex');
-      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count: body.count, seed, chain: st.user.chain, source: st.user.chain === 'solana' ? 'orao-vrf' : 'near-rng' }, ctx());
+      const started = engine.apply(st, { type: 'ripStart', pack: body.pack, count: body.count, seed, chain: 'near', source: 'dev' }, ctx());
+      const out = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: crypto.randomBytes(32).toString('hex'), source: 'dev', ref: st.user.address } }, ctx());
       db.users[uid] = out.state;
       saveDb();
-      return send(res, 200, { state: out.state, rip: out.result.rip, rng: rngInfo() });
+      console.log('[rip] dev rip', { user: st.user.address, pack: body.pack, count: started.result.rip.count });
+      return send(res, 200, { state: out.state, rip: started.result.rip, pay: null, result: out.result });
+    }
+    if (step === 'start') {
+      if (!game.ready) return send(res, 503, notReady());
+      const index = D.PACKS.findIndex((p) => p.id === body.pack);
+      if (index < 0) return send(res, 400, { error: 'That pack is not available.' });
+      const count = D.MULTI.includes(body.count) ? body.count : 1;
+      const amount = (BigInt(game.prices[index]) * BigInt(count)).toString();
+      const seed = crypto.randomBytes(32).toString('hex');
+      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: 'near', source: 'pokenear-near' }, ctx());
+      db.users[uid] = out.state;
+      saveDb();
+      return send(res, 200, { state: out.state, rip: out.result.rip, pay: payFor(game, out.result.rip) });
     }
     const pr = st.pendingRip;
     if (!pr) return send(res, 400, { error: 'There is no open rip.' });
-    const r = await readRandomness(st.user, pr.seed);
-    if (step === 'cancel') {
-      if (r.status !== 'missing') return send(res, 409, { error: 'Randomness was already requested for this rip. Finish it instead.' });
+    if (pr.source === 'dev' || (isDev(st) && step === 'cancel')) {
       const out = engine.apply(st, { type: 'ripCancel' }, ctx());
       db.users[uid] = out.state;
       saveDb();
       return send(res, 200, { state: out.state, result: out.result });
     }
-    if (r.status !== 'fulfilled') return send(res, 202, { status: r.status, rip: pr, rng: rngInfo() });
-    const out = engine.apply(st, { type: 'ripFinish', proof: { randomness: r.randomness, source: r.source, ref: r.ref, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null } }, ctx());
+    const r = await withNearRpc((url) => onchain.nearDraw(url, GAME_ACCOUNT, pr.seed));
+    if (step === 'cancel') {
+      if (r.status !== 'missing') return send(res, 409, { error: 'This rip is already paid. Finish it instead.' });
+      const out = engine.apply(st, { type: 'ripCancel' }, ctx());
+      db.users[uid] = out.state;
+      saveDb();
+      return send(res, 200, { state: out.state, result: out.result });
+    }
+    if (r.status !== 'fulfilled') return send(res, 202, { status: r.status, rip: pr, pay: game.ready ? payFor(game, pr) : null });
+    const index = D.PACKS.findIndex((p) => p.id === pr.pack);
+    if (r.account !== st.user.address || r.pack !== index || r.count !== pr.count) {
+      console.warn('[rip] payment mismatch', { user: st.user.address, draw: r, rip: pr });
+      return send(res, 400, { error: 'The payment on chain does not match this rip.' });
+    }
+    const proof = { randomness: r.randomness, source: 'pokenear-near', ref: GAME_ACCOUNT, paid: r.amount, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null };
+    const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
     db.users[uid] = out.state;
     saveDb();
     return send(res, 200, { state: out.state, result: out.result });
   } catch (err) {
     if (err.isGameError) return send(res, 400, { error: err.message });
     console.error('[rip]', err.message);
-    return send(res, err.status || 502, { error: err.status ? err.message : 'Could not read randomness from chain. Try again in a moment.' });
+    return send(res, err.status || 502, { error: err.status ? err.message : 'Could not reach NEAR. Try again in a moment.' });
+  }
+}
+
+/* ---------- buyback ----------
+   The card value x BUYBACK_RATE is converted to $POKENEAR at the on-chain Starter Pack rate
+   (prices[0] for $PACKS[0].usd), then GAME_ACCOUNT.payout() sends it. ref_id makes it pay once. */
+const selling = new Set();
+async function buybackRoute(req, res) {
+  const uid = currentUserId(req);
+  const st = uid && db.users[uid];
+  if (!st) return send(res, 401, { error: 'Connect your wallet first.' });
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
+  const uids = [...new Set([].concat(body && (body.uids || body.uid) || []).map(Number))].filter(Number.isInteger).sort((a, b) => a - b);
+  let dry;
+  try { dry = engine.apply(st, { type: 'buyback', uids }, ctx()); } catch (err) {
+    if (err.isGameError) return send(res, 400, { error: err.message });
+    throw err;
+  }
+  if (isDev(st)) {
+    const out = engine.apply(st, { type: 'buyback', uids, payout: { amount: null, tx: null, dev: true } }, ctx());
+    db.users[uid] = out.state;
+    saveDb();
+    return send(res, 200, { state: out.state, result: out.result });
+  }
+  const game = await gameConfig();
+  if (!game.ready || !game.buyback) return send(res, 503, { error: 'Buyback opens when ' + D.TOKEN + ' is live.' });
+  if (selling.has(uid)) return send(res, 409, { error: 'A sale is already in progress.' });
+  const cents = BigInt(Math.round(dry.result.usd * 100));
+  const amount = BigInt(game.prices[0]) * cents / BigInt(D.PACKS[0].usd * 100);
+  if (amount <= 0n) return send(res, 400, { error: 'Nothing to pay for these cards.' });
+  const ref = 'sell:' + crypto.createHash('sha256').update(uid + ':' + uids.join(',')).digest('hex').slice(0, 40);
+  selling.add(uid);
+  try {
+    const isPaid = () => withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'is_paid', { ref_id: ref }));
+    let tx = null;
+    if (!(await isPaid())) {
+      let out;
+      try {
+        out = await withNearRpc((url) => nearTx.callFunction(url, {
+          signerId: GAME_ACCOUNT, secretKey: PAYOUT_KEY, receiverId: GAME_ACCOUNT,
+          method: 'payout', args: { receiver_id: st.user.address, amount: amount.toString(), ref_id: ref }
+        }));
+      } catch (err) {
+        out = { ok: false, error: err.message };
+      }
+      // A retry after a lost response must not report a payout that actually landed as failed.
+      if (!(out.ok && out.value === true) && !(await isPaid())) {
+        console.error('[buyback] payout failed', { user: st.user.address, ref, out });
+        return send(res, 502, { error: 'The payout did not go through. Your cards are still in your vault.' });
+      }
+      tx = out.hash || null;
+    }
+    const outState = engine.apply(db.users[uid], { type: 'buyback', uids, payout: { amount: amount.toString(), tx } }, ctx());
+    db.users[uid] = outState.state;
+    saveDb();
+    return send(res, 200, { state: outState.state, result: outState.result });
+  } finally {
+    selling.delete(uid);
+  }
+}
+
+async function balanceRoute(req, res) {
+  const uid = currentUserId(req);
+  const st = uid && db.users[uid];
+  if (!st) return send(res, 401, { error: 'Connect your wallet first.' });
+  const game = await gameConfig();
+  if (!game.token) return send(res, 200, { amount: null, decimals: null });
+  try {
+    const amount = await withNearRpc((url) => onchain.nearView(url, game.token, 'ft_balance_of', { account_id: st.user.address }));
+    return send(res, 200, { amount: String(amount || '0'), decimals: game.decimals, symbol: game.symbol });
+  } catch (err) {
+    return send(res, 502, { error: 'Could not read your balance.' });
   }
 }
 
@@ -298,7 +394,9 @@ async function route(req, res) {
   let url;
   try { url = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost'); } catch { return send(res, 400, 'Bad request'); }
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: Object.keys(auth.CHAINS), nearNetwork: NEAR_NETWORK, rng: rngInfo() });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS });
+  if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
+  if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
   if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
   if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');
@@ -313,7 +411,6 @@ async function route(req, res) {
     const uid = currentUserId(req);
     return send(res, 200, { state: uid ? db.users[uid] || null : null });
   }
-  if (p === '/api/action' && req.method === 'POST') return handleAction(req, res);
   if (p === '/api/leaderboard' && req.method === 'GET') return send(res, 200, { rows: leaderboard() });
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, p);
   send(res, 405, 'Method not allowed');
@@ -328,8 +425,8 @@ const server = http.createServer((req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`Pokenear running at http://localhost:${PORT} (wallet sign-in: Solana, NEAR ${NEAR_NETWORK})`);
+    console.log(`Pokenear running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
   });
 }
 
-module.exports = { server, db };
+module.exports = { server, db, resetGameCache: () => { gameCache = { at: 0, ttl: 0, value: null }; } };

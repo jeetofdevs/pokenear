@@ -6,8 +6,7 @@
   'use strict';
 
   var engine = root.PN.engine;
-  var STORAGE_KEY = 'pokenear:v5';
-  var REF_KEY = 'pokenear:ref';
+  var STORAGE_KEY = 'pokenear:v6';
 
   function safeGet(key) {
     try { return root.localStorage.getItem(key); } catch (e) { return null; }
@@ -19,44 +18,26 @@
     try { root.localStorage.removeItem(key); } catch (e) { /* ignore */ }
   }
 
-  function cryptoRng() {
-    var buf = new Uint32Array(1);
-    root.crypto.getRandomValues(buf);
-    return buf[0] / 4294967296;
-  }
-
-  // Invite codes arrive as ?ref=CODE or #ref-CODE (artifact viewers only keep the hash).
-  function captureRef() {
-    var code = null;
-    try {
-      var q = new URLSearchParams(root.location.search).get('ref');
-      if (q) code = q;
-    } catch (e) { /* ignore */ }
-    var m = /^#ref-([A-Za-z0-9]{4,12})$/.exec(root.location.hash || '');
-    if (m) code = m[1];
-    if (code && /^[A-Za-z0-9]{4,12}$/.test(code)) {
-      safeSet(REF_KEY, code.toUpperCase());
-      return code.toUpperCase();
-    }
-    return safeGet(REF_KEY);
-  }
-
   var listeners = [];
   var store = {
     mode: 'local',
     state: engine.emptyState(),
-    ref: null,
+    chains: ['near'],
+    devAccounts: [],
+    // Payment config from the interaction wallet's contract (live) or a demo stand-in (local).
+    game: null,
 
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () { listeners.forEach(function (fn) { fn(store.state); }); },
 
     init: function () {
-      store.ref = captureRef();
       return fetchJSON('api/config')
         .then(function (cfg) {
           if (cfg && cfg.mode === 'live') {
             store.mode = 'live';
-            store.rng = cfg.rng || null;
+            store.game = cfg.game || null;
+            store.chains = cfg.chains || ['near'];
+            store.devAccounts = cfg.devAccounts || [];
             return fetchJSON('api/me').then(function (me) {
               store.state = (me && me.state && engine.migrate(me.state)) || engine.emptyState();
             });
@@ -65,32 +46,19 @@
         })
         .catch(function () {
           store.mode = 'local';
+          store.game = { demo: true, ready: true, buyback: true, account: root.PN.data.GAME_ACCOUNT };
           var raw = safeGet(STORAGE_KEY);
           var loaded = null;
           try { loaded = raw ? JSON.parse(raw) : null; } catch (e) { loaded = null; }
-          store.state = loaded && loaded.v === 5 ? loaded : engine.emptyState();
+          store.state = loaded ? engine.migrate(loaded) : engine.emptyState();
         })
         .then(function () { store.emit(); return store.state; });
     },
 
+    // Local (demo) mode only: run the engine in the browser.
     dispatch: function (action) {
-      if (store.mode === 'live') {
-        return fetch('api/action', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(action)
-        }).then(function (res) {
-          return res.json().catch(function () { return {}; }).then(function (body) {
-            if (!res.ok || body.error) throw new Error(body.error || 'Server error (' + res.status + '). Try again.');
-            store.state = body.state;
-            store.emit();
-            return body.result;
-          });
-        });
-      }
       return new Promise(function (resolve) {
-        var out = engine.apply(store.state, action, { rng: cryptoRng, now: Date.now(), mode: 'local' });
+        var out = engine.apply(store.state, action, { now: Date.now(), mode: 'local' });
         store.state = out.state;
         safeSet(STORAGE_KEY, JSON.stringify(store.state));
         store.emit();
@@ -118,34 +86,32 @@
         return postJSON('api/auth/wallet', {
           chain: chain, nonce: nonce, signature: signed.signature, address: signed.address,
           accountId: signed.accountId, publicKey: signed.publicKey, callbackUrl: signed.callbackUrl, message: signed.message,
-          wallet: signed.wallet, ref: store.ref
+          wallet: signed.wallet
         }).then(function (body) {
-          safeRemove(REF_KEY);
-          var before = store.state.user;
           store.state = body.state;
           store.emit();
-          return { bonus: before ? 0 : body.state.earned };
+          return {};
         });
       }
-      return store.dispatch({ type: 'connect', chain: chain, address: signed.address || signed.accountId, wallet: signed.wallet, ref: store.ref }).then(function (r) {
-        safeRemove(REF_KEY);
-        return r;
-      });
+      return store.dispatch({ type: 'connect', chain: chain, address: signed.address || signed.accountId, wallet: signed.wallet });
     },
 
     /* ---------- rips ----------
-       ripStart: pay and get a seed. ripFinish: deliver cards once randomness exists
-       (live: read from chain by the server; demo: browser randomness). */
+       ripStart: reserve a seed; live mode also returns what to pay (store.pay).
+       ripFinish: deliver the cards once the payment + randomness is on chain
+       (live: read from chain by the server; demo: browser randomness, nothing paid). */
     ripStart: function (pack, count) {
       if (store.mode === 'live') {
         return postJSON('api/rip/start', { pack: pack, count: count }).then(function (b) {
           store.state = b.state;
-          store.rng = b.rng;
+          store.pay = b.pay;
+          store.devResult = b.result || null; // dev wallet: the rip is already drawn and recorded
           store.emit();
           return b.rip;
         });
       }
       var u = store.state.user;
+      store.pay = null;
       return store.dispatch({ type: 'ripStart', pack: pack, count: count, seed: randomHex(32), chain: u && u.chain, source: 'demo' })
         .then(function (r) { return r.rip; });
     },
@@ -159,7 +125,7 @@
           body: JSON.stringify(extra || {})
         }).then(function (res) {
           return res.json().catch(function () { return {}; }).then(function (b) {
-            if (res.status === 202) return { pending: true, status: b.status };
+            if (res.status === 202) { if (b.pay) store.pay = b.pay; return { pending: true, status: b.status }; }
             if (!res.ok || b.error) throw new Error(b.error || 'Server error (' + res.status + '). Try again.');
             store.state = b.state;
             store.emit();
@@ -175,6 +141,26 @@
         return postJSON('api/rip/cancel', {}).then(function (b) { store.state = b.state; store.emit(); return b.result; });
       }
       return store.dispatch({ type: 'ripCancel' });
+    },
+
+    // Sell cards back. Live: the interaction wallet pays $POKENEAR on chain before the cards leave.
+    buyback: function (uids) {
+      if (store.mode === 'live') {
+        return postJSON('api/buyback', { uids: uids }).then(function (b) { store.state = b.state; store.emit(); return b.result; });
+      }
+      return store.dispatch({ type: 'buyback', uids: uids });
+    },
+
+    // Dev wallet (pokenearfun.near): rips without paying, recorded as dev rips.
+    isDev: function () {
+      var u = store.state.user;
+      return store.mode === 'live' && !!u && store.devAccounts.indexOf(u.address) >= 0;
+    },
+
+    // On-chain $POKENEAR balance of the signed-in wallet: { amount, decimals } or null.
+    balance: function () {
+      if (store.mode !== 'live' || !store.state.user) return Promise.resolve(null);
+      return fetchJSON('api/balance').catch(function () { return null; });
     },
 
     logout: function () {

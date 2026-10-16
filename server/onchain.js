@@ -3,7 +3,8 @@
    - Solana: ORAO VRF v2. The randomness account is the PDA ["orao-vrf-randomness-request", seed]
      of the ORAO program. Layout (Anchor): 8-byte discriminator | enum tag (0 pending, 1 fulfilled)
      | client pubkey (32) | seed (32) | fulfilled: randomness (64).
-   - NEAR: the Pokenear RNG contract (contracts/near-rng), view method get_draw({ seed }). */
+   - NEAR: the Pokenear contract on the interaction wallet (contracts/near-rng), get_draw({ seed }):
+     the randomness drawn when the player paid for the rip in $POKENEAR. */
 const crypto = require('node:crypto');
 const auth = require('../js/auth.js');
 
@@ -108,16 +109,25 @@ async function solanaRandomness(rpcUrl, seedHex) {
 }
 
 // -> { status: 'missing' } | { status: 'fulfilled', randomness, account, blockHeight }
-async function nearDraw(rpcUrl, contractId, seedHex) {
+// Call a NEAR view method and parse its JSON result.
+async function nearView(rpcUrl, contractId, method, args) {
   const result = await rpc(rpcUrl, 'query', {
     request_type: 'call_function', finality: 'final', account_id: contractId,
-    method_name: 'get_draw', args_base64: Buffer.from(JSON.stringify({ seed: seedHex })).toString('base64')
+    method_name: method, args_base64: Buffer.from(JSON.stringify(args || {})).toString('base64')
   });
   const text = Buffer.from(result.result || []).toString('utf8');
-  const draw = text ? JSON.parse(text) : null;
-  if (!draw) return { status: 'missing' };
-  if (!/^[0-9a-f]{64}$/.test(draw.randomness || '')) throw new Error('Bad randomness from the NEAR contract.');
-  return { status: 'fulfilled', randomness: draw.randomness, account: draw.account, blockHeight: draw.block_height };
+  return text ? JSON.parse(text) : null;
 }
 
-module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearDraw };
+// A paid rip on the Pokenear contract (see contracts/near-rng): randomness + what was paid.
+async function nearDraw(rpcUrl, contractId, seedHex) {
+  const draw = await nearView(rpcUrl, contractId, 'get_draw', { seed: seedHex });
+  if (!draw) return { status: 'missing' };
+  if (!/^[0-9a-f]{64}$/.test(draw.randomness || '')) throw new Error('Bad randomness from the NEAR contract.');
+  return {
+    status: 'fulfilled', randomness: draw.randomness, account: draw.account, blockHeight: draw.block_height,
+    pack: draw.pack, count: draw.count, amount: draw.amount
+  };
+}
+
+module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearView, nearDraw };

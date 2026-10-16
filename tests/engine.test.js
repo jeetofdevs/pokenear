@@ -79,7 +79,7 @@ test('cards are real, unique and valued', () => {
   assert.equal(D.cardById['mew-199'].code, 'SIR');
 });
 
-test('connect accepts Solana and NEAR addresses and grants demo credit', () => {
+test('connect validates addresses and grants no credit', () => {
   const bad = (chain, address) => assert.throws(() => engine.apply(engine.emptyState(), { type: 'connect', chain, address }, ctx()), /not a valid|Choose Solana/);
   bad('solana', 'not-a-key');
   bad('solana', '0OIl' + SOL.slice(4));
@@ -89,15 +89,16 @@ test('connect accepts Solana and NEAR addresses and grants demo credit', () => {
   const s = connected();
   assert.equal(s.user.chain, 'solana');
   assert.equal(s.user.name, '7xKX…gAsU');
-  assert.equal(s.balance, D.ECONOMY.startBonus);
+  assert.equal(s.balance, undefined);
   const n = engine.apply(engine.emptyState(), { type: 'connect', chain: 'near', address: 'pokefan.near' }, ctx()).state;
   assert.equal(n.user.name, 'pokefan.near');
-  assert.notEqual(n.user.refCode, s.user.refCode);
-  assert.equal(connected({ ref: 'PNFRIEND1' }).balance, D.ECONOMY.startBonus + D.ECONOMY.referredBonus);
-  assert.equal(connected({ ref: engine.refCodeFor('solana', SOL) }).balance, D.ECONOMY.startBonus);
+  assert.equal(n.user.refCode, undefined);
 });
 
 test('base58 round-trips and validates key length', () => {
+  assert.equal(auth.base58Encode(new Uint8Array(32)), '1'.repeat(32)); // all-zero bytes (e.g. a zero hash)
+  assert.equal(auth.base58Decode('1'.repeat(32)).length, 32);
+  assert.deepEqual([...auth.base58Decode('1112')], [0, 0, 0, 1]);
   const bytes = new Uint8Array(32).map((_, i) => (i * 37 + 11) & 255);
   const enc = auth.base58Encode(bytes);
   assert.deepEqual(Array.from(auth.base58Decode(enc)), Array.from(bytes));
@@ -153,81 +154,66 @@ test('uniforms from randomness follow the published odds', () => {
   assert.ok(Math.abs(beat / N - p.beat) < 0.015, 'beat ' + beat / N);
 });
 
-test('ripStart charges and reserves; ripFinish delivers cards with proof', () => {
+test('ripStart reserves a seed and the amount to pay; ripFinish delivers cards with proof', () => {
   const s0 = connected();
-  const started = engine.apply(s0, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED, chain: 'solana', source: 'orao-vrf' }, ctx());
-  assert.equal(started.state.balance, D.ECONOMY.startBonus - STARTER.price);
+  const started = engine.apply(s0, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED, amount: '1000', chain: 'near', source: 'pokenear-near' }, ctx());
   assert.equal(started.state.pendingRip.seed, SEED);
+  assert.equal(started.state.pendingRip.amount, '1000');
   assert.equal(started.state.vault.length, 0);
   assert.throws(() => engine.apply(started.state, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED }, ctx()), /open rip/);
   assert.throws(() => engine.apply(started.state, { type: 'ripFinish', proof: { randomness: 'zz' } }, ctx()), /Bad randomness/);
-  const { state, result } = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: RAND, source: 'orao-vrf', ref: 'acct', tx: 'sig' } }, ctx());
+  const { state, result } = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: RAND, source: 'pokenear-near', ref: 'pokenearfun.near', tx: 'sig', paid: '1000' } }, ctx());
   assert.equal(state.pendingRip, null);
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0].id, engine.cardsFromRandomness('starter', 1, RAND, SEED)[0].id);
-  assert.deepEqual(state.vault[0].proof, { source: 'orao-vrf', chain: 'solana', seed: SEED, randomness: RAND, ref: 'acct', tx: 'sig' });
+  assert.deepEqual(state.vault[0].proof, { source: 'pokenear-near', chain: 'near', seed: SEED, randomness: RAND, ref: 'pokenearfun.near', tx: 'sig', paid: '1000' });
   assert.equal(state.totalPulls, 1);
   assert.throws(() => engine.apply(state, { type: 'ripFinish', proof: { randomness: RAND } }, ctx()), /no open rip/);
 });
 
-test('5x rip costs 5 packs and gives 5 unique items', () => {
-  const s = connected();
-  s.balance = STARTER.price * 5;
-  const { state, result } = ripWith(s, 'starter', 5);
+test('5x rip gives 5 unique items', () => {
+  const { result } = ripWith(connected(), 'starter', 5);
   assert.equal(result.items.length, 5);
   assert.equal(new Set(result.items.map((i) => i.uid)).size, 5);
-  assert.equal(state.balance, 0);
 });
 
-test('ripCancel refunds the open rip', () => {
+test('ripCancel drops the open rip', () => {
   const started = engine.apply(connected(), { type: 'ripStart', pack: 'starter', count: 1, seed: SEED }, ctx()).state;
   const { state, result } = engine.apply(started, { type: 'ripCancel' }, ctx());
-  assert.equal(result.refund, D.packById.starter.price);
-  assert.equal(state.balance, D.ECONOMY.startBonus);
+  assert.equal(result.cancelled, true);
   assert.equal(state.pendingRip, null);
 });
 
-test('not enough balance, bad seed or unknown pack is rejected', () => {
+test('bad seed or unknown pack is rejected', () => {
   const s = connected();
-  s.balance = 999;
-  assert.throws(() => engine.apply(s, { type: 'ripStart', pack: 'starter', seed: SEED }, ctx()), /costs \$10/);
   assert.throws(() => engine.apply(s, { type: 'ripStart', pack: 'op01', seed: SEED }, ctx()), /not available/);
-  s.balance = 5000;
   assert.throws(() => engine.apply(s, { type: 'ripStart', pack: 'starter', seed: 'xyz' }, ctx()), /Bad rip seed/);
-  assert.equal(s.balance, 5000);
 });
 
-test('buyback pays 90% of value once', () => {
-  let s = ripWith(connected(), 'starter', 1).state;
+test('buyback values cards at 90% and records the payout once', () => {
+  const s = ripWith(connected(), 'starter', 1).state;
   const item = s.vault[0];
-  const before = s.balance;
-  const out = engine.apply(s, { type: 'buyback', uid: item.uid }, ctx());
-  assert.equal(out.result.amount, D.cardById[item.id].buyback);
-  assert.equal(out.state.balance, before + D.cardById[item.id].buyback);
+  const out = engine.apply(s, { type: 'buyback', uid: item.uid, payout: { amount: '900', tx: 'h' } }, ctx());
+  assert.equal(out.result.usd, Math.round(D.cardById[item.id].usd * D.BUYBACK_RATE * 100) / 100);
   assert.equal(out.state.vault.length, 0);
+  assert.deepEqual(out.state.payouts[0], { at: T, usd: out.result.usd, amount: '900', tx: 'h', cards: 1 });
   assert.throws(() => engine.apply(out.state, { type: 'buyback', uid: item.uid }, ctx()), /no longer in your vault/);
 });
 
-test('daily reward has a cooldown', () => {
-  let s = connected();
-  s = engine.apply(s, { type: 'daily' }, ctx(1, T)).state;
-  assert.throws(() => engine.apply(s, { type: 'daily' }, ctx(1, T + 1000)), /ready in/);
-  s = engine.apply(s, { type: 'daily' }, ctx(1, T + D.ECONOMY.dailyCooldownMs)).state;
-  assert.equal(s.balance, D.ECONOMY.startBonus + 2 * D.ECONOMY.dailyReward);
+test('credit, daily and invite actions are gone', () => {
+  const s = connected();
+  for (const type of ['daily', 'inviteJoined', 'joinWhitelist', 'task']) assert.throws(() => engine.apply(s, { type }, ctx()), /Unknown action/);
 });
 
-test('invites pay the inviter; removed actions are rejected', () => {
-  let s = connected();
-  for (let i = 0; i < 3; i++) s = engine.apply(s, { type: 'inviteJoined' }, ctx()).state;
-  assert.equal(s.invites, 3);
-  assert.equal(s.balance, D.ECONOMY.startBonus + 3 * D.ECONOMY.inviteReward);
-  assert.throws(() => engine.apply(s, { type: 'joinWhitelist' }, ctx()), /Unknown action/);
-  assert.throws(() => engine.apply(s, { type: 'task', id: 'follow' }, ctx()), /Unknown action/);
-});
-
-test('saves from the X-login era reset; wallet saves are kept', () => {
-  const old = { v: 4, user: { handle: 'x' }, balance: 1234, tasks: { follow: 1 }, vault: [] };
-  assert.deepEqual(engine.migrate(old), engine.emptyState());
+test('older saves keep the wallet but drop credits and the vault', () => {
+  const x = { v: 4, user: { handle: 'x' }, balance: 1234, tasks: { follow: 1 }, vault: [] };
+  assert.deepEqual(engine.migrate(x), engine.emptyState());
+  const v5 = { v: 5, user: { chain: 'near', address: 'bob.near', name: 'bob.near', refCode: 'PNX', joinedAt: 5 }, balance: 2000, vault: [{ uid: 1, id: 'mew-207' }] };
+  const m = engine.migrate(v5);
+  assert.equal(m.v, 6);
+  assert.equal(m.user.address, 'bob.near');
+  assert.equal(m.balance, undefined);
+  assert.equal(m.vault.length, 0);
   const cur = connected();
   assert.equal(engine.migrate(cur), cur);
 });
