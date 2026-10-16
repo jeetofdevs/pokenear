@@ -263,7 +263,7 @@
 
   function footerHTML() {
     return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in ' + D.TOKEN + ' to ' + D.GAME_ACCOUNT + '. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
-      '<span class="foot-links"><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
+      '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
 

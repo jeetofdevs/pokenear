@@ -38,6 +38,7 @@
             store.game = cfg.game || null;
             store.chains = cfg.chains || ['near'];
             store.devAccounts = cfg.devAccounts || [];
+            store.serverVersion = cfg.version || null;
             return fetchJSON('api/me').then(function (me) {
               store.state = (me && me.state && engine.migrate(me.state)) || engine.emptyState();
             });

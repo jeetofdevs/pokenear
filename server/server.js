@@ -394,7 +394,7 @@ async function route(req, res) {
   let url;
   try { url = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost'); } catch { return send(res, 400, 'Bad request'); }
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, version: D.VERSION });
   if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
   if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
@@ -425,7 +425,7 @@ const server = http.createServer((req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`Pokenear running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
+    console.log(`Pokenear v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
   });
 }
 
