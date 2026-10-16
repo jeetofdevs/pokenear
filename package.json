@@ -1,0 +1,12 @@
+{
+  "name": "pokenear",
+  "version": "1.0.0",
+  "description": "Pokenear: TCG gacha with X login, invites and a $POKENEAR whitelist.",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test tests/engine.test.js tests/server.test.js"
+  }
+}
