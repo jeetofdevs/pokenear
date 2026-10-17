@@ -136,7 +136,7 @@
   var NEAR_WALLET_KEY = 'pokenear:near-wallet';
 
   /* Pay for a rip in NEAR from the player's NEAR wallet. pay comes from the server:
-     { method: 'rip', receiver, deposit (yoctoNEAR), args: { seed, pack, count } }. Resolves { tx, ref }
+     { method: 'rip' | 'transfer', receiver, deposit (yoctoNEAR), args? }. Resolves { tx, ref }
      once the transaction is sent; the server then reads the draw from chain. */
   function payRip(user, pay) {
     if (!pay || !pay.receiver || !pay.deposit) return Promise.reject(new Error('Packs open soon.'));
@@ -164,7 +164,7 @@
   // Block explorer links for a proof.
   function explorer(proof, network) {
     if (!proof) return null;
-    if (proof.source === 'pokenear-near' || proof.source === 'near-rng') {
+    if (proof.source === 'pokenear-near' || proof.source === 'near-rng' || proof.source === 'near-transfer') {
       var host = network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io';
       return { label: 'NearBlocks', account: proof.ref ? host + '/address/' + proof.ref : null, tx: proof.tx ? host + '/txns/' + proof.tx : null };
     }

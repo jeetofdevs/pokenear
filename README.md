@@ -22,6 +22,10 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen). Every Pokémon has artwork: dream-world sprites up to Gen 5, PokeAPI official artwork for newer Pokémon (`npm run build:cards` downloads it once into `.cache/`).
 - **Docs** at `#docs` and a leaderboard by vault value. Official X: [@pokenearfun](https://x.com/pokenearfun).
 
+## Going live (direct mode)
+
+Packs open as soon as the server knows the NEAR price; no contract is needed for that. The server reads NEAR/USD live (median of Binance, CoinGecko and Kraken, cached 30 s; `NEAR_PRICE_URL` overrides, and admins can save a backup price) and quotes every rip at that moment's price. Without the contract, the player sends exactly that NEAR to **pokenear.near** (`TREASURY`); the server checks the transaction on chain (sender, receiver, exact amount, success, sent after the rip started, never reused) and derives `randomness = sha256("pokenear-transfer:v1" || block hash || seed)` from the block that included it. Buybacks turn on after the contract is deployed. Admin wallets: pokenearfun.near and pokenear.near (`ADMIN_ACCOUNTS`).
+
 ## Payments and on-chain RNG
 
 1. `POST /api/rip/start` issues a one-time 32-byte `seed` and returns what to pay: `{ method: 'rip', receiver: pokenearfun.near, deposit, args: {seed, pack, count} }`. Prices (yoctoNEAR) come from the contract (`get_config`).

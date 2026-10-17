@@ -17,6 +17,7 @@ const auth = require('../js/auth.js');
 const verify = require('./wallet-verify.js');
 const onchain = require('./onchain.js');
 const nearTx = require('./near-tx.js');
+const price = require('./price.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
@@ -46,9 +47,16 @@ const GAME_ACCOUNT = process.env.GAME_ACCOUNT || D.GAME_ACCOUNT;
 const PAYOUT_KEY = process.env.PAYOUT_KEY || '';
 // Dev wallets rip without paying (server randomness), still recorded like any rip.
 const DEV_ACCOUNTS = (process.env.DEV_ACCOUNTS || D.GAME_ACCOUNT).split(',').map((a) => a.trim()).filter(Boolean);
+// Wallets allowed on the admin page (read status, backup price). On-chain changes are still signed
+// by the right wallet in the browser.
+const ADMIN_ACCOUNTS = (process.env.ADMIN_ACCOUNTS || D.ADMIN_ACCOUNTS.join(',')).split(',').map((a) => a.trim()).filter(Boolean);
 const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_ACCOUNTS.includes(st.user.address));
 // Payments, randomness and buybacks are on NEAR, so sign-in is NEAR only.
 const CHAINS = ['near'];
+// Direct mode (no contract yet): players send NEAR straight to the treasury.
+const TREASURY = process.env.TREASURY || D.TREASURY;
+const YOCTO = 10n ** 24n;
+const ROUND = 10n ** 20n; // quotes are rounded up to 0.0001 NEAR
 
 const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/pokenear_game.wasm']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
@@ -67,9 +75,9 @@ function loadDotEnv(file) {
 function loadDb() {
   try {
     const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    return { users: {}, sessions: {}, ...db };
+    return { users: {}, sessions: {}, settings: {}, usedTx: {}, ...db };
   } catch {
-    return { users: {}, sessions: {} };
+    return { users: {}, sessions: {}, settings: {}, usedTx: {} };
   }
 }
 const db = loadDb();
@@ -192,25 +200,53 @@ async function walletLogin(req, res) {
 }
 
 /* ---------- game config (read from the interaction wallet's contract) ---------- */
-let gameCache = { at: 0, ttl: 0, value: null };
-async function gameConfig() {
+let gameCache = { at: 0, ttl: 0, value: null }; // the contract's config, read from chain
+async function chainConfig() {
   if (gameCache.value && Date.now() - gameCache.at < gameCache.ttl) return gameCache.value;
   let value;
   try {
     const cfg = await withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'get_config', {}));
-    const prices = ((cfg && cfg.prices) || []).map(String);
-    value = {
-      account: GAME_ACCOUNT, treasury: (cfg && cfg.treasury) || null, currency: 'NEAR', decimals: 24,
-      prices, maxPerRip: (cfg && cfg.max_per_rip) || 5,
-      ready: prices.length >= D.PACKS.length, buyback: Boolean(PAYOUT_KEY)
-    };
+    value = { initialized: Boolean(cfg), treasury: (cfg && cfg.treasury) || null, prices: ((cfg && cfg.prices) || []).map(String) };
     gameCache = { at: Date.now(), ttl: 60000, value };
   } catch (err) {
-    console.warn('[game-config]', err.message);
-    value = { account: GAME_ACCOUNT, treasury: null, currency: 'NEAR', decimals: 24, prices: [], ready: false, buyback: false, error: 'not deployed' };
+    value = { initialized: false, treasury: null, prices: [] };
     gameCache = { at: Date.now(), ttl: 15000, value };
   }
   return value;
+}
+
+// NEAR/USD now: live market median, else the admin's manual price, else none.
+async function marketPrice() {
+  const live = await price.nearUsd().catch(() => null);
+  if (live) return { usd: live.usd, source: live.sources.join('+'), at: live.at, stale: live.stale };
+  const manual = Number((db.settings && db.settings.nearUsd) || process.env.NEAR_USD);
+  if (manual > 0) return { usd: manual, source: 'manual', at: null, stale: false };
+  return null;
+}
+
+// yoctoNEAR for `usdCents` at `usdPerNear`, rounded up to 0.0001 NEAR.
+function yoctoFor(usdCents, usdPerNear) {
+  const micro = BigInt(Math.round(usdPerNear * 1e6));
+  const raw = BigInt(usdCents) * YOCTO * 1000000n / (100n * micro);
+  return ((raw + ROUND - 1n) / ROUND) * ROUND;
+}
+
+/* Game config. Mode 'contract' once pokenearfun.near runs the Pokenear contract, else 'direct'
+   (NEAR sent straight to the treasury). Pack prices follow the live NEAR price unless the
+   contract has fixed prices set on chain. */
+async function gameConfig() {
+  const [chain, market] = await Promise.all([chainConfig(), marketPrice()]);
+  const fixed = chain.initialized && chain.prices.length >= D.PACKS.length;
+  const prices = fixed ? chain.prices : market ? D.PACKS.map((p) => yoctoFor(Math.round(p.usd * 100), market.usd).toString()) : [];
+  return {
+    account: GAME_ACCOUNT, mode: chain.initialized ? 'contract' : 'direct',
+    treasury: chain.initialized ? chain.treasury : TREASURY,
+    currency: 'NEAR', decimals: 24, prices, maxPerRip: 5,
+    priceSource: fixed ? 'contract' : market ? market.source : null,
+    nearUsd: market ? market.usd : null, priceAt: market ? market.at : null,
+    ready: prices.length >= D.PACKS.length,
+    buyback: chain.initialized && Boolean(PAYOUT_KEY) && Boolean(fixed || market)
+  };
 }
 const notReady = () => ({ error: 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
 
@@ -221,6 +257,7 @@ const notReady = () => ({ error: 'Packs open soon. Follow @' + D.X_HANDLE + ' fo
    finish: read the draw from chain, check it is this player's payment for this rip, derive the cards.
    cancel: drop the rip, only while nothing was paid for its seed. */
 function payFor(game, pr) {
+  if (pr.source === 'near-transfer') return { method: 'transfer', receiver: pr.treasury || TREASURY, deposit: pr.amount };
   const pack = D.PACKS.findIndex((p) => p.id === pr.pack);
   return { method: 'rip', receiver: GAME_ACCOUNT, deposit: pr.amount, args: { seed: pr.seed, pack, count: pr.count } };
 }
@@ -250,7 +287,9 @@ async function ripRoute(req, res, step) {
       const count = D.MULTI.includes(body.count) ? body.count : 1;
       const amount = (BigInt(game.prices[index]) * BigInt(count)).toString();
       const seed = crypto.randomBytes(32).toString('hex');
-      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: 'near', source: 'pokenear-near' }, ctx());
+      const source = game.mode === 'direct' ? 'near-transfer' : 'pokenear-near';
+      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: 'near', source }, ctx());
+      if (source === 'near-transfer') out.state.pendingRip.treasury = game.treasury;
       db.users[uid] = out.state;
       saveDb();
       return send(res, 200, { state: out.state, rip: out.result.rip, pay: payFor(game, out.result.rip) });
@@ -263,6 +302,7 @@ async function ripRoute(req, res, step) {
       saveDb();
       return send(res, 200, { state: out.state, result: out.result });
     }
+    if (pr.source === 'near-transfer') return directRip(req, res, step, uid, st, pr, body, game);
     const r = await withNearRpc((url) => onchain.nearDraw(url, GAME_ACCOUNT, pr.seed));
     if (step === 'cancel') {
       if (r.status !== 'missing') return send(res, 409, { error: 'This rip is already paid. Finish it instead.' });
@@ -273,7 +313,7 @@ async function ripRoute(req, res, step) {
     }
     if (r.status !== 'fulfilled') return send(res, 202, { status: r.status, rip: pr, pay: game.ready ? payFor(game, pr) : null });
     const index = D.PACKS.findIndex((p) => p.id === pr.pack);
-    if (r.account !== st.user.address || r.pack !== index || r.count !== pr.count) {
+    if (r.account !== st.user.address || r.pack !== index || r.count !== pr.count || (pr.amount && String(r.amount) !== String(pr.amount))) {
       console.warn('[rip] payment mismatch', { user: st.user.address, draw: r, rip: pr });
       return send(res, 400, { error: 'The payment on chain does not match this rip.' });
     }
@@ -287,6 +327,54 @@ async function ripRoute(req, res, step) {
     console.error('[rip]', err.message);
     return send(res, err.status || 502, { error: err.status ? err.message : 'Could not reach NEAR. Try again in a moment.' });
   }
+}
+
+/* Direct mode rip: the player sent a plain NEAR transfer to the treasury. The server checks the
+   transaction on chain (sender, receiver, exact amount, success, sent after this rip started, never
+   used before) and derives the randomness from the hash of the block that included it:
+     randomness = sha256("pokenear-transfer:v1" || block_hash || seed)
+   Nobody can know that block hash before the transaction lands, and anyone can re-check it. */
+const RIP_TRANSFER_DOMAIN = Buffer.from('pokenear-transfer:v1');
+function transferRandomness(blockHash, seedHex) {
+  return crypto.createHash('sha256').update(Buffer.concat([RIP_TRANSFER_DOMAIN, Buffer.from(auth.base58Decode(blockHash)), Buffer.from(seedHex, 'hex')])).digest('hex');
+}
+async function directRip(req, res, step, uid, st, pr, body, game) {
+  const save = (state) => { db.users[uid] = state; saveDb(); };
+  if (step === 'cancel') {
+    const out = engine.apply(st, { type: 'ripCancel' }, ctx());
+    save(out.state);
+    return send(res, 200, { state: out.state, result: out.result });
+  }
+  const given = typeof body.tx === 'string' ? body.tx.trim() : '';
+  if (given) {
+    const raw = auth.base58Decode(given);
+    if (!raw || raw.length !== 32) return send(res, 400, { error: 'That is not a NEAR transaction hash.' });
+    st.pendingRip.tx = given;
+    save(st);
+  }
+  const txHash = st.pendingRip.tx;
+  if (!txHash) return send(res, 202, { status: 'missing', rip: pr, pay: payFor(game, pr) });
+  const usedBy = db.usedTx[txHash];
+  if (usedBy && usedBy !== uid + ':' + pr.seed) {
+    st.pendingRip.tx = null; save(st);
+    return send(res, 400, { error: 'That transaction was already used for another rip.' });
+  }
+  const t = await withNearRpc((url) => onchain.nearTransferTx(url, txHash, st.user.address));
+  if (t.status === 'pending') return send(res, 202, { status: 'pending', rip: pr, pay: payFor(game, pr) });
+  const fail = (msg) => { st.pendingRip.tx = null; save(st); return send(res, 400, { error: msg }); };
+  if (t.status === 'failed') return fail('That transaction failed on NEAR. Nothing was paid; try again.');
+  const treasury = pr.treasury || TREASURY;
+  if (t.signer !== st.user.address || t.receiver !== treasury || t.deposit !== String(pr.amount)) {
+    console.warn('[rip] transfer mismatch', { user: st.user.address, tx: txHash, t, rip: pr });
+    return fail('That transaction is not the payment for this rip (it must send the exact amount to ' + treasury + ').');
+  }
+  const block = await withNearRpc((url) => onchain.nearBlock(url, t.blockHash));
+  if (block.timestampMs < pr.at - 5000) return fail('That payment was sent before this rip started.');
+  db.usedTx[txHash] = uid + ':' + pr.seed;
+  const proof = { randomness: transferRandomness(t.blockHash, pr.seed), source: 'near-transfer', ref: treasury, tx: txHash, block: t.blockHash, paid: t.deposit };
+  const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
+  save(out.state);
+  return send(res, 200, { state: out.state, result: out.result });
 }
 
 /* ---------- buyback ----------
@@ -315,7 +403,10 @@ async function buybackRoute(req, res) {
   if (!game.ready || !game.buyback) return send(res, 503, { error: 'Buyback opens soon.' });
   if (selling.has(uid)) return send(res, 409, { error: 'A sale is already in progress.' });
   const cents = BigInt(Math.round(dry.result.usd * 100));
-  const amount = BigInt(game.prices[0]) * cents / BigInt(D.PACKS[0].usd * 100);
+  // At the live NEAR price (or the contract's fixed prices if set), rounded down to 0.0001 NEAR.
+  const amount = game.priceSource === 'contract'
+    ? BigInt(game.prices[0]) * cents / BigInt(D.PACKS[0].usd * 100)
+    : (cents * YOCTO * 1000000n / (100n * BigInt(Math.round(game.nearUsd * 1e6)))) / ROUND * ROUND;
   if (amount <= 0n) return send(res, 400, { error: 'Nothing to pay for these cards.' });
   const ref = 'sell:' + crypto.createHash('sha256').update(uid + ':' + uids.join(',')).digest('hex').slice(0, 40);
   selling.add(uid);
@@ -348,15 +439,15 @@ async function buybackRoute(req, res) {
   }
 }
 
-/* ---------- admin (interaction wallet only) ----------
+/* ---------- admin (admin wallets only) ----------
    Read-only status for the #admin page. Every change (deploy, prices, keys) is a transaction
    the interaction wallet signs in the browser; the server never holds that wallet's keys. */
 const EMPTY_CODE = '11111111111111111111111111111111';
 function adminOnly(req, res) {
   const uid = currentUserId(req);
   const st = uid && db.users[uid];
-  if (!st || st.user.chain !== 'near' || st.user.address !== GAME_ACCOUNT) {
-    send(res, 403, { error: 'Admin is only for ' + GAME_ACCOUNT + '.' });
+  if (!st || st.user.chain !== 'near' || !ADMIN_ACCOUNTS.includes(st.user.address)) {
+    send(res, 403, { error: 'Admin is only for ' + ADMIN_ACCOUNTS.join(', ') + '.' });
     return null;
   }
   return st;
@@ -370,8 +461,11 @@ async function adminStatus(req, res) {
     safe(withNearRpc((url) => onchain.nearAccount(url, GAME_ACCOUNT))),
     safe(withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'get_config', {})))
   ]);
+  const game = await gameConfig();
   const out = {
     account: GAME_ACCOUNT, network: NEAR_NETWORK,
+    mode: game.mode, ready: game.ready, nearUsd: game.nearUsd, priceSource: game.priceSource, priceAt: game.priceAt,
+    manualNearUsd: (db.settings && db.settings.nearUsd) || null, directTreasury: TREASURY,
     exists: Boolean(account && !account.error),
     near: account && !account.error ? account.amount : null,
     deployed: Boolean(account && !account.error && account.code_hash && account.code_hash !== EMPTY_CODE),
@@ -396,6 +490,18 @@ async function adminStatus(req, res) {
     }
   }
   send(res, 200, out);
+}
+
+// Admin: manual NEAR/USD price, used only when no live price source answers.
+async function adminPrice(req, res) {
+  if (!adminOnly(req, res)) return;
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
+  const usd = String(body && body.nearUsd || '').trim();
+  if (usd && !D.packPricesRaw(usd, 24)) return send(res, 400, { error: 'Enter the USD price of 1 NEAR, for example 2.50.' });
+  db.settings.nearUsd = usd || null;
+  saveDb();
+  send(res, 200, { ok: true, nearUsd: db.settings.nearUsd });
 }
 
 async function balanceRoute(req, res) {
@@ -441,10 +547,11 @@ async function route(req, res) {
   let url;
   try { url = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost'); } catch { return send(res, 400, 'Bad request'); }
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, version: D.VERSION });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, adminAccounts: ADMIN_ACCOUNTS, version: D.VERSION });
   if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
   if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
   if (p === '/api/admin/status' && req.method === 'GET') return adminStatus(req, res);
+  if (p === '/api/admin/price' && req.method === 'POST') return adminPrice(req, res);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
   if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
   if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');
@@ -477,4 +584,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, db, resetGameCache: () => { gameCache = { at: 0, ttl: 0, value: null }; } };
+module.exports = { server, db, resetGameCache: () => { gameCache = { at: 0, ttl: 0, value: null }; price.reset(); } };

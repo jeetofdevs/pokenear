@@ -42,6 +42,19 @@
     var whole = v / base, frac = Number((v % base) * BigInt(100) / base);
     return whole.toLocaleString('en-US') + (frac ? '.' + String(frac).padStart(2, '0').replace(/0$/, '') : '');
   }
+  // Live NEAR amount for a pack (from the server's market quote), e.g. "4.0123"; null if unknown.
+  function nearQuote(p, n) {
+    var g = store.game;
+    if (store.mode !== 'live' || !g || !g.prices || g.prices.length < D.PACKS.length || store.isDev()) return null;
+    var i = D.PACKS.indexOf(p);
+    var raw = (BigInt(g.prices[i]) * BigInt(n || 1)).toString();
+    return fmtNear(raw);
+  }
+  function fmtNear(raw) {
+    var v = BigInt(raw), unit = BigInt(10) ** BigInt(24);
+    var frac = String(v % unit).padStart(24, '0').slice(0, 4).replace(/0+$/, '');
+    return (v / unit).toLocaleString('en-US') + (frac ? '.' + frac : '');
+  }
   function payReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready); }
   function buybackReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready && store.game.buyback); }
   function seriesOf(card) { return D.seriesById[card.series]; }
@@ -320,7 +333,7 @@
     var buttons = D.MULTI.map(function (n, i) {
       return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="rip" data-count="' + n + '"' + (payReady() ? '' : ' disabled') + '>' +
         '<span class="buy-name">Rip ' + n + (n > 1 ? ' cards' : ' card') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
-        '<small>' + COIN + 'Paid in ' + D.TOKEN + '</small></button>';
+        '<small>' + COIN + (nearQuote(p, n) ? '≈ ' + nearQuote(p, n) + ' NEAR now' : 'Paid in ' + D.TOKEN) + '</small></button>';
     }).join('');
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an open rip</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' card' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
@@ -459,9 +472,9 @@
       docSec('token', 'Paying with NEAR',
         '<p>Packs are paid in <b>NEAR</b>. There are no credits, points or off-chain balances: the balance in the top bar is the NEAR in your wallet.</p>' +
         '<ul class="doc-list">' +
-          '<li><b>How you pay.</b> Your wallet calls <code>rip</code> on the Pokenear contract ' + GA + ' with the pack price attached. One approval, one transaction.</li>' +
-          '<li><b>Where it goes.</b> The contract forwards every payment to the Pokenear treasury <code>' + esc(D.TREASURY) + '</code> in that same transaction.</li>' +
-          '<li><b>Exact price or refund.</b> The pack price in NEAR is stored in the contract and follows the NEAR price. If the amount does not match, or anything else is wrong, the transaction fails and your NEAR stays with you.</li>' +
+          '<li><b>Live price.</b> Packs are priced in USD. When you open one, the NEAR amount is taken from the live NEAR market price at that moment and locked for that rip, so $10 is always $10 of NEAR.</li>' +
+          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Pokenear treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Pokenear contract is live, a <code>rip</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
+          '<li><b>Exact amount.</b> The site always asks for the exact quoted amount. A payment with a different amount does not open the pack.</li>' +
           '<li><b>Buybacks</b> are paid in NEAR from ' + GA + ' straight to your wallet.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
@@ -472,6 +485,7 @@
           '<li><b>Draw.</b> Inside that transaction the contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores it under the seed. A seed can be drawn only once.</li>' +
           '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this rip, computes your cards with the public formula, and your browser computes them again to check.</li>' +
         '</ol>' +
+        '<p class="small"><b>Direct transfers.</b> When you pay with a plain transfer to <code>' + esc(D.TREASURY) + '</code>, the randomness is <code>sha256("pokenear-transfer:v1" || hash of the block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands, and the proof links the transaction so anyone can check it.</p>' +
         '<h3>The formula</h3>' +
         '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("pokenear-rip:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
         '<p class="muted small">The pack list is ordered by value, highest first, as on the pack page. The same code runs in the server and in your browser.</p>'),
@@ -505,7 +519,8 @@
           ['Can Pokenear change my card after I rip?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
           ['Can Pokenear see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The rip stays open: press Continue to pay and finish it, or Cancel rip to drop it.'],
-          ['What if I send the wrong amount?', 'The contract rejects it and the transaction fails, so your NEAR stays with you. The site always asks for the exact amount.'],
+          ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the rip and opens nothing, so always pay from the site.'],
+          ['Why does the NEAR amount change?', 'Packs are priced in USD. The NEAR amount follows the live NEAR market price and is locked when you open the pack.'],
           ['Why NEAR only?', 'Payments, randomness and buybacks all happen on NEAR, in one place you can verify.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
           ['How strong is NEAR randomness?', 'It comes from the validators of each block. It cannot be predicted by players or by Pokenear; in theory a block producer could withhold a block, which for card values like these costs far more than it could win.']
@@ -559,7 +574,7 @@
       '<span class="admin-pill ' + (done ? 'ok' : 'todo') + '">' + (done ? 'Done' : 'To do') + '</span></div>' + body + '</section>';
   }
   function adminHTML() {
-    if (!store.isAdmin()) return '<section class="panel">The admin page is only for ' + esc(D.GAME_ACCOUNT) + '.</section>';
+    if (!store.isAdmin()) return '<section class="panel">The admin page is only for ' + esc(D.ADMIN_ACCOUNTS.join(' and ')) + '.</section>';
     var a = adminState();
     if (!a.status && !a.loading && !a.error) setTimeout(loadAdmin, 0);
     var st = a.status;
@@ -569,40 +584,48 @@
     if (!st) return head + '<section class="panel muted">Reading ' + esc(D.GAME_ACCOUNT) + ' from NEAR…</section>';
     var busy = function (label) { return a.busy === label ? ' disabled' : ''; };
     var GA = '<code>' + esc(st.account) + '</code>';
-    var summary = '<section class="panel admin-summary">' +
+    var me = store.state.user.address;
+    var asGame = me === st.account;
+    var owner = st.config ? st.config.owner : D.CONTRACT_OWNER;
+    var canOwn = asGame || me === owner;
+    var needGame = '<p class="small">This step changes ' + GA + ' itself, so log in as <b>' + esc(st.account) + '</b> to do it.</p>';
+    var needOwner = '<p class="small">Log in as the contract owner <b>' + esc(owner) + '</b> or as ' + GA + ' to do this.</p>';
+    var modeLine = st.ready
+      ? '<section class="panel admin-live ok"><b>Packs are live.</b> ' + (st.mode === 'contract'
+          ? 'Players pay through the Pokenear contract on ' + esc(st.account) + '; payments go to ' + esc((st.config && st.config.treasury) || D.TREASURY) + '.'
+          : 'Players send NEAR straight to ' + esc(st.directTreasury) + ' (direct mode). Deploy the contract below to turn on buybacks.') + '</section>'
+      : '<section class="panel admin-live"><b>Packs are not open yet.</b> They open as soon as a NEAR price is available (step 2).</section>';
+    var summary = modeLine + '<section class="panel admin-summary">' +
       '<div class="stat"><b>' + (st.near ? fmtToken(st.near, 24) : '—') + '</b><span>NEAR on ' + esc(st.account) + ' (buybacks)</span></div>' +
       '<div class="stat"><b>' + (st.treasury && st.treasury.near ? fmtToken(st.treasury.near, 24) : '—') + '</b><span>NEAR on ' + esc(D.TREASURY) + ' (payments)</span></div>' +
-      '<div class="stat"><b>' + (st.config ? st.config.prices.length : 0) + '/' + D.PACKS.length + '</b><span>Pack prices on chain</span></div></section>';
+      '<div class="stat"><b>' + (st.nearUsd ? usd(st.nearUsd) : '—') + '</b><span>NEAR price now</span></div></section>';
 
     // 1. Contract
-    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","treasury":"' + D.TREASURY + '","prices":null}\'';
-    var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account),
+    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + D.CONTRACT_OWNER + '","treasury":"' + D.TREASURY + '","prices":null}\'';
+    var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
-        : (st.deployed
+        : !asGame ? needGame : (st.deployed
           ? '<p class="small">Code is deployed but not initialized.</p><button class="btn btn-gold" data-act="admin-init"' + busy('Initialize') + '>Initialize contract</button>'
           : '<p class="small">Deploys the Pokenear contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
             '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
             '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/pokenear_game.wasm" download>pokenear_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
 
-    // 2. Prices in NEAR + treasury
-    var cfg = st.config;
-    var priceRows = a.prices ? '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">NEAR per pack</th></tr></thead><tbody>' +
-      D.PACKS.map(function (p, i) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + usd(p.usd) + '</td><td class="num">' + fmtToken(a.prices[i], 24) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
-    var current = cfg && cfg.prices.length >= D.PACKS.length
-      ? '<p class="small">On chain now: ' + D.PACKS.map(function (p, i) { return esc(p.name.replace(' Pack', '')) + ' ' + fmtToken(cfg.prices[i], 24) + ' NEAR'; }).join(' · ') + '</p>' : '';
-    var s2 = adminStep(2, Boolean(cfg && cfg.prices.length >= D.PACKS.length), 'Pack prices in NEAR',
-      current +
-      '<div class="admin-form two"><label>USD price of 1 NEAR<input id="admin-usd" value="' + esc(a.usd) + '" placeholder="2.50" inputmode="decimal" autocomplete="off"></label>' +
-      '<button class="btn" data-act="admin-calc">Calculate</button></div>' + priceRows +
-      (a.prices ? '<button class="btn btn-gold" data-act="admin-save-prices"' + (st.initialized ? '' : ' disabled title="Deploy the contract first"') + busy('Save prices') + '>Save prices on chain</button>' : '') +
-      '<p class="muted small">Packs open for players as soon as prices are saved. Update them when the NEAR price moves, so packs stay at $10, $25, $50 and $100.</p>');
+    // 2. Live NEAR price (packs stay at their USD price)
+    var quote = st.nearUsd ? D.PACKS.map(function (p) { return esc(p.name.replace(' Pack', '')) + ' ' + usd(p.usd) + ' ≈ ' + (p.usd / st.nearUsd).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' NEAR'; }).join(' · ') : '';
+    var src = st.priceSource === 'manual' ? 'your backup price (live sources unreachable)' : st.priceSource === 'contract' ? 'fixed prices on the contract' : st.priceSource ? 'live market (' + esc(st.priceSource) + ')' : null;
+    var s2 = adminStep(2, Boolean(st.ready), 'Live NEAR price',
+      (st.nearUsd ? '<p class="small">1 NEAR = <b>' + usd(st.nearUsd) + '</b> from ' + src + '. Every rip is quoted at the price of that moment.</p><p class="muted small">' + quote + '</p>'
+        : '<p class="small err">No NEAR price yet: the live sources did not answer. Enter a backup price below so packs can open.</p>') +
+      '<div class="admin-form two"><label>Backup USD price of 1 NEAR (used only if live sources fail)<input id="admin-usd" value="' + esc(st.manualNearUsd || '') + '" placeholder="2.50" inputmode="decimal" autocomplete="off"></label>' +
+      '<button class="btn" data-act="admin-manual-price"' + busy('Backup price') + '>Save backup</button></div>');
 
     // 3. Treasury
+    var cfg = st.config;
     var tre = cfg && cfg.treasury;
-    var s3 = adminStep(3, tre === D.TREASURY, 'Payments go to ' + esc(D.TREASURY),
-      !st.initialized ? '<p class="muted small">Deploy the contract first.</p>'
+    var s3 = adminStep(3, st.initialized ? tre === D.TREASURY : st.directTreasury === D.TREASURY, 'Payments go to ' + esc(D.TREASURY),
+      !st.initialized ? '<p class="muted small">Direct mode: players send NEAR straight to <code>' + esc(st.directTreasury) + '</code>. After the contract is deployed it forwards every payment there.</p>'
         : tre === D.TREASURY ? '<p class="muted small">Every rip payment is forwarded to <code>' + esc(tre) + '</code> in the same transaction' + (st.treasury && st.treasury.exists === false ? '. <b class="err">That account does not exist on NEAR yet; payments would fail.</b>' : '.') + '</p>'
-        : '<p class="small">The contract sends payments to <code>' + esc(tre || '?') + '</code>. Switch it to <code>' + esc(D.TREASURY) + '</code>:</p><button class="btn btn-gold" data-act="admin-treasury"' + busy('Set treasury') + '>Set treasury with wallet</button>');
+        : '<p class="small">The contract sends payments to <code>' + esc(tre || '?') + '</code>. Switch it to <code>' + esc(D.TREASURY) + '</code>:</p>' + (canOwn ? '<button class="btn btn-gold" data-act="admin-treasury"' + busy('Set treasury') + '>Set treasury with wallet</button>' : needOwner));
 
     // 4. Buyback key
     var pk = st.payoutKey;
@@ -625,6 +648,7 @@
       s4body = '<p class="small">Buybacks are paid in NEAR by ' + GA + ' through a key that can only call payout(). Keep some NEAR on ' + GA + ' for them. Generate the key here; it is created in this browser.</p>' +
         '<button class="btn btn-gold" data-act="admin-genkey">Generate buyback key</button>';
     }
+    if (!keyDone && !asGame) s4body = '<p class="small">Buybacks are paid in NEAR by ' + GA + ' through a key that can only call payout().</p>' + needGame;
     var s4 = adminStep(4, keyDone, 'Buyback key (PAYOUT_KEY)', s4body);
     return head + summary + '<div class="admin-steps">' + s1 + s2 + s3 + s4 + '</div>';
   }
@@ -651,12 +675,18 @@
           a.busy = null;
           return adminTx('Deploy', { receiverId: GA, actions: [
             { type: 'deploy', code: new Uint8Array(buf) },
-            { type: 'call', method: 'new', args: { owner: GA, treasury: D.TREASURY, prices: a.prices || null }, gas: '100000000000000' }
+            { type: 'call', method: 'new', args: { owner: D.CONTRACT_OWNER, treasury: D.TREASURY, prices: null }, gas: '100000000000000' }
           ] });
         }).catch(function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
       case 'admin-init':
-        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, treasury: D.TREASURY, prices: a.prices || null } }] });
+        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: D.CONTRACT_OWNER, treasury: D.TREASURY, prices: null } }] });
+        break;
+      case 'admin-manual-price':
+        var v = (($('#admin-usd') || {}).value || '').trim().replace(',', '.');
+        if (v && !D.packPricesRaw(v, 24)) { toast('Enter the USD price of 1 NEAR, for example 2.50.', true); break; }
+        a.busy = 'Backup price'; render();
+        store.adminSetPrice(v).then(function () { a.busy = null; toast(v ? 'Backup price saved.' : 'Backup price cleared.'); loadAdmin(); }, function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
       case 'admin-save-prices':
         if (!a.prices) return;
@@ -837,9 +867,12 @@
       // The request may already be on chain: check first, ask the wallet only if nothing is there.
       ui.opening.status = 'checking';
       renderOverlay();
-      store.ripFinish({}).then(function (r) {
+      var returnedTx = ui.returnedTx;
+      ui.returnedTx = null;
+      store.ripFinish(returnedTx ? { tx: returnedTx } : {}).then(function (r) {
         if (!ui.opening) return;
         if (!r.pending) return deliverRip(r);
+        if (r.status === 'pending') { ui.opening.status = 'waiting'; renderOverlay(); return pollRip(0); }
         return askWallet();
       }).catch(ripError);
       return;
@@ -901,10 +934,10 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'pokenear-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev rip · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
+    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'pokenear-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev rip · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
-      (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + 'Interaction wallet' + '</a>' : '') : '';
+      (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';
     return '<div class="proof"><div class="proof-head"><span class="proof-src">' + esc(src) + '</span>' +
       '<span class="' + (ok ? 'proof-ok' : 'proof-bad') + '">' + (ok ? '✓ Verified in your browser' : '✗ Does not match') + '</span></div>' +
       '<dl><dt>Seed</dt><dd class="num">' + esc(proof.seed) + '</dd><dt>Randomness</dt><dd class="num">' + esc(proof.randomness) + '</dd></dl>' +
@@ -927,16 +960,19 @@
       var u = store.state.user;
       var live = store.mode === 'live' && !store.isDev();
       var walletName = u.wallet || A.CHAINS[u.chain].name;
+      var pay = store.pay;
+      var direct = !!(pay && pay.method === 'transfer');
       var steps = [
         [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
-          live ? 'Pay ' + usd(p.usd * o.count) + ' in ' + D.TOKEN : store.isDev() ? 'Dev wallet: no payment needed' : 'Demo: nothing is paid in this preview',
-          live ? (o.status === 'checking' ? 'Checking the chain for an earlier payment…' : 'Approve one transaction in ' + esc(walletName) + ' to ' + D.GAME_ACCOUNT + ' (plus a tiny NEAR gas fee)') : store.isDev() ? 'Rips from ' + esc(u.address) + ' are free and recorded as dev rips' : 'This preview is not connected to a chain'],
+          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Dev wallet: no payment needed' : 'Demo: nothing is paid in this preview',
+          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Rips from ' + esc(u.address) + ' are free and recorded as dev rips' : 'This preview is not connected to a chain'],
         [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Randomness drawn on chain',
-          o.status === 'slow' ? 'Taking longer than usual. Your rip is saved; check again in a moment.' : (live ? 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction' : store.isDev() ? 'Server randomness' : 'Browser randomness')]
+          o.status === 'slow' ? 'Taking longer than usual. Your rip is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
       ];
       var actions = '';
       if (o.status === 'error') {
         actions = '<button class="btn btn-gold" data-act="rip-retry">Try again</button><button class="btn" data-act="rip-refund">Cancel rip</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
+        if (live && direct) actions += '<div class="tx-paste"><span class="muted small">Already paid? Paste the transaction hash:</span><div class="ref-row"><input id="rip-tx" placeholder="Transaction hash" autocomplete="off"><button class="btn" data-act="rip-tx">Check</button></div><span class="muted small">Cancel only if you did not pay: a payment sent for a cancelled rip cannot be matched.</span></div>';
       } else if (o.status === 'slow') {
         actions = '<button class="btn btn-gold" data-act="rip-check">Check again</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
       }
@@ -1063,6 +1099,11 @@
       case 'rip-resume': resumeRip(); break;
       case 'rip-retry': askWallet(); break;
       case 'rip-check': ui.opening.status = 'waiting'; renderOverlay(); pollRip(0); break;
+      case 'rip-tx':
+        var txv = ($('#rip-tx') || {}).value || '';
+        if (!txv.trim()) break;
+        ui.opening.tx = txv.trim(); ui.opening.status = 'waiting'; ui.opening.error = null; renderOverlay(); pollRip(0);
+        break;
       case 'rip-later': ui.opening = null; renderOverlay(); render(); break;
       case 'rip-refund':
         store.ripCancel().then(function () { ui.opening = null; renderOverlay(); render(); toast('Rip cancelled. Nothing was paid.'); },
@@ -1157,6 +1198,16 @@
       }
       setRoute();
       refreshBalance();
+      // Back from a redirect wallet after paying: continue the open rip with that transaction.
+      try {
+        var q = new URLSearchParams(root.location.search);
+        var hashes = q.get('transactionHashes');
+        if (hashes && store.state.pendingRip) {
+          ui.returnedTx = hashes.split(',').pop();
+          root.history.replaceState(null, '', root.location.pathname + root.location.hash);
+          resumeRip();
+        }
+      } catch (e) { /* ignore */ }
     });
   }
 

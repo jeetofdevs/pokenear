@@ -129,6 +129,33 @@ async function nearAccessKey(rpcUrl, accountId, publicKey) {
   }
 }
 
+// A plain NEAR transfer, looked up by hash and sender. status: 'pending' (not final yet or not
+// found), 'failed', or 'ok' with { signer, receiver, deposit (one Transfer action), blockHash }.
+async function nearTransferTx(rpcUrl, txHash, senderId) {
+  let r;
+  try {
+    r = await rpc(rpcUrl, 'tx', { tx_hash: txHash, sender_account_id: senderId, wait_until: 'FINAL' });
+  } catch (err) {
+    if (/UNKNOWN_TRANSACTION|TIMEOUT|doesn't exist|not found|timeout/i.test(err.message)) return { status: 'pending' };
+    throw err;
+  }
+  const tx = r && r.transaction;
+  if (!tx || !r.transaction_outcome) return { status: 'pending' };
+  if (!r.status || !('SuccessValue' in r.status)) return { status: 'failed' };
+  const actions = tx.actions || [];
+  const transfer = actions.length === 1 && actions[0] && actions[0].Transfer;
+  return {
+    status: 'ok', signer: tx.signer_id, receiver: tx.receiver_id,
+    deposit: transfer ? String(transfer.deposit) : null, blockHash: r.transaction_outcome.block_hash
+  };
+}
+
+// Block header by hash: { height, timestampMs }.
+async function nearBlock(rpcUrl, blockHash) {
+  const r = await rpc(rpcUrl, 'block', { block_id: blockHash });
+  return { height: r.header.height, timestampMs: Math.floor(Number(r.header.timestamp) / 1e6) };
+}
+
 // Call a NEAR view method and parse its JSON result.
 async function nearView(rpcUrl, contractId, method, args) {
   const result = await rpc(rpcUrl, 'query', {
@@ -150,4 +177,4 @@ async function nearDraw(rpcUrl, contractId, seedHex) {
   };
 }
 
-module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearView, nearDraw, nearAccount, nearAccessKey };
+module.exports = { ORAO_PROGRAM, ORAO_SEED_PREFIX, DISC_V2, DISC_V1, isOnCurve, findProgramAddress, oraoRandomnessAddress, solanaRandomness, nearView, nearDraw, nearAccount, nearAccessKey, nearTransferTx, nearBlock };

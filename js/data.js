@@ -10,13 +10,15 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261017.8'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261017.9'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the Pokenear interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
   // chain (set_prices) and follows the NEAR price; the site never shows a fixed NEAR amount.
   var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
   var TREASURY = 'pokenear.near'; // receives every rip payment
+  var CONTRACT_OWNER = 'pokenear.near'; // owner of the Pokenear contract (prices, treasury)
+  var ADMIN_ACCOUNTS = ['pokenearfun.near', 'pokenear.near']; // wallets that see the admin page
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
 
   // On-chain pack prices for set_prices: each pack's USD price converted to the smallest unit
@@ -170,6 +172,8 @@
     TOKEN: TOKEN,
     GAME_ACCOUNT: GAME_ACCOUNT,
     TREASURY: TREASURY,
+    CONTRACT_OWNER: CONTRACT_OWNER,
+    ADMIN_ACCOUNTS: ADMIN_ACCOUNTS,
     packPricesRaw: packPricesRaw,
     VERSION: VERSION,
     EV_RATIO: EV_RATIO,

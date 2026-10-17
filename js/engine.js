@@ -135,6 +135,7 @@
         if (!(isHex(randomness, 32) || isHex(randomness, 64))) throw GameError('Bad randomness.');
         var cards = cardsFromRandomness(pr.pack, pr.count, randomness, pr.seed);
         var stored = { source: proof.source || pr.source, chain: pr.chain, seed: pr.seed, randomness: randomness, ref: proof.ref || null, tx: proof.tx || null, paid: proof.paid || pr.amount || null };
+        if (proof.block) stored.block = String(proof.block).slice(0, 60); // direct transfers: block whose hash seeded the draw
         var items = cards.map(function (card, k) {
           var item = { uid: state.nextUid++, id: card.id, pack: pr.pack, at: now, proof: stored, n: k };
           state.vault.push(item);

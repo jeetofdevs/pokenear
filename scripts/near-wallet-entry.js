@@ -43,8 +43,8 @@ async function signIn(walletId, params) {
   });
 }
 
-// Pay for a rip in NEAR: call rip({seed, pack, count}) on the Pokenear contract with the price
-// attached. The contract draws the randomness and forwards the NEAR to the treasury in the same
+// Pay for a rip in NEAR: either a plain transfer to the treasury (direct mode) or rip({seed, pack,
+// count}) on the Pokenear contract with the price attached. The contract draws the randomness and forwards the NEAR to the treasury in the same
 // transaction. Returns { tx }, or nothing when the wallet redirects away (the rip resumes on return).
 async function pay(walletId, params) {
   if (!selector) await init();
@@ -55,7 +55,9 @@ async function pay(walletId, params) {
   const outcome = await wallet.signAndSendTransaction({
     signerId,
     receiverId: params.receiverId,
-    actions: [actionCreators.functionCall(params.method || 'rip', params.args, BigInt('50000000000000'), BigInt(params.deposit))]
+    actions: [params.method === 'transfer'
+      ? actionCreators.transfer(BigInt(params.deposit))
+      : actionCreators.functionCall(params.method || 'rip', params.args, BigInt('50000000000000'), BigInt(params.deposit))]
   });
   if (!outcome) return null;
   return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };

@@ -2,8 +2,10 @@
 //!
 //! Deployed on the Pokenear interaction wallet (pokenearfun.near).
 //!
-//! Rip: the Pokenear server issues a one-time 32-byte `seed`. The player calls
-//! `rip({seed, pack, count})` attaching exactly the on-chain pack price x count in NEAR. The
+//! Rip: the Pokenear server issues a one-time 32-byte `seed` and quotes the price from the live NEAR
+//! price. The player calls `rip({seed, pack, count})` attaching that amount. If fixed prices are set
+//! on chain the amount must equal price x count; otherwise any amount >= MIN_RIP is accepted and the
+//! server checks it against its quote before giving cards. The
 //! contract mixes NEAR's protocol randomness (`env::random_seed()`) with the seed, the player and
 //! the block height, stores the draw under the seed, and forwards the NEAR to the treasury
 //! (pokenear.near) in the same transaction. Any check failing panics, so the player's NEAR is
@@ -19,6 +21,8 @@ use near_sdk::{env, near, require, AccountId, BorshStorageKey, Gas, NearToken, P
 
 /// Most cards one rip can buy.
 pub const MAX_PER_RIP: u8 = 5;
+/// Smallest rip payment when prices follow the live quote; also covers the draw's storage.
+pub const MIN_RIP: NearToken = NearToken::from_millinear(100);
 /// NEAR kept on the account on top of its storage stake, so payouts never break the contract.
 pub const RESERVE: NearToken = NearToken::from_millinear(500);
 const GAS_CALLBACK: Gas = Gas::from_tgas(10);
@@ -51,7 +55,7 @@ pub struct Pokenear {
     owner: AccountId,
     /// Where rip payments are forwarded (pokenear.near).
     treasury: AccountId,
-    /// Price of one card per pack, in yoctoNEAR. Index = pack. Empty = rips closed.
+    /// Fixed price of one card per pack, in yoctoNEAR. Index = pack. Empty = live quotes.
     prices: Vec<U128>,
     draws: LookupMap<String, Draw>,
     payouts: LookupSet<String>,
@@ -83,10 +87,12 @@ impl Pokenear {
 
     /* ---------- owner ---------- */
 
-    /// Set the price of one card for each pack, in yoctoNEAR.
+    /// Fix the price of one card for each pack, in yoctoNEAR. An empty list goes back to live quotes.
     pub fn set_prices(&mut self, prices: Vec<U128>) {
         self.assert_owner();
-        self.check_prices(&prices);
+        if !prices.is_empty() {
+            self.check_prices(&prices);
+        }
         self.prices = prices;
     }
 
@@ -133,9 +139,15 @@ impl Pokenear {
         let amount = env::attached_deposit().as_yoctonear();
         require!(is_seed(&seed), "seed must be 64 lowercase hex characters");
         require!(count >= 1 && count <= MAX_PER_RIP, "bad card count");
-        let price = self.prices.get(pack as usize).unwrap_or_else(|| env::panic_str("unknown pack")).0;
-        let due = price.checked_mul(count as u128).unwrap_or_else(|| env::panic_str("price overflow"));
-        require!(amount == due, "wrong amount for this pack");
+        if self.prices.is_empty() {
+            // Live-quoted prices: the server checks the exact amount; this only blocks dust spam.
+            require!(pack < 16, "unknown pack");
+            require!(amount >= MIN_RIP.as_yoctonear(), "attach at least 0.1 NEAR");
+        } else {
+            let price = self.prices.get(pack as usize).unwrap_or_else(|| env::panic_str("unknown pack")).0;
+            let due = price.checked_mul(count as u128).unwrap_or_else(|| env::panic_str("price overflow"));
+            require!(amount == due, "wrong amount for this pack");
+        }
         require!(!self.draws.contains_key(&seed), "seed already drawn");
 
         let account = env::predecessor_account_id();
@@ -307,11 +319,27 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "unknown pack")]
-    fn rips_are_closed_until_prices_are_set() {
+    fn without_fixed_prices_any_quote_is_accepted() {
         ctx(game(), 0, 7, 100);
         let mut c = Pokenear::new(game(), treasury(), None);
-        rip(&mut c, SEED_A, 0, 1, NEAR);
+        let d = rip(&mut c, SEED_A, 3, 5, 12_345 * NEAR / 1000);
+        assert_eq!(d.amount, U128(12_345 * NEAR / 1000));
+    }
+
+    #[test]
+    #[should_panic(expected = "attach at least 0.1 NEAR")]
+    fn dust_rips_are_refused() {
+        ctx(game(), 0, 7, 100);
+        let mut c = Pokenear::new(game(), treasury(), None);
+        rip(&mut c, SEED_A, 0, 1, NEAR / 100);
+    }
+
+    #[test]
+    fn prices_can_go_back_to_live_quotes() {
+        let mut c = setup();
+        ctx(game(), 0, 7, 100);
+        c.set_prices(vec![]);
+        assert_eq!(rip(&mut c, SEED_A, 0, 1, NEAR / 2).amount, U128(NEAR / 2));
     }
 
     #[test]

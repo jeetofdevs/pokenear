@@ -681,3 +681,6 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
   .admin-summary { grid-template-columns: 1fr; }
   .admin-form { grid-template-columns: 1fr; }
 }
+.admin-live { border-color: var(--line); }
+.admin-live.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok) 8%, var(--panel)); }
+.tx-paste { display: grid; gap: 8px; width: 100%; margin-top: 6px; text-align: left; }

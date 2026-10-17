@@ -39,6 +39,9 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
   const paid = new Set(); // payout ref_ids
   const sent = []; // decoded payout calls
   let contract = null; // get_config result; null = not deployed
+  let priceUsd = null; // live NEAR/USD from the mock price feed; null = feed down
+  const txs = {}; // hash -> { signer, receiver, deposit, ok, blockHash }
+  const blocks = {}; // hash -> timestamp ms
   const payout = keypair();
   const payoutPub = 'ed25519:' + auth.base58Encode(payout.raw);
   const payoutKey = 'ed25519:' + auth.base58Encode(Buffer.concat([payout.privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32), payout.raw]));
@@ -48,9 +51,23 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (req.url === '/price') {
+        res.writeHead(priceUsd ? 200 : 503, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(priceUsd ? { usd: priceUsd } : { error: 'down' }));
+      }
       const { method, params } = JSON.parse(body);
       const reply = (x) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(x)); };
       const view = (v) => reply({ result: { result: [...Buffer.from(JSON.stringify(v))] } });
+      if (method === 'tx') {
+        const t = txs[params.tx_hash];
+        if (!t || t.signer !== params.sender_account_id) return reply({ error: { name: 'HANDLER_ERROR', cause: { name: 'UNKNOWN_TRANSACTION' } } });
+        return reply({ result: {
+          status: t.ok ? { SuccessValue: '' } : { Failure: { ActionError: {} } },
+          transaction: { signer_id: t.signer, receiver_id: t.receiver, actions: [{ Transfer: { deposit: t.deposit } }] },
+          transaction_outcome: { block_hash: t.blockHash, id: params.tx_hash }
+        } });
+      }
+      if (method === 'block') return reply({ result: { header: { height: 77, timestamp: String(BigInt(blocks[params.block_id]) * 1000000n) } } });
       if (method === 'broadcast_tx_commit') {
         const tx = Buffer.from(params[0], 'base64');
         const bodyBytes = tx.subarray(0, tx.length - 65);
@@ -86,7 +103,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
   });
   const rpcPort = await listen(rpc);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pokenear-'));
-  Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, PAYOUT_KEY: payoutKey, DB_FILE: path.join(dir, 'db.json') });
+  Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, NEAR_PRICE_URL: `http://127.0.0.1:${rpcPort}/price`, PAYOUT_KEY: payoutKey, DB_FILE: path.join(dir, 'db.json') });
   const srv = require('../server/server.js');
   const { server } = srv;
   const port = await listen(server);
@@ -134,6 +151,41 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const closed = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
     assert.equal(closed.status, 503);
     assert.match(closed.body.error, /Packs open soon/);
+
+    // Direct mode (no contract yet): the live NEAR price opens packs; players send NEAR to pokenear.near.
+    priceUsd = 2.5;
+    srv.resetGameCache();
+    const cfgD = (await get('/api/config')).body.game;
+    assert.deepEqual([cfgD.mode, cfgD.ready, cfgD.treasury, cfgD.nearUsd, cfgD.buyback], ['direct', true, TREASURY, 2.5, false]);
+    assert.equal(cfgD.prices[0], String(4n * UNIT));
+    const ds = await post('/api/rip/start', { pack: 'rare', count: 1 }, bob);
+    assert.equal(ds.status, 200, JSON.stringify(ds.body));
+    assert.deepEqual(ds.body.pay, { method: 'transfer', receiver: TREASURY, deposit: String(10n * UNIT) });
+    const dseed = ds.body.rip.seed;
+    assert.equal((await post('/api/rip/finish', {}, bob)).status, 202); // no transaction yet
+    const hash = () => auth.base58Encode(crypto.randomBytes(32));
+    const blockHash = hash(), oldBlock = hash();
+    blocks[blockHash] = Date.now() + 1000; blocks[oldBlock] = Date.now() - 3600e3;
+    const pay = (o) => { const h = hash(); txs[h] = { signer: 'bob.near', receiver: TREASURY, deposit: String(10n * UNIT), ok: true, blockHash, ...o }; return h; };
+    assert.equal((await post('/api/rip/finish', { tx: 'not-a-hash' }, bob)).status, 400);
+    assert.equal((await post('/api/rip/finish', { tx: hash() }, bob)).status, 202); // not on chain yet
+    assert.match((await post('/api/rip/finish', { tx: pay({ receiver: 'mallory.near' }) }, bob)).body.error, /not the payment for this rip/);
+    assert.match((await post('/api/rip/finish', { tx: pay({ deposit: String(9n * UNIT) }) }, bob)).body.error, /not the payment/);
+    assert.match((await post('/api/rip/finish', { tx: pay({ ok: false }) }, bob)).body.error, /failed on NEAR/);
+    assert.match((await post('/api/rip/finish', { tx: pay({ blockHash: oldBlock }) }, bob)).body.error, /before this rip started/);
+    const good = pay();
+    const df = await post('/api/rip/finish', { tx: good }, bob);
+    assert.equal(df.status, 200, JSON.stringify(df.body));
+    const expectRand = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('pokenear-transfer:v1'), Buffer.from(auth.base58Decode(blockHash)), Buffer.from(dseed, 'hex')])).digest('hex');
+    const dItem = df.body.result.items[0];
+    assert.deepEqual(dItem.proof, { source: 'near-transfer', chain: 'near', seed: dseed, randomness: expectRand, ref: TREASURY, tx: good, paid: String(10n * UNIT), block: blockHash });
+    assert.equal(dItem.id, engine.cardsFromRandomness('rare', 1, expectRand, dseed)[0].id);
+    // The same transaction cannot open a second rip.
+    await post('/api/rip/start', { pack: 'rare', count: 1 }, bob);
+    assert.match((await post('/api/rip/finish', { tx: good }, bob)).body.error, /already used/);
+    assert.equal((await post('/api/rip/cancel', {}, bob)).status, 200);
+    // Buyback needs the contract.
+    assert.equal((await post('/api/buyback', { uids: [dItem.uid] }, bob)).status, 503);
 
     // Launch: the owner sets NEAR prices on pokenearfun.near (NEAR at $2.50: $10 = 4 NEAR).
     contract = { owner: GAME, treasury: TREASURY, prices: ['4', '10', '20', '40'].map((x) => String(BigInt(x) * UNIT)), max_per_rip: 5, currency: 'NEAR' };
@@ -186,7 +238,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.deepEqual(Object.keys(sent[0].args), ['receiver_id', 'amount', 'ref_id']);
     assert.equal(sent[0].args.receiver_id, 'bob.near');
     assert.equal(sent[0].args.amount, expected.toString());
-    assert.equal(sold.body.state.vault.length, 3);
+    assert.equal(sold.body.state.vault.length, 4);
     assert.equal((await post('/api/buyback', { uids: sell }, bob)).status, 400); // already sold
 
     // Dev wallet: rips without paying, recorded like any rip; buyback records without a payout.
@@ -205,8 +257,15 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(devSell.status, 200);
     assert.equal(devSell.body.result.payout.dev, true);
     assert.equal(sent.length, 1); // no payout transaction for the dev wallet
-    // Admin endpoints answer only the interaction wallet.
+    // Admin endpoints answer only the admin wallets (pokenearfun.near, pokenear.near).
     assert.equal((await get('/api/admin/status', bob)).status, 403);
+    const owner = (await nearLogin(register(TREASURY), TREASURY)).cookie;
+    const admOwner = await get('/api/admin/status', owner);
+    assert.equal(admOwner.status, 200);
+    assert.equal(admOwner.body.mode, 'contract');
+    assert.equal((await post('/api/admin/price', { nearUsd: 'abc' }, owner)).status, 400);
+    assert.equal((await post('/api/admin/price', { nearUsd: '3.10' }, owner)).body.nearUsd, '3.10');
+    assert.equal((await post('/api/admin/price', { nearUsd: '3.10' }, bob)).status, 403);
     const adm = await get('/api/admin/status', dev);
     assert.equal(adm.status, 200, JSON.stringify(adm.body));
     assert.equal(adm.body.account, GAME);
@@ -221,6 +280,14 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     contract = null;
     srv.resetGameCache();
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, dev)).status, 200);
+    // Players fall back to direct transfers to the treasury.
+    const fallback = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
+    assert.equal(fallback.body.pay.method, 'transfer');
+    assert.equal((await post('/api/rip/cancel', {}, bob)).status, 200);
+    // No live price and no backup price: packs close for players.
+    priceUsd = null;
+    await post('/api/admin/price', { nearUsd: '' }, owner);
+    srv.resetGameCache();
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 503);
 
     // HOT / Meteor sign without callbackUrl even though the page sends one; redirect wallets may sign it.
@@ -231,7 +298,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const forged = await nearLogin(nk, 'bob.near', { sent: page, signed: 'https://evil.example/' });
     assert.equal(forged.status, 401);
     assert.match(forged.body.error, /NEAR wallet signature did not match/);
-    assert.equal((await get('/api/me', bob)).body.state.vault.length, 3); // signing again keeps progress
+    assert.equal((await get('/api/me', bob)).body.state.vault.length, 4); // signing again keeps progress
 
     // Reused nonce, key not on the account, implicit accounts.
     const n1 = await nonce();

@@ -38,6 +38,7 @@
             store.game = cfg.game || null;
             store.chains = cfg.chains || ['near'];
             store.devAccounts = cfg.devAccounts || [];
+            store.adminAccounts = cfg.adminAccounts || null;
             store.serverVersion = cfg.version || null;
             return fetchJSON('api/me').then(function (me) {
               store.state = (me && me.state && engine.migrate(me.state)) || engine.emptyState();
@@ -152,13 +153,14 @@
       return store.dispatch({ type: 'buyback', uids: uids });
     },
 
-    // Admin page: only the interaction wallet itself (pokenearfun.near), live mode.
+    // Admin page: only the admin wallets (pokenearfun.near, pokenear.near), live mode.
     isAdmin: function () {
       var u = store.state.user;
-      var account = (store.game && store.game.account) || root.PN.data.GAME_ACCOUNT;
-      return store.mode === 'live' && !!u && u.chain === 'near' && u.address === account;
+      var admins = store.adminAccounts || root.PN.data.ADMIN_ACCOUNTS;
+      return store.mode === 'live' && !!u && u.chain === 'near' && admins.indexOf(u.address) >= 0;
     },
     adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
+    adminSetPrice: function (nearUsd) { return postJSON('api/admin/price', { nearUsd: nearUsd }); },
 
     // Dev wallet (pokenearfun.near): rips without paying, recorded as dev rips.
     isDev: function () {
