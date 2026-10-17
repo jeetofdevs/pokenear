@@ -1,13 +1,13 @@
 # Pokenear
 
-On-chain Pokémon TCG gacha on NEAR: packs are paid in `$POKENEAR` (CA `pokenear.nearlytrade.near`) to the interaction wallet **pokenearfun.near**, whose contract draws the randomness in the same transaction.
+On-chain Pokémon TCG gacha on NEAR: packs are paid in **NEAR** through the contract on **pokenearfun.near**, which draws the randomness and forwards every payment to the treasury **pokenear.near** in the same transaction.
 
-Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 96% (paid in `$POKENEAR` by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: the only currency is the token in the player's wallet.
+Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep cards in a vault or sell them back for 96% (paid in NEAR by pokenearfun.near). Every card is derived from the on-chain draw and re-checked in the browser. There are no credits, points, invites or daily rewards: players pay with the NEAR in their wallet.
 
 ## Features
 
 - **NEAR wallet sign-in**: HOT, Meteor, MyNearWallet, Sender, Intear via NEAR Wallet Selector (bundled in `vendor/near-wallet.js`). The wallet signs a NEP-413 message (no transaction, no fee); the server verifies it and checks the key is a full-access key of the account.
-- **Tiered packs, one card per rip**, priced in USD and paid in `$POKENEAR`. Each tier has its own value band so every pack has different chase cards:
+- **Tiered packs, one card per rip**, priced in USD and paid in NEAR (the NEAR amount is set on chain and follows the NEAR price). Each tier has its own value band so every pack has different chase cards:
 
   | Pack | Price | Card values in pool |
   | --- | --- | --- |
@@ -17,15 +17,15 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
   | Legend | $100 | $34 – $320 |
 
 - **Published odds for every card.** Each card gets weight `value^-k`; `k` is solved so the pack's expected value is 98% of its price (`EV_RATIO`).
-- **Buyback at 96%** (`BUYBACK_RATE`) of a card's value, paid on chain from pokenearfun.near at the same rate as the pack prices.
+- **Buyback at 96%** (`BUYBACK_RATE`) of a card's value, paid in NEAR from pokenearfun.near at the same rate as the pack prices.
 - **Dev wallet**: `pokenearfun.near` (`DEV_ACCOUNTS`) rips without paying; its rips use server randomness and are recorded like any other (vault, history, ranks, database), marked as dev rips.
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen). Every Pokémon has artwork: dream-world sprites up to Gen 5, PokeAPI official artwork for newer Pokémon (`npm run build:cards` downloads it once into `.cache/`).
 - **Docs** at `#docs` and a leaderboard by vault value. Official X: [@pokenearfun](https://x.com/pokenearfun).
 
 ## Payments and on-chain RNG
 
-1. `POST /api/rip/start` issues a one-time 32-byte `seed` and returns what to pay: `{ token, receiver: pokenearfun.near, amount, msg: {seed, pack, count} }`. Prices come from the contract (`get_config`).
-2. The player's wallet calls `ft_transfer_call` on the `$POKENEAR` token to pokenearfun.near with that `msg`. The contract's `ft_on_transfer` (contracts/near-rng) checks the token and the exact amount (`price[pack] × count`), mixes `env::random_seed()` with the seed, the player and the block height, and stores the draw. Any mismatch panics, so the token refunds the player in the same transaction.
+1. `POST /api/rip/start` issues a one-time 32-byte `seed` and returns what to pay: `{ method: 'rip', receiver: pokenearfun.near, deposit, args: {seed, pack, count} }`. Prices (yoctoNEAR) come from the contract (`get_config`).
+2. The player's wallet calls `rip({seed, pack, count})` on pokenearfun.near with exactly `price[pack] × count` NEAR attached. The contract mixes `env::random_seed()` with the seed, the player and the block height, stores the draw, and forwards the NEAR to the treasury **pokenear.near** in the same transaction. Any mismatch panics, so the player's NEAR is returned.
 3. `POST /api/rip/finish` reads `get_draw(seed)` (202 until it exists), checks it was this player's payment for this pack and count, and derives the cards:
 
    ```
@@ -34,36 +34,24 @@ Players connect a NEAR wallet, rip Pokémon card packs with published odds, keep
    ```
 
 4. The browser re-derives the cards and shows the proof with NearBlocks links. `POST /api/rip/cancel` drops a rip only while nothing was paid for its seed.
-5. `POST /api/buyback` sends `payout(receiver, amount, ref_id)` to pokenearfun.near, signed with `PAYOUT_KEY` (a function-call key limited to `payout`, signed by `server/near-tx.js` without dependencies). Each `ref_id` pays once; cards leave the vault only after the payout succeeds.
+5. `POST /api/buyback` sends `payout(receiver, amount, ref_id)` to pokenearfun.near, signed with `PAYOUT_KEY` (a function-call key limited to `payout`). The contract pays NEAR from its own balance (keeping its storage stake plus 0.5 NEAR), each `ref_id` pays once, and cards leave the vault only after the payout succeeds.
 
 ### Launch from the admin page (no terminal)
 
 Log in to the site with **pokenearfun.near** and open **Admin** (`#admin`, only shown to that wallet). Each step is one transaction your wallet approves; the server never holds the wallet's keys:
 
-1. **Deploy** the Pokenear contract (if your wallet cannot deploy from a website, the page shows the one CLI command instead).
-2. **CA and prices**: enter the `$POKENEAR` CA and the USD price of one token, check it, save. Packs open for players right away.
-3. **Register** pokenearfun.near with the token so it can receive payments.
-4. **Buyback key**: generated in your browser and shown once. Paste it into your hosting as `PAYOUT_KEY`, approve adding it (it can only call `payout`), redeploy.
+1. **Deploy** the Pokenear contract (treasury pokenear.near is set at deploy). If your wallet cannot deploy from a website, the page shows the one CLI command instead.
+2. **Prices**: enter the USD price of 1 NEAR, calculate, save. Packs open for players right away. Update when the NEAR price moves.
+3. **Treasury**: shows that payments go to pokenear.near (and can switch it if needed).
+4. **Buyback key**: generated in your browser and shown once. Paste it into your hosting as `PAYOUT_KEY`, approve adding it (it can only call `payout`), redeploy. Keep NEAR on pokenearfun.near for buybacks.
 
-### Launch checklist with the CLI (alternative)
-
-```bash
-node scripts/near-commands.js <TOKEN_CA> <USD_PER_TOKEN> [decimals]   # prints every command below with real values
-```
-
-1. Deploy `contracts/near-rng/res/pokenear_game.wasm` on pokenearfun.near with `new({owner, token, prices})`.
-2. Register pokenearfun.near with the token (`storage_deposit`) so it can receive `$POKENEAR`.
-3. Later price or CA changes: `set_prices` / `set_token` (owner only). The site picks them up within a minute.
-4. Buyback: run `npm run payout-key` on the server. It creates the key locally, writes `PAYOUT_KEY` to `.env` (secret never printed) and prints the `near add-key` command that lets this key call `payout` only on pokenearfun.near.
-5. Keep some NEAR on pokenearfun.near: each draw is stored in contract state (about 0.003 NEAR) and payouts pay gas.
-
-Until the token is set, players see "Packs open when $POKENEAR is live"; the dev wallet can rip anyway.
+CLI alternative: `node scripts/near-commands.js <USD_PER_NEAR>` prints the same steps as NEAR CLI commands.
 
 Contract tests and build:
 
 ```bash
 cd contracts/near-rng
-cargo +stable test                                       # 14 unit tests
+cargo +stable test                                       # 15 unit tests
 cargo build --release --target wasm32-unknown-unknown    # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/pokenear_game.wasm
 ```
 
@@ -89,7 +77,7 @@ The server runs on Node 18+ and has no runtime dependencies (no `npm install` ne
 
 Opened as static files (no server), the site runs in **demo mode**: rips are free and use browser randomness, progress stays in the browser, and a "demo wallet" button lets people try it without a wallet.
 
-Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle, including the `ft_transfer_call` payment).
+Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle, including the `rip` payment).
 
 ## Brand
 
@@ -124,7 +112,7 @@ Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header
 | `server/server.js`, `server/wallet-verify.js` | Static files, wallet sign-in and signature checks, game API |
 | `server/onchain.js` | NEAR view calls: contract config, draws, token metadata and balances |
 | `server/near-tx.js` | Dependency-free NEAR transaction signer for buyback payouts |
-| `contracts/near-rng/` | Pokenear contract for pokenearfun.near: `$POKENEAR` payments, randomness, payouts (Rust, near-sdk 5.11) |
+| `contracts/near-rng/` | Pokenear contract for pokenearfun.near: NEAR payments forwarded to pokenear.near, randomness, payouts (Rust, near-sdk 5.11) |
 | `tests/` | `node --test` suites |
 
 ## Notes before launch
@@ -133,6 +121,6 @@ Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header
 - The logo uses the NEAR symbol. Check the NEAR Foundation brand guidelines before using it publicly, and avoid implying an official partnership.
 
 - `data/db.json` is fine for a pilot. Move to a real database before large traffic.
-- Each rip costs the player the pack price in `$POKENEAR` plus NEAR gas; draw storage is paid from pokenearfun.near's NEAR balance.
+- Each rip costs the player the pack price in NEAR plus gas; draw storage is paid from pokenearfun.near's NEAR balance.
 - NEAR's `random_seed` comes from block producers; a producer could in theory withhold a block. Fine for these card values; use a VRF oracle on NEAR if stakes grow.
-- Solana sign-in and the ORAO VRF code (`server/onchain.js`, `scripts/solana-vrf-entry.js`) are kept but switched off, since `$POKENEAR` lives on NEAR.
+- Solana sign-in and the ORAO VRF code (`server/onchain.js`, `scripts/solana-vrf-entry.js`) are kept but switched off, since payments run on NEAR.

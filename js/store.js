@@ -144,7 +144,7 @@
       return store.dispatch({ type: 'ripCancel' });
     },
 
-    // Sell cards back. Live: the interaction wallet pays $POKENEAR on chain before the cards leave.
+    // Sell cards back. Live: the interaction wallet pays NEAR on chain before the cards leave.
     buyback: function (uids) {
       if (store.mode === 'live') {
         return postJSON('api/buyback', { uids: uids }).then(function (b) { store.state = b.state; store.emit(); return b.result; });
@@ -159,7 +159,6 @@
       return store.mode === 'live' && !!u && u.chain === 'near' && u.address === account;
     },
     adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
-    adminToken: function (ca) { return fetchJSONOrError('api/admin/token?ca=' + encodeURIComponent(ca)); },
 
     // Dev wallet (pokenearfun.near): rips without paying, recorded as dev rips.
     isDev: function () {
@@ -167,7 +166,7 @@
       return store.mode === 'live' && !!u && store.devAccounts.indexOf(u.address) >= 0;
     },
 
-    // On-chain $POKENEAR balance of the signed-in wallet: { amount, decimals } or null.
+    // On-chain NEAR balance of the signed-in wallet: { amount, decimals } or null.
     balance: function () {
       if (store.mode !== 'live' || !store.state.user) return Promise.resolve(null);
       return fetchJSON('api/balance').catch(function () { return null; });

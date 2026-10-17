@@ -1,9 +1,10 @@
 'use strict';
 /* Pokenear server: static files + NEAR wallet sign-in + authoritative game API.
    No runtime dependencies. Sign-in is a signed message with a one-time nonce.
-   Rips are paid in $POKENEAR (NEP-141) to the interaction wallet (GAME_ACCOUNT, pokenearfun.near),
-   whose contract draws the randomness in the same transaction; the server reads it back.
-   Buybacks are paid by that contract, called with a function-call key (PAYOUT_KEY).
+   Rips are paid in NEAR: the player calls rip() on the interaction wallet's contract (GAME_ACCOUNT,
+   pokenearfun.near) with the pack price attached; it draws the randomness and forwards the NEAR to
+   the treasury (pokenear.near) in the same transaction. The server reads the draw back.
+   Buybacks are paid in NEAR by that contract, called with a function-call key (PAYOUT_KEY).
    Game state lives in a JSON file (DB_FILE). */
 const http = require('node:http');
 const fs = require('node:fs');
@@ -38,15 +39,15 @@ async function withNearRpc(fn) {
   }
   throw last;
 }
-// Interaction wallet running contracts/near-rng. The $POKENEAR contract address (CA) and the pack
-// prices are read from it (set_token / set_prices), so launching needs no server change.
+// Interaction wallet running contracts/near-rng. Pack prices (yoctoNEAR) and the treasury are read
+// from it (set_prices / set_treasury), so launching needs no server change.
 const GAME_ACCOUNT = process.env.GAME_ACCOUNT || D.GAME_ACCOUNT;
 // Function-call access key of GAME_ACCOUNT allowed to call payout() only. Empty = buyback closed.
 const PAYOUT_KEY = process.env.PAYOUT_KEY || '';
 // Dev wallets rip without paying (server randomness), still recorded like any rip.
 const DEV_ACCOUNTS = (process.env.DEV_ACCOUNTS || D.GAME_ACCOUNT).split(',').map((a) => a.trim()).filter(Boolean);
 const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_ACCOUNTS.includes(st.user.address));
-// $POKENEAR lives on NEAR, so sign-in is NEAR only.
+// Payments, randomness and buybacks are on NEAR, so sign-in is NEAR only.
 const CHAINS = ['near'];
 
 const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/pokenear_game.wasm']);
@@ -145,7 +146,7 @@ async function walletLogin(req, res) {
   const issued = nonces.get(nonce);
   nonces.delete(nonce);
   if (!issued || Date.now() - issued > NONCE_TTL) return send(res, 400, { error: 'Sign-in expired. Try again.' });
-  if (!CHAINS.includes(chain)) return send(res, 400, { error: 'Sign in with a NEAR wallet. ' + D.TOKEN + ' lives on NEAR.' });
+  if (!CHAINS.includes(chain)) return send(res, 400, { error: 'Sign in with a NEAR wallet.' });
 
   let address;
   if (chain === 'solana') {
@@ -197,33 +198,31 @@ async function gameConfig() {
   let value;
   try {
     const cfg = await withNearRpc((url) => onchain.nearView(url, GAME_ACCOUNT, 'get_config', {}));
-    const token = (cfg && cfg.token) || null;
-    const meta = token ? await withNearRpc((url) => onchain.nearView(url, token, 'ft_metadata', {})) : null;
     const prices = ((cfg && cfg.prices) || []).map(String);
     value = {
-      account: GAME_ACCOUNT, token, symbol: (meta && meta.symbol) || null, decimals: meta ? Number(meta.decimals) : null,
+      account: GAME_ACCOUNT, treasury: (cfg && cfg.treasury) || null, currency: 'NEAR', decimals: 24,
       prices, maxPerRip: (cfg && cfg.max_per_rip) || 5,
-      ready: Boolean(token && meta && prices.length >= D.PACKS.length), buyback: Boolean(PAYOUT_KEY)
+      ready: prices.length >= D.PACKS.length, buyback: Boolean(PAYOUT_KEY)
     };
     gameCache = { at: Date.now(), ttl: 60000, value };
   } catch (err) {
     console.warn('[game-config]', err.message);
-    value = { account: GAME_ACCOUNT, token: null, symbol: null, decimals: null, prices: [], ready: false, buyback: false, error: 'not deployed' };
+    value = { account: GAME_ACCOUNT, treasury: null, currency: 'NEAR', decimals: 24, prices: [], ready: false, buyback: false, error: 'not deployed' };
     gameCache = { at: Date.now(), ttl: 15000, value };
   }
   return value;
 }
-const notReady = () => ({ error: 'Packs open when ' + D.TOKEN + ' is live. Follow @' + D.X_HANDLE + ' for the launch.' });
+const notReady = () => ({ error: 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
 
 /* ---------- on-chain rips ----------
-   start:  reserve a one-time seed. The player pays with ft_transfer_call on the $POKENEAR token to
-           GAME_ACCOUNT with msg {seed, pack, count}; the contract checks the price and draws the
-           randomness in that same transaction (a wrong amount is refunded by the token).
+   start:  reserve a one-time seed. The player calls rip({seed, pack, count}) on GAME_ACCOUNT with the
+           price attached in NEAR; the contract checks the price, draws the randomness and forwards
+           the NEAR to the treasury in that same transaction (a wrong amount is refunded).
    finish: read the draw from chain, check it is this player's payment for this rip, derive the cards.
    cancel: drop the rip, only while nothing was paid for its seed. */
 function payFor(game, pr) {
   const pack = D.PACKS.findIndex((p) => p.id === pr.pack);
-  return { token: game.token, receiver: GAME_ACCOUNT, amount: pr.amount, msg: JSON.stringify({ seed: pr.seed, pack, count: pr.count }) };
+  return { method: 'rip', receiver: GAME_ACCOUNT, deposit: pr.amount, args: { seed: pr.seed, pack, count: pr.count } };
 }
 
 async function ripRoute(req, res, step) {
@@ -291,7 +290,7 @@ async function ripRoute(req, res, step) {
 }
 
 /* ---------- buyback ----------
-   The card value x BUYBACK_RATE is converted to $POKENEAR at the on-chain Starter Pack rate
+   The card value x BUYBACK_RATE is converted to NEAR at the on-chain Starter Pack rate
    (prices[0] for $PACKS[0].usd), then GAME_ACCOUNT.payout() sends it. ref_id makes it pay once. */
 const selling = new Set();
 async function buybackRoute(req, res) {
@@ -313,7 +312,7 @@ async function buybackRoute(req, res) {
     return send(res, 200, { state: out.state, result: out.result });
   }
   const game = await gameConfig();
-  if (!game.ready || !game.buyback) return send(res, 503, { error: 'Buyback opens when ' + D.TOKEN + ' is live.' });
+  if (!game.ready || !game.buyback) return send(res, 503, { error: 'Buyback opens soon.' });
   if (selling.has(uid)) return send(res, 409, { error: 'A sale is already in progress.' });
   const cents = BigInt(Math.round(dry.result.usd * 100));
   const amount = BigInt(game.prices[0]) * cents / BigInt(D.PACKS[0].usd * 100);
@@ -350,7 +349,7 @@ async function buybackRoute(req, res) {
 }
 
 /* ---------- admin (interaction wallet only) ----------
-   Read-only status for the #admin page. Every change (deploy, CA, prices, keys) is a transaction
+   Read-only status for the #admin page. Every change (deploy, prices, keys) is a transaction
    the interaction wallet signs in the browser; the server never holds that wallet's keys. */
 const EMPTY_CODE = '11111111111111111111111111111111';
 function adminOnly(req, res) {
@@ -378,20 +377,13 @@ async function adminStatus(req, res) {
     deployed: Boolean(account && !account.error && account.code_hash && account.code_hash !== EMPTY_CODE),
     initialized: Boolean(config && !config.error),
     config: config && !config.error ? config : null,
-    token: null,
+    treasury: null,
     payoutKey: { configured: Boolean(PAYOUT_KEY), publicKey: null, onChain: false }
   };
-  const token = out.config && out.config.token;
-  if (token) {
-    const [meta, bal, storage] = await Promise.all([
-      safe(withNearRpc((url) => onchain.nearView(url, token, 'ft_metadata', {}))),
-      safe(withNearRpc((url) => onchain.nearView(url, token, 'ft_balance_of', { account_id: GAME_ACCOUNT }))),
-      safe(withNearRpc((url) => onchain.nearView(url, token, 'storage_balance_of', { account_id: GAME_ACCOUNT })))
-    ]);
-    out.token = {
-      id: token, symbol: meta && meta.symbol, decimals: meta && !meta.error ? Number(meta.decimals) : null,
-      balance: bal && !bal.error ? String(bal) : null, registered: Boolean(storage && !storage.error)
-    };
+  const treasury = out.config && out.config.treasury;
+  if (treasury) {
+    const t = await safe(withNearRpc((url) => onchain.nearAccount(url, treasury)));
+    out.treasury = { id: treasury, exists: Boolean(t && !t.error), near: t && !t.error ? t.amount : null };
   }
   if (PAYOUT_KEY) {
     try {
@@ -406,29 +398,13 @@ async function adminStatus(req, res) {
   send(res, 200, out);
 }
 
-// Token metadata for a CA typed on the admin page (decimals are needed to compute prices).
-async function adminToken(req, res, url) {
-  if (!adminOnly(req, res)) return;
-  const ca = String(url.searchParams.get('ca') || '').trim();
-  if (!auth.isNearAccount(ca)) return send(res, 400, { error: 'That is not a NEAR contract address.' });
-  try {
-    const meta = await withNearRpc((u) => onchain.nearView(u, ca, 'ft_metadata', {}));
-    if (!meta || meta.decimals == null) return send(res, 400, { error: 'No fungible token found at ' + ca + '.' });
-    send(res, 200, { id: ca, name: meta.name, symbol: meta.symbol, decimals: Number(meta.decimals), icon: meta.icon || null });
-  } catch (err) {
-    send(res, 400, { error: 'No fungible token found at ' + ca + '.' });
-  }
-}
-
 async function balanceRoute(req, res) {
   const uid = currentUserId(req);
   const st = uid && db.users[uid];
   if (!st) return send(res, 401, { error: 'Connect your wallet first.' });
-  const game = await gameConfig();
-  if (!game.token) return send(res, 200, { amount: null, decimals: null });
   try {
-    const amount = await withNearRpc((url) => onchain.nearView(url, game.token, 'ft_balance_of', { account_id: st.user.address }));
-    return send(res, 200, { amount: String(amount || '0'), decimals: game.decimals, symbol: game.symbol });
+    const acc = await withNearRpc((url) => onchain.nearAccount(url, st.user.address));
+    return send(res, 200, { amount: acc ? String(acc.amount) : '0', decimals: 24, symbol: 'NEAR' });
   } catch (err) {
     return send(res, 502, { error: 'Could not read your balance.' });
   }
@@ -469,7 +445,6 @@ async function route(req, res) {
   if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
   if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
   if (p === '/api/admin/status' && req.method === 'GET') return adminStatus(req, res);
-  if (p === '/api/admin/token' && req.method === 'GET') return adminToken(req, res, url);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
   if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
   if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');

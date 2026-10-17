@@ -2,7 +2,7 @@
 name = "pokenear-game"
 version = "0.1.0"
 edition = "2021"
-description = "Pokenear: $POKENEAR payments, on-chain randomness and buyback payouts on NEAR"
+description = "Pokenear: NEAR payments, on-chain randomness and buyback payouts"
 publish = false
 rust-version = "1.81"
 

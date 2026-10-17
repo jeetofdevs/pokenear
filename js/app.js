@@ -42,10 +42,6 @@
     var whole = v / base, frac = Number((v % base) * BigInt(100) / base);
     return whole.toLocaleString('en-US') + (frac ? '.' + String(frac).padStart(2, '0').replace(/0$/, '') : '');
   }
-  // Official $POKENEAR CA with a copy button (landing, footer, docs).
-  function caChipHTML(extra) {
-    return '<button class="ca-chip' + (extra ? ' ' + extra : '') + '" data-act="copy-ca" title="Copy the ' + D.TOKEN + ' contract address"><span class="ca-label">CA</span><code>' + esc(D.TOKEN_CA) + '</code><span class="ca-copy">Copy</span></button>';
-  }
   function payReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready); }
   function buybackReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready && store.game.buyback); }
   function seriesOf(card) { return D.seriesById[card.series]; }
@@ -266,8 +262,8 @@
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in ' + D.TOKEN + ' to ' + D.GAME_ACCOUNT + '. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
-      caChipHTML('small') + '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
+    return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in NEAR. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
+      '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
 
@@ -299,7 +295,6 @@
         '<h1>Rip real <span class="gold">Pokémon</span> cards. Sell back instantly.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
-        caChipHTML() +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
     '</section>' +
@@ -311,7 +306,7 @@
     '<section class="panel"><div class="steps">' +
       step(1, 'Connect a NEAR wallet', 'HOT, Meteor, MyNearWallet, Sender or Intear. One signature, no transaction, no fee.') +
       step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
-      step(3, 'Pay in ' + D.TOKEN, 'One transaction pays ' + D.GAME_ACCOUNT + ' and draws your card\'s randomness on chain.') +
+      step(3, 'Pay in NEAR', 'One transaction pays for the pack and draws your card\'s randomness on chain.') +
       step(4, 'Keep or sell back', 'Hold the card in your vault or sell it for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value, paid in ' + D.TOKEN + '.') +
     '</div></section>' +
     '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(starter.name) + ' odds</h2><span class="muted">Every pack publishes its full card list</span></div>' + packStatsHTML(starter) + oddsHTML(starter) + '</section>';
@@ -330,7 +325,7 @@
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an open rip</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' card' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
       '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel rip</button></div></section>' : '';
-    var launch = store.isDev() ? '<p class="demo-note gold-note">Dev wallet ' + esc(st.user.address) + ': rips need no payment and are recorded as dev rips.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">' + D.TOKEN + '</div><h2>Packs open when ' + D.TOKEN + ' is live</h2></div>' +
+    var launch = store.isDev() ? '<p class="demo-note gold-note">Dev wallet ' + esc(st.user.address) + ': rips need no payment and are recorded as dev rips.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
         '<div class="daily-right"><a class="btn btn-gold" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + 'Follow @' + D.X_HANDLE + '</a></div></section>';
     return openRip + launch +
       '<section class="panel pull-stage">' +
@@ -338,7 +333,7 @@
         '<div class="pull-info">' +
           '<div><div class="eyebrow">Pokémon TCG · ' + p.pool.length + ' cards from ' + usd(p.min) + ' to ' + usd(p.top[0].usd) + ' · ' + (st.pulls[p.id] || 0) + ' ripped</div><h2>' + esc(p.name) + '</h2></div>' +
           '<div class="pull-buttons">' + buttons + '</div>' +
-          (store.mode === 'local' ? '<p class="demo-note">Preview: rips are free here and use browser randomness. On the live site you pay in ' + D.TOKEN + ' and the randomness comes from ' + D.GAME_ACCOUNT + ' on NEAR.</p>' : '') +
+          (store.mode === 'local' ? '<p class="demo-note">Preview: rips are free here and use browser randomness. On the live site you pay in NEAR and the randomness is drawn on chain in that payment.</p>' : '') +
           packStatsHTML(p) +
           '<div><div class="eyebrow" style="margin-bottom:10px">Top hits</div><div class="chase-row">' +
             p.top.slice(0, 6).map(function (c) { return slotHTML(c, { chance: chanceOf(p, c.id) }); }).join('') + '</div></div>' +
@@ -375,7 +370,7 @@
             var c = D.cardById[it.id];
             return '<div class="slot vault-item"><button data-act="zoom" data-id="' + c.id + '" data-uid="' + it.uid + '" aria-label="' + esc(c.name) + '">' + cardHTML(c) + '</button>' +
               '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
-              '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens when ' + D.TOKEN + ' is live"') + '>Sell back ' + buybackUsd([c]) + '</button></div>';
+              '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens soon"') + '>Sell back ' + buybackUsd([c]) + '</button></div>';
           }).join('') + '</div>'
         : '<div class="panel empty">Your vault is empty. <a href="#packs">Rip a pack</a> to pull your first card.</div>');
   }
@@ -443,7 +438,7 @@
         '<ol class="doc-list">' +
           '<li><b>Connect a NEAR wallet.</b> HOT, Meteor, MyNearWallet, Sender or Intear. You sign one message to prove the wallet is yours. That message is not a transaction and costs nothing.</li>' +
           '<li><b>Pick a pack.</b> Four tiers from ' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + '. Every card in the pack and its exact chance is listed before you buy.</li>' +
-          '<li><b>Pay in ' + D.TOKEN + '.</b> Your wallet sends one transaction to the Pokenear interaction wallet ' + GA + '. The same transaction draws your randomness on chain.</li>' +
+          '<li><b>Pay in NEAR.</b> Your wallet sends one transaction with the pack price to the Pokenear contract ' + GA + '. The same transaction draws your randomness on chain.</li>' +
           '<li><b>Keep or sell.</b> Cards go to your vault. Sell any card back for ' + BB + ' of its value, paid in ' + D.TOKEN + ' to your wallet.</li>' +
         '</ol>'),
       docSec('packs', 'Packs and prices',
@@ -461,19 +456,19 @@
           return '<tr><td>' + esc(r) + '</td>' + rarityRows.map(function (x) { return '<td class="num">' + (x.by[r] ? fmtChance(x.by[r]) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>' +
         '<p class="muted small">Every rip is independent. There is no pity timer and no hidden adjustment: the odds you see are the odds the code uses, and the randomness comes from the chain.</p>'),
-      docSec('token', 'Paying with ' + D.TOKEN,
-        '<p><b>' + D.TOKEN + '</b> is a fungible token on NEAR and the only currency of Pokenear. There are no credits, points or off-chain balances: the balance in the top bar is what your wallet holds.</p>' +
+      docSec('token', 'Paying with NEAR',
+        '<p>Packs are paid in <b>NEAR</b>. There are no credits, points or off-chain balances: the balance in the top bar is the NEAR in your wallet.</p>' +
         '<ul class="doc-list">' +
-          '<li><b>Where payments go.</b> Every pack is paid to the Pokenear interaction wallet ' + GA + '. It runs the Pokenear contract, which checks the payment and draws the randomness.</li>' +
-          '<li><b>How you pay.</b> Your wallet calls <code>ft_transfer_call</code> on the ' + D.TOKEN + ' token with ' + GA + ' as receiver and the rip details as the message. One approval, one transaction.</li>' +
-          '<li><b>Exact price or refund.</b> The pack price in ' + D.TOKEN + ' is stored in the contract. If the amount does not match, or anything else is wrong, the contract rejects the transfer and the token returns your ' + D.TOKEN + ' in the same transaction.</li>' +
-          '<li><b>Contract address.</b> The official ' + D.TOKEN + ' CA is <code>' + esc(D.TOKEN_CA) + '</code> on NEAR. It is also announced on <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a>. Only trust this address.</li>' +
+          '<li><b>How you pay.</b> Your wallet calls <code>rip</code> on the Pokenear contract ' + GA + ' with the pack price attached. One approval, one transaction.</li>' +
+          '<li><b>Where it goes.</b> The contract forwards every payment to the Pokenear treasury <code>' + esc(D.TREASURY) + '</code> in that same transaction.</li>' +
+          '<li><b>Exact price or refund.</b> The pack price in NEAR is stored in the contract and follows the NEAR price. If the amount does not match, or anything else is wrong, the transaction fails and your NEAR stays with you.</li>' +
+          '<li><b>Buybacks</b> are paid in NEAR from ' + GA + ' straight to your wallet.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
         '<p>Nobody at Pokenear picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
         '<ol class="doc-list">' +
           '<li><b>Seed.</b> When you rip, the server gives you a one-time 32-byte <code>seed</code>. It is shown in the rip proof.</li>' +
-          '<li><b>Pay.</b> Your wallet sends the ' + D.TOKEN + ' payment with that seed to ' + GA + '. The server never holds your keys and cannot pay for you.</li>' +
+          '<li><b>Pay.</b> Your wallet calls <code>rip</code> on ' + GA + ' with that seed and the pack price in NEAR. The server never holds your keys and cannot pay for you.</li>' +
           '<li><b>Draw.</b> Inside that transaction the contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores it under the seed. A seed can be drawn only once.</li>' +
           '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this rip, computes your cards with the public formula, and your browser computes them again to check.</li>' +
         '</ol>' +
@@ -495,14 +490,14 @@
       docSec('fees', 'Fees',
         '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Action</th><th>You pay</th></tr></thead><tbody>' +
           '<tr><td>Connect wallet</td><td>Nothing (message signature)</td></tr>' +
-          '<tr><td>Rip 1 or 5 cards</td><td>The pack price in ' + D.TOKEN + ', plus NEAR gas (a fraction of a cent) and 1 yoctoNEAR required by the token standard</td></tr>' +
+          '<tr><td>Rip 1 or 5 cards</td><td>The pack price in NEAR, plus NEAR gas (a fraction of a cent)</td></tr>' +
           '<tr><td>Sell back</td><td>Nothing. ' + D.GAME_ACCOUNT + ' pays the gas</td></tr>' +
         '</tbody></table></div>'),
       docSec('security', 'Wallet safety',
         '<ul class="doc-list">' +
           '<li>Sign-in is one plain-text message with a one-time code. It never asks for a transaction, approval or seed phrase.</li>' +
-          '<li>The only transaction Pokenear asks for is <code>ft_transfer_call</code> on the ' + D.TOKEN + ' token to ' + GA + '. Check both before you approve.</li>' +
-          '<li>Pokenear will never DM you, ask for your seed phrase, or ask you to send tokens to any other address.</li>' +
+          '<li>The only transaction Pokenear asks for is <code>rip</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
+          '<li>Pokenear will never DM you, ask for your seed phrase, or ask you to send NEAR or tokens to any address.</li>' +
           '<li>The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
         '</ul>'),
       docSec('faq', 'FAQ',
@@ -510,8 +505,8 @@
           ['Can Pokenear change my card after I rip?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
           ['Can Pokenear see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The rip stays open: press Continue to pay and finish it, or Cancel rip to drop it.'],
-          ['What if I send the wrong amount?', 'The contract rejects it and the token refunds you in the same transaction. The site always asks for the exact amount.'],
-          ['Why NEAR only?', D.TOKEN + ' is a NEAR token, so payments, randomness and buybacks all happen on NEAR.'],
+          ['What if I send the wrong amount?', 'The contract rejects it and the transaction fails, so your NEAR stays with you. The site always asks for the exact amount.'],
+          ['Why NEAR only?', 'Payments, randomness and buybacks all happen on NEAR, in one place you can verify.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
           ['How strong is NEAR randomness?', 'It comes from the validators of each block. It cannot be predicted by players or by Pokenear; in theory a block producer could withhold a block, which for card values like these costs far more than it could win.']
         ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
@@ -522,7 +517,8 @@
   }
 
   /* ---------- admin (interaction wallet only) ----------
-     Every change is a transaction pokenearfun.near approves in its own wallet; the payout key
+     Every change is a transaction pokenearfun.near approves in its own wallet: deploy, NEAR pack
+     prices, the treasury that receives payments, and the buyback key. The payout key
      is generated in this browser and shown once so it can be pasted into the hosting settings. */
   var ADMIN_KEY_STORE = 'pokenear:admin-new-key';
   var YOCTO = '000000000000000000000000';
@@ -531,7 +527,7 @@
     if (!ui.admin) {
       var saved = null;
       try { saved = JSON.parse(root.sessionStorage.getItem(ADMIN_KEY_STORE) || 'null'); } catch (e) { saved = null; }
-      ui.admin = { status: null, loading: false, error: null, token: null, ca: D.TOKEN_CA, usd: '', prices: null, newKey: saved, busy: null };
+      ui.admin = { status: null, loading: false, error: null, usd: '', prices: null, newKey: saved, busy: null };
     }
     return ui.admin;
   }
@@ -540,7 +536,6 @@
     a.loading = true; a.error = null; render();
     return store.adminStatus().then(function (st) {
       a.status = st; a.loading = false;
-      if (st.config && st.config.token && a.ca === D.TOKEN_CA) a.ca = st.config.token;
       render();
     }, function (e) { a.loading = false; a.error = e.message; render(); });
   }
@@ -575,12 +570,12 @@
     var busy = function (label) { return a.busy === label ? ' disabled' : ''; };
     var GA = '<code>' + esc(st.account) + '</code>';
     var summary = '<section class="panel admin-summary">' +
-      '<div class="stat"><b>' + (st.near ? fmtToken(st.near, 24) : '—') + '</b><span>NEAR on ' + esc(st.account) + '</span></div>' +
-      '<div class="stat"><b>' + (st.token && st.token.balance != null ? fmtToken(st.token.balance, st.token.decimals) : '—') + '</b><span>' + D.TOKEN + ' for buybacks</span></div>' +
+      '<div class="stat"><b>' + (st.near ? fmtToken(st.near, 24) : '—') + '</b><span>NEAR on ' + esc(st.account) + ' (buybacks)</span></div>' +
+      '<div class="stat"><b>' + (st.treasury && st.treasury.near ? fmtToken(st.treasury.near, 24) : '—') + '</b><span>NEAR on ' + esc(D.TREASURY) + ' (payments)</span></div>' +
       '<div class="stat"><b>' + (st.config ? st.config.prices.length : 0) + '/' + D.PACKS.length + '</b><span>Pack prices on chain</span></div></section>';
 
     // 1. Contract
-    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","token":"' + D.TOKEN_CA + '","prices":null}\'';
+    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + st.account + '","treasury":"' + D.TREASURY + '","prices":null}\'';
     var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account),
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
         : (st.deployed
@@ -589,24 +584,25 @@
             '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
             '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/pokenear_game.wasm" download>pokenear_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
 
-    // 2. CA + prices
-    var cur = st.config && st.config.token;
-    var priceRows = a.prices && a.token ? '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">' + esc(a.token.symbol || 'Token') + ' per pack</th></tr></thead><tbody>' +
-      D.PACKS.map(function (p, i) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + usd(p.usd) + '</td><td class="num">' + fmtToken(a.prices[i], a.token.decimals) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
-    var s2 = adminStep(2, Boolean(cur && st.config.prices.length >= D.PACKS.length), D.TOKEN + ' contract address and prices',
-      (cur && cur !== D.TOKEN_CA ? '<p class="err small">The contract uses ' + esc(cur) + ', but the website shows ' + esc(D.TOKEN_CA) + ' as the official CA. Save the official CA below.</p>' : '') +
-      (cur ? '<p class="small">Current CA: <code>' + esc(cur) + '</code>' + (st.token ? ' (' + esc(st.token.symbol || '?') + ', ' + st.token.decimals + ' decimals)' : '') + '</p>' : '') +
-      '<div class="admin-form"><label>CA (token contract)<input id="admin-ca" value="' + esc(a.ca) + '" placeholder="' + esc(D.TOKEN_CA) + '" autocomplete="off"></label>' +
-      '<label>USD price of 1 ' + D.TOKEN + '<input id="admin-usd" value="' + esc(a.usd) + '" placeholder="0.01" inputmode="decimal" autocomplete="off"></label>' +
-      '<button class="btn" data-act="admin-check">Check token</button></div>' + priceRows +
-      (a.prices ? '<button class="btn btn-gold" data-act="admin-save-token"' + (st.initialized ? '' : ' disabled title="Deploy the contract first"') + busy('Save CA and prices') + '>Save CA and prices on chain</button>' : '') +
-      '<p class="muted small">Packs open for players as soon as this is saved. Change prices again any time the token price moves.</p>');
+    // 2. Prices in NEAR + treasury
+    var cfg = st.config;
+    var priceRows = a.prices ? '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">NEAR per pack</th></tr></thead><tbody>' +
+      D.PACKS.map(function (p, i) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + usd(p.usd) + '</td><td class="num">' + fmtToken(a.prices[i], 24) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
+    var current = cfg && cfg.prices.length >= D.PACKS.length
+      ? '<p class="small">On chain now: ' + D.PACKS.map(function (p, i) { return esc(p.name.replace(' Pack', '')) + ' ' + fmtToken(cfg.prices[i], 24) + ' NEAR'; }).join(' · ') + '</p>' : '';
+    var s2 = adminStep(2, Boolean(cfg && cfg.prices.length >= D.PACKS.length), 'Pack prices in NEAR',
+      current +
+      '<div class="admin-form two"><label>USD price of 1 NEAR<input id="admin-usd" value="' + esc(a.usd) + '" placeholder="2.50" inputmode="decimal" autocomplete="off"></label>' +
+      '<button class="btn" data-act="admin-calc">Calculate</button></div>' + priceRows +
+      (a.prices ? '<button class="btn btn-gold" data-act="admin-save-prices"' + (st.initialized ? '' : ' disabled title="Deploy the contract first"') + busy('Save prices') + '>Save prices on chain</button>' : '') +
+      '<p class="muted small">Packs open for players as soon as prices are saved. Update them when the NEAR price moves, so packs stay at $10, $25, $50 and $100.</p>');
 
-    // 3. Register with the token
-    var s3 = adminStep(3, Boolean(st.token && st.token.registered), 'Register ' + esc(st.account) + ' with the token',
-      st.token ? (st.token.registered ? '<p class="muted small">' + esc(st.account) + ' can receive ' + esc(st.token.symbol || D.TOKEN) + '.</p>'
-        : '<p class="small">Lets ' + GA + ' receive ' + D.TOKEN + ' payments (0.0125 NEAR storage deposit, mostly refunded if already registered).</p><button class="btn btn-gold" data-act="admin-register"' + busy('Register') + '>Register with wallet</button>')
-        : '<p class="muted small">Save the CA first.</p>');
+    // 3. Treasury
+    var tre = cfg && cfg.treasury;
+    var s3 = adminStep(3, tre === D.TREASURY, 'Payments go to ' + esc(D.TREASURY),
+      !st.initialized ? '<p class="muted small">Deploy the contract first.</p>'
+        : tre === D.TREASURY ? '<p class="muted small">Every rip payment is forwarded to <code>' + esc(tre) + '</code> in the same transaction' + (st.treasury && st.treasury.exists === false ? '. <b class="err">That account does not exist on NEAR yet; payments would fail.</b>' : '.') + '</p>'
+        : '<p class="small">The contract sends payments to <code>' + esc(tre || '?') + '</code>. Switch it to <code>' + esc(D.TREASURY) + '</code>:</p><button class="btn btn-gold" data-act="admin-treasury"' + busy('Set treasury') + '>Set treasury with wallet</button>');
 
     // 4. Buyback key
     var pk = st.payoutKey;
@@ -626,24 +622,18 @@
         '<p class="small"><b>3.</b> Redeploy the server, then press Refresh. When the server sees the key this step turns green.</p>' +
         '<button class="btn btn-ghost btn-sm" data-act="admin-forget">I saved it, hide the secret</button>';
     } else {
-      s4body = '<p class="small">Buybacks are paid by ' + GA + ' through a key that can only call payout(). Generate it here; it is created in this browser.</p>' +
+      s4body = '<p class="small">Buybacks are paid in NEAR by ' + GA + ' through a key that can only call payout(). Keep some NEAR on ' + GA + ' for them. Generate the key here; it is created in this browser.</p>' +
         '<button class="btn btn-gold" data-act="admin-genkey">Generate buyback key</button>';
     }
     var s4 = adminStep(4, keyDone, 'Buyback key (PAYOUT_KEY)', s4body);
     return head + summary + '<div class="admin-steps">' + s1 + s2 + s3 + s4 + '</div>';
   }
-  function adminCheckToken() {
+  function adminCalc() {
     var a = adminState();
-    a.ca = ($('#admin-ca') || {}).value ? $('#admin-ca').value.trim() : '';
-    a.usd = ($('#admin-usd') || {}).value ? $('#admin-usd').value.trim() : '';
-    a.token = null; a.prices = null;
-    if (!a.ca) return toast('Enter the CA.', true);
-    store.adminToken(a.ca).then(function (t) {
-      a.token = t;
-      a.prices = D.packPricesRaw(a.usd, t.decimals);
-      if (!a.prices) toast('Enter the USD price of 1 ' + D.TOKEN + ', for example 0.01.', true);
-      render();
-    }, function (e) { toast(e.message, true); render(); });
+    a.usd = ($('#admin-usd') || {}).value ? $('#admin-usd').value.trim().replace(',', '.') : '';
+    a.prices = D.packPricesRaw(a.usd, 24);
+    if (!a.prices) toast('Enter the USD price of 1 NEAR, for example 2.50.', true);
+    render();
   }
   function adminAction(act, el) {
     var a = adminState();
@@ -651,7 +641,7 @@
     var GA = st && st.account;
     switch (act) {
       case 'admin-refresh': loadAdmin(); break;
-      case 'admin-check': adminCheckToken(); break;
+      case 'admin-calc': adminCalc(); break;
       case 'admin-deploy':
         a.busy = 'Deploy'; render();
         fetch('contracts/near-rng/res/pokenear_game.wasm').then(function (r) {
@@ -661,22 +651,19 @@
           a.busy = null;
           return adminTx('Deploy', { receiverId: GA, actions: [
             { type: 'deploy', code: new Uint8Array(buf) },
-            { type: 'call', method: 'new', args: { owner: GA, token: a.token ? a.token.id : D.TOKEN_CA, prices: a.prices || null }, gas: '100000000000000' }
+            { type: 'call', method: 'new', args: { owner: GA, treasury: D.TREASURY, prices: a.prices || null }, gas: '100000000000000' }
           ] });
         }).catch(function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
       case 'admin-init':
-        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, token: D.TOKEN_CA, prices: null } }] });
+        adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: GA, treasury: D.TREASURY, prices: a.prices || null } }] });
         break;
-      case 'admin-save-token':
-        if (!a.token || !a.prices) return;
-        adminTx('Save CA and prices', { receiverId: GA, actions: [
-          { type: 'call', method: 'set_token', args: { token: a.token.id } },
-          { type: 'call', method: 'set_prices', args: { prices: a.prices } }
-        ] });
+      case 'admin-save-prices':
+        if (!a.prices) return;
+        adminTx('Save prices', { receiverId: GA, actions: [{ type: 'call', method: 'set_prices', args: { prices: a.prices } }] });
         break;
-      case 'admin-register':
-        adminTx('Register', { receiverId: st.token.id, actions: [{ type: 'call', method: 'storage_deposit', args: { account_id: GA, registration_only: true }, deposit: STORAGE_DEPOSIT }] });
+      case 'admin-treasury':
+        adminTx('Set treasury', { receiverId: GA, actions: [{ type: 'call', method: 'set_treasury', args: { treasury: D.TREASURY } }] });
         break;
       case 'admin-genkey':
         W.adminKeyPair().then(function (k) {
@@ -746,7 +733,7 @@
     }).join('');
     $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal wallet-modal" id="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
       '<div class="modal-title">' + WALLET_SVG + '<h2 id="connect-title">Connect wallet</h2></div>' +
-      '<p class="muted small">' + D.TOKEN + ' lives on NEAR, so Pokenear uses NEAR wallets. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
+      '<p class="muted small">Pokenear runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
       '<section><div class="eyebrow">' + CHAIN_BADGE.near + ' NEAR</div><ul class="wallet-list">' + near + '</ul></section>' +
       '<div class="err" id="connect-err" role="alert"></div>' +
       (store.mode === 'local' ? '<div class="demo-wallet"><span class="muted small">No wallet in this browser? This preview can use a throwaway demo address.</span><button class="btn btn-sm" data-act="wallet-demo">Use demo wallet</button></div>' : '') +
@@ -811,7 +798,7 @@
   }
 
   /* ---------- rip ---------- */
-  /* A rip: reserve a seed -> pay in $POKENEAR from the player's wallet (the contract draws the
+  /* A rip: reserve a seed -> pay in NEAR from the player's wallet (the contract draws the
      randomness in that transaction) -> server reads the draw -> cards. */
   function startRip(count) {
     if (ui.busy) return;
@@ -1042,7 +1029,7 @@
     });
   }
 
-  // On-chain $POKENEAR balance for the top bar (live mode).
+  // On-chain NEAR balance for the top bar (live mode).
   function refreshBalance() {
     store.balance().then(function (b) { ui.balance = b; if (!ui.opening) render(); });
   }
@@ -1057,9 +1044,6 @@
     if (act.indexOf('admin-') === 0) { adminAction(act, el); return; }
     switch (act) {
       case 'connect': openConnect(); break;
-      case 'copy-ca':
-        try { navigator.clipboard.writeText(D.TOKEN_CA).then(function () { toast('CA copied: ' + D.TOKEN_CA); }, function () { toast(D.TOKEN_CA); }); } catch (err) { toast(D.TOKEN_CA); }
-        break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
       case 'wallet-demo': signIn('near', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;

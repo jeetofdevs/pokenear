@@ -1,6 +1,6 @@
 /* Pokenear game engine. Pure state transitions, no DOM and no storage.
    The browser runs it locally in demo mode; the Node server runs the same
-   code authoritatively. Payments are real $POKENEAR transfers checked on chain by the
+   code authoritatively. Payments are real NEAR transfers checked on chain by the
    server, so the state holds no balance. */
 (function (root) {
   'use strict';
@@ -33,7 +33,7 @@
     };
   }
 
-  // v6 replaced demo credits with real $POKENEAR payments: keep the wallet, start a fresh vault.
+  // v6 replaced demo credits with real on-chain payments: keep the wallet, start a fresh vault.
   function migrate(old) {
     if (!old || old.v === 6) return old;
     var st = emptyState();

@@ -1,6 +1,6 @@
 /* Entry for vendor/near-wallet.js (bundled by `npm run build:near`).
    Exposes window.PNNear: a thin wrapper around NEAR Wallet Selector for sign-in (signMessage)
-   and for paying rips in $POKENEAR (ft_transfer_call to the Pokenear interaction wallet). */
+   and for paying rips in NEAR (rip() on the Pokenear contract, forwarded to the treasury). */
 import { Buffer } from 'buffer';
 import { setupWalletSelector, actionCreators } from '@near-wallet-selector/core';
 import { setupHotWallet } from '@near-wallet-selector/hot-wallet';
@@ -43,9 +43,9 @@ async function signIn(walletId, params) {
   });
 }
 
-// Pay for a rip: ft_transfer_call on the $POKENEAR token to the Pokenear interaction wallet,
-// whose contract checks the price and draws the randomness in the same transaction.
-// Returns { tx }, or nothing when the wallet redirects away (MyNearWallet); the rip resumes on return.
+// Pay for a rip in NEAR: call rip({seed, pack, count}) on the Pokenear contract with the price
+// attached. The contract draws the randomness and forwards the NEAR to the treasury in the same
+// transaction. Returns { tx }, or nothing when the wallet redirects away (the rip resumes on return).
 async function pay(walletId, params) {
   if (!selector) await init();
   const wallet = await selector.wallet(walletId);
@@ -54,8 +54,8 @@ async function pay(walletId, params) {
   const signerId = params.accountId || (accounts[0] && accounts[0].accountId);
   const outcome = await wallet.signAndSendTransaction({
     signerId,
-    receiverId: params.tokenId,
-    actions: [actionCreators.functionCall('ft_transfer_call', { receiver_id: params.receiverId, amount: params.amount, msg: params.msg }, BigInt('100000000000000'), BigInt(1))]
+    receiverId: params.receiverId,
+    actions: [actionCreators.functionCall(params.method || 'rip', params.args, BigInt('50000000000000'), BigInt(params.deposit))]
   });
   if (!outcome) return null;
   return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };

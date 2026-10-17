@@ -671,6 +671,7 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
 .admin-step p { margin: 0; }
 .admin-step code { font-family: var(--f-mono); font-size: 0.9em; word-break: break-all; }
 .admin-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.admin-form.two { grid-template-columns: minmax(0, 320px) auto; }
 .admin-form label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .admin-form input, .ref-row input { min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); color: var(--text); font: 14px var(--f-mono); min-width: 0; }
 .ref-row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -680,14 +681,3 @@ button.pack-tile:hover .bw-sheen, .big-pack .bw-sheen { animation-duration: 1.8s
   .admin-summary { grid-template-columns: 1fr; }
   .admin-form { grid-template-columns: 1fr; }
 }
-
-/* ---------- official CA chip ---------- */
-.ca-chip { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; padding: 8px 8px 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; font: 700 14px/1 var(--f-body); }
-.ca-chip:hover { border-color: var(--gold); }
-.ca-chip .ca-label { color: var(--gold); font-weight: 900; letter-spacing: 0.06em; }
-.ca-chip code { font: 600 14px/1.2 var(--f-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.ca-chip .ca-copy { flex: none; padding: 6px 10px; border-radius: 999px; background: var(--gold); color: #1a1300; font-size: 12px; font-weight: 800; }
-.hero .ca-chip { justify-self: start; align-self: flex-start; }
-.ca-chip.small { padding: 4px 4px 4px 10px; font-size: 12px; }
-.ca-chip.small code { font-size: 12px; }
-.ca-chip.small .ca-copy { padding: 4px 8px; font-size: 11px; }

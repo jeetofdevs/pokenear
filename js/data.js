@@ -9,18 +9,18 @@
 (function (root) {
   'use strict';
 
-  var TOKEN = '$POKENEAR';
-  var VERSION = '20261017.7'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var TOKEN = 'NEAR'; // payment currency shown on the site
+  var VERSION = '20261017.8'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
-  // Packs are priced in US dollars and paid in $POKENEAR (a NEAR token) to the Pokenear
-  // interaction wallet. The $POKENEAR amount of each pack is set on chain in that wallet's
-  // contract at launch; the site never shows a fixed token amount.
+  // Packs are priced in US dollars and paid in NEAR through the Pokenear interaction wallet's
+  // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
+  // chain (set_prices) and follows the NEAR price; the site never shows a fixed NEAR amount.
   var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
-  var TOKEN_CA = 'pokenear.nearlytrade.near'; // official $POKENEAR contract address (NEAR)
+  var TREASURY = 'pokenear.near'; // receives every rip payment
   var X_HANDLE = 'pokenearfun'; // official X account (link only)
 
-  // On-chain pack prices for set_prices: each pack's USD price converted to the token's smallest
-  // unit, given the USD price of one token (decimal string) and the token's decimals. Exact BigInt math.
+  // On-chain pack prices for set_prices: each pack's USD price converted to the smallest unit
+  // (yoctoNEAR: 24 decimals), given the USD price of one NEAR as a decimal string. Exact BigInt math.
   function packPricesRaw(usdPerToken, decimals) {
     var m = /^(\d+)(?:\.(\d+))?$/.exec(String(usdPerToken).trim());
     if (!m || !/^\d+$/.test(String(decimals))) return null;
@@ -169,7 +169,7 @@
   var data = {
     TOKEN: TOKEN,
     GAME_ACCOUNT: GAME_ACCOUNT,
-    TOKEN_CA: TOKEN_CA,
+    TREASURY: TREASURY,
     packPricesRaw: packPricesRaw,
     VERSION: VERSION,
     EV_RATIO: EV_RATIO,

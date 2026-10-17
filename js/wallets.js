@@ -135,16 +135,16 @@
   /* ---------- on-chain randomness for a rip ---------- */
   var NEAR_WALLET_KEY = 'pokenear:near-wallet';
 
-  /* Pay for a rip in $POKENEAR from the player's NEAR wallet. pay comes from the server:
-     { token, receiver, amount, msg }. Resolves { tx, ref } once the transaction is sent; the
-     server then reads the draw from chain. */
+  /* Pay for a rip in NEAR from the player's NEAR wallet. pay comes from the server:
+     { method: 'rip', receiver, deposit (yoctoNEAR), args: { seed, pack, count } }. Resolves { tx, ref }
+     once the transaction is sent; the server then reads the draw from chain. */
   function payRip(user, pay) {
-    if (!pay || !pay.token) return Promise.reject(new Error('Packs open when ' + root.PN.data.TOKEN + ' is live.'));
+    if (!pay || !pay.receiver || !pay.deposit) return Promise.reject(new Error('Packs open soon.'));
     var walletId = null;
     try { walletId = root.localStorage.getItem(NEAR_WALLET_KEY); } catch (e) { /* ignore */ }
     if (!walletId) return Promise.reject(new Error('Reconnect your NEAR wallet to pay.'));
     return loadNear().then(function (x) {
-      return x.near.pay(walletId, { tokenId: pay.token, receiverId: pay.receiver, amount: pay.amount, msg: pay.msg, accountId: user.address });
+      return x.near.pay(walletId, { receiverId: pay.receiver, method: pay.method, args: pay.args, deposit: pay.deposit, accountId: user.address });
     }).then(function (out) { return out ? { tx: out.tx, ref: pay.receiver } : new Promise(function () {}); });
   }
 

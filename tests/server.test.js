@@ -30,10 +30,10 @@ function nearSign(kp, { message, nonce, recipient, callbackUrl }) {
   return crypto.sign(null, hash, kp.privateKey).toString('base64');
 }
 
-test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () => {
+test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', async () => {
   const GAME = 'pokenearfun.near';
-  const TOKEN = 'pokenear.tkn.near';
-  const UNIT = 10n ** 18n;
+  const TREASURY = 'pokenear.near';
+  const UNIT = 10n ** 24n; // yoctoNEAR
   const nearKeys = {}; // account -> "ed25519:..." full-access key
   const draws = {}; // seed -> draw as returned by get_draw
   const paid = new Set(); // payout ref_ids
@@ -68,18 +68,18 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
         const ok = nearKeys[params.account_id] === params.public_key;
         return reply(ok ? { result: { permission: 'FullAccess', nonce: 1, block_hash: blockHash } } : { error: { cause: { name: 'UNKNOWN_ACCESS_KEY' } } });
       }
-      if (params.request_type === 'view_account') return reply(params.account_id === GAME ? { result: { amount: '5000000000000000000000000', code_hash: 'Gc8dD7NQnRZ5cRdxqd7tq9RYr8EpTkL8BF8D1nQDvYJ5' } } : { error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
+      if (params.request_type === 'view_account') {
+        if (params.account_id === GAME) return reply({ result: { amount: '5000000000000000000000000', code_hash: 'Gc8dD7NQnRZ5cRdxqd7tq9RYr8EpTkL8BF8D1nQDvYJ5' } });
+        if (params.account_id === TREASURY) return reply({ result: { amount: '42000000000000000000000000', code_hash: '11111111111111111111111111111111' } });
+        if (params.account_id === 'bob.near') return reply({ result: { amount: String(12n * UNIT + UNIT / 2n), code_hash: '11111111111111111111111111111111' } });
+        return reply({ error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
+      }
       const args = JSON.parse(Buffer.from(params.args_base64 || '', 'base64').toString() || '{}');
       if (params.account_id === GAME) {
         if (!contract) return reply({ error: { cause: { name: 'UNKNOWN_ACCOUNT' } } });
         if (params.method_name === 'get_config') return view(contract);
         if (params.method_name === 'get_draw') return view(draws[args.seed] || null);
         if (params.method_name === 'is_paid') return view(paid.has(args.ref_id));
-      }
-      if (params.account_id === TOKEN) {
-        if (params.method_name === 'ft_metadata') return view({ symbol: 'POKENEAR', decimals: 18 });
-        if (params.method_name === 'ft_balance_of') return view(String(123n * UNIT + 45n * UNIT / 100n));
-        if (params.method_name === 'storage_balance_of') return view({ total: '1250000000000000000000', available: '0' });
       }
       reply({ error: { cause: { name: 'UNKNOWN' } } });
     });
@@ -133,40 +133,40 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
     // Contract not deployed / token not set: rips are closed for players.
     const closed = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
     assert.equal(closed.status, 503);
-    assert.match(closed.body.error, /\$POKENEAR is live/);
+    assert.match(closed.body.error, /Packs open soon/);
 
-    // Launch: the owner sets the CA and prices on pokenearfun.near.
-    contract = { owner: GAME, token: TOKEN, prices: ['1000', '2500', '5000', '10000'].map((x) => String(BigInt(x) * UNIT)), max_per_rip: 5 };
+    // Launch: the owner sets NEAR prices on pokenearfun.near (NEAR at $2.50: $10 = 4 NEAR).
+    contract = { owner: GAME, treasury: TREASURY, prices: ['4', '10', '20', '40'].map((x) => String(BigInt(x) * UNIT)), max_per_rip: 5, currency: 'NEAR' };
     srv.resetGameCache();
     const cfg = (await get('/api/config')).body.game;
     assert.equal(cfg.ready, true);
-    assert.equal(cfg.token, TOKEN);
-    assert.equal(cfg.decimals, 18);
+    assert.equal(cfg.treasury, TREASURY);
+    assert.equal(cfg.decimals, 24);
     assert.equal(cfg.buyback, true);
     const bal = await get('/api/balance', bob);
-    assert.equal(bal.body.amount, String(123n * UNIT + 45n * UNIT / 100n));
+    assert.deepEqual(bal.body, { amount: String(12n * UNIT + UNIT / 2n), decimals: 24, symbol: 'NEAR' });
 
     // Paid rip: start -> pay instructions -> nothing on chain (202) -> draw -> cards.
     const start = await post('/api/rip/start', { pack: 'rare', count: 5 }, bob);
     assert.equal(start.status, 200, JSON.stringify(start.body));
     const seed = start.body.rip.seed;
-    assert.deepEqual(start.body.pay, { token: TOKEN, receiver: GAME, amount: String(5n * 2500n * UNIT), msg: JSON.stringify({ seed, pack: 1, count: 5 }) });
+    assert.deepEqual(start.body.pay, { method: 'rip', receiver: GAME, deposit: String(5n * 10n * UNIT), args: { seed, pack: 1, count: 5 } });
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 400); // one open rip at a time
     const wait = await post('/api/rip/finish', {}, bob);
     assert.equal(wait.status, 202);
-    assert.equal(wait.body.pay.msg, start.body.pay.msg);
+    assert.deepEqual(wait.body.pay, start.body.pay);
     // A draw paid by someone else, or for another pack, does not count.
-    draws[seed] = { account: 'mallory.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 1, count: 5, amount: start.body.pay.amount };
+    draws[seed] = { account: 'mallory.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 1, count: 5, amount: start.body.pay.deposit };
     assert.equal((await post('/api/rip/finish', {}, bob)).status, 400);
-    draws[seed] = { account: 'bob.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 0, count: 5, amount: start.body.pay.amount };
+    draws[seed] = { account: 'bob.near', randomness: 'aa'.repeat(32), block_height: 1, pack: 0, count: 5, amount: start.body.pay.deposit };
     assert.equal((await post('/api/rip/finish', {}, bob)).status, 400);
     assert.equal((await post('/api/rip/cancel', {}, bob)).status, 409); // paid: cannot cancel
-    draws[seed] = { account: 'bob.near', randomness: 'bb'.repeat(32), block_height: 7, pack: 1, count: 5, amount: start.body.pay.amount };
+    draws[seed] = { account: 'bob.near', randomness: 'bb'.repeat(32), block_height: 7, pack: 1, count: 5, amount: start.body.pay.deposit };
     const fin = await post('/api/rip/finish', { tx: 'H1' }, bob);
     assert.equal(fin.status, 200, JSON.stringify(fin.body));
     const items = fin.body.result.items;
     assert.deepEqual(items.map((i) => i.id), engine.cardsFromRandomness('rare', 5, 'bb'.repeat(32), seed).map((c) => c.id));
-    assert.deepEqual(items[0].proof, { source: 'pokenear-near', chain: 'near', seed, randomness: 'bb'.repeat(32), ref: GAME, tx: 'H1', paid: start.body.pay.amount });
+    assert.deepEqual(items[0].proof, { source: 'pokenear-near', chain: 'near', seed, randomness: 'bb'.repeat(32), ref: GAME, tx: 'H1', paid: start.body.pay.deposit });
 
     // Unpaid rip can be cancelled.
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 200);
@@ -174,12 +174,12 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
     assert.equal(cancel.status, 200);
     assert.equal(cancel.body.state.pendingRip, null);
 
-    // Buyback: pokenearfun.near pays BUYBACK_RATE of value at the on-chain Starter rate (1000 tokens = $10).
+    // Buyback: pokenearfun.near pays BUYBACK_RATE of value in NEAR at the on-chain Starter rate (4 NEAR = $10).
     const sell = items.slice(0, 2).map((i) => i.uid);
     const usd = Math.round(items.slice(0, 2).reduce((n, i) => n + require('../js/data.js').cardById[i.id].usd, 0) * require("../js/data.js").BUYBACK_RATE * 100) / 100;
     const sold = await post('/api/buyback', { uids: sell }, bob);
     assert.equal(sold.status, 200, JSON.stringify(sold.body));
-    const expected = 1000n * UNIT * BigInt(Math.round(usd * 100)) / 1000n;
+    const expected = 4n * UNIT * BigInt(Math.round(usd * 100)) / 1000n;
     assert.equal(sold.body.result.payout.amount, expected.toString());
     assert.equal(sent.length, 1);
     assert.ok(sent[0].ok && sent[0].method);
@@ -211,15 +211,11 @@ test('NEAR sign-in, $POKENEAR rips, dev wallet and buyback payouts', async () =>
     assert.equal(adm.status, 200, JSON.stringify(adm.body));
     assert.equal(adm.body.account, GAME);
     assert.equal(adm.body.initialized, true);
-    assert.equal(adm.body.token.id, TOKEN);
-    assert.equal(adm.body.token.decimals, 18);
+    assert.equal(adm.body.config.treasury, TREASURY);
+    assert.equal(adm.body.treasury.near, '42000000000000000000000000');
     assert.equal(adm.body.payoutKey.configured, true);
     assert.equal(adm.body.payoutKey.publicKey, payoutPub);
     assert.equal(adm.body.payoutKey.onChain, false); // the mock reports it as a FunctionCall key without payout
-    const tok = await get('/api/admin/token?ca=' + TOKEN, dev);
-    assert.deepEqual([tok.status, tok.body.decimals, tok.body.symbol], [200, 18, 'POKENEAR']);
-    assert.equal((await get('/api/admin/token?ca=Not%20Valid', dev)).status, 400);
-    assert.equal((await get('/api/admin/token?ca=' + TOKEN, bob)).status, 403);
 
     // The dev wallet still rips while the contract is unreachable.
     contract = null;

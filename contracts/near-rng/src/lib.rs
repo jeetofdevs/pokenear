@@ -1,33 +1,26 @@
-//! Pokenear game contract: $POKENEAR payments + on-chain randomness for card rips.
+//! Pokenear game contract: NEAR payments + on-chain randomness for card rips.
 //!
 //! Deployed on the Pokenear interaction wallet (pokenearfun.near).
 //!
 //! Rip: the Pokenear server issues a one-time 32-byte `seed`. The player calls
-//! `ft_transfer_call` on the $POKENEAR token with this contract as receiver and
-//! `msg = {"seed":"<64 hex>","pack":<index>,"count":<n>}`. The token calls `ft_on_transfer`,
-//! which checks the amount equals the on-chain pack price x count, mixes NEAR's protocol
-//! randomness (`env::random_seed()`) with the seed, the player and the block height, and
-//! stores the draw under the seed. Any check failing panics, so the token refunds the player.
-//! Anyone can read a draw back with `get_draw(seed)` and re-derive the cards.
+//! `rip({seed, pack, count})` attaching exactly the on-chain pack price x count in NEAR. The
+//! contract mixes NEAR's protocol randomness (`env::random_seed()`) with the seed, the player and
+//! the block height, stores the draw under the seed, and forwards the NEAR to the treasury
+//! (pokenear.near) in the same transaction. Any check failing panics, so the player's NEAR is
+//! returned. Anyone can read a draw back with `get_draw(seed)` and re-derive the cards.
 //!
 //! Buyback: the owner (or a function-call key on this account limited to `payout`) calls
-//! `payout(receiver_id, amount, ref_id)`; each `ref_id` pays at most once.
+//! `payout(receiver_id, amount, ref_id)`; it pays NEAR from this account and each `ref_id` pays once.
 
 use near_sdk::json_types::U128;
-use near_sdk::serde::Deserialize;
 use near_sdk::serde_json::{self, json};
 use near_sdk::store::{LookupMap, LookupSet};
-use near_sdk::{
-    env, near, require, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseOrValue,
-    PromiseResult,
-};
+use near_sdk::{env, near, require, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseResult};
 
 /// Most cards one rip can buy.
 pub const MAX_PER_RIP: u8 = 5;
-/// Token storage registration for a buyback receiver (refunded by the token if already registered).
-const STORAGE_DEPOSIT: NearToken = NearToken::from_micronear(1250);
-const GAS_STORAGE: Gas = Gas::from_tgas(10);
-const GAS_FT_TRANSFER: Gas = Gas::from_tgas(15);
+/// NEAR kept on the account on top of its storage stake, so payouts never break the contract.
+pub const RESERVE: NearToken = NearToken::from_millinear(500);
 const GAS_CALLBACK: Gas = Gas::from_tgas(10);
 
 #[derive(BorshStorageKey)]
@@ -48,25 +41,17 @@ pub struct Draw {
     pub timestamp_ms: u64,
     pub pack: u8,
     pub count: u8,
-    /// $POKENEAR paid, in the token's smallest unit.
+    /// NEAR paid, in yoctoNEAR.
     pub amount: U128,
-}
-
-#[derive(Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-struct RipMsg {
-    seed: String,
-    pack: u8,
-    count: u8,
 }
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Pokenear {
     owner: AccountId,
-    /// $POKENEAR token contract. Rips are closed until it is set.
-    token: Option<AccountId>,
-    /// Price of one card per pack, in the token's smallest unit. Index = pack.
+    /// Where rip payments are forwarded (pokenear.near).
+    treasury: AccountId,
+    /// Price of one card per pack, in yoctoNEAR. Index = pack. Empty = rips closed.
     prices: Vec<U128>,
     draws: LookupMap<String, Draw>,
     payouts: LookupSet<String>,
@@ -80,10 +65,10 @@ fn is_seed(seed: &str) -> bool {
 #[near]
 impl Pokenear {
     #[init]
-    pub fn new(owner: AccountId, token: Option<AccountId>, prices: Option<Vec<U128>>) -> Self {
+    pub fn new(owner: AccountId, treasury: AccountId, prices: Option<Vec<U128>>) -> Self {
         let mut c = Self {
             owner,
-            token,
+            treasury,
             prices: vec![],
             draws: LookupMap::new(Key::Draws),
             payouts: LookupSet::new(Key::Payouts),
@@ -98,17 +83,17 @@ impl Pokenear {
 
     /* ---------- owner ---------- */
 
-    /// Set the $POKENEAR token contract (CA).
-    pub fn set_token(&mut self, token: AccountId) {
-        self.assert_owner();
-        self.token = Some(token);
-    }
-
-    /// Set the price of one card for each pack, in the token's smallest unit.
+    /// Set the price of one card for each pack, in yoctoNEAR.
     pub fn set_prices(&mut self, prices: Vec<U128>) {
         self.assert_owner();
         self.check_prices(&prices);
         self.prices = prices;
+    }
+
+    /// Change where rip payments go.
+    pub fn set_treasury(&mut self, treasury: AccountId) {
+        self.assert_owner();
+        self.treasury = treasury;
     }
 
     pub fn set_owner(&mut self, owner: AccountId) {
@@ -116,26 +101,17 @@ impl Pokenear {
         self.owner = owner;
     }
 
-    /// Pay a buyback from this account's $POKENEAR. `ref_id` (e.g. "sell:<user>:<card>") pays once.
+    /// Pay a buyback in NEAR from this account. `ref_id` (e.g. "sell:<hash>") pays once.
     pub fn payout(&mut self, receiver_id: AccountId, amount: U128, ref_id: String) -> Promise {
         self.assert_owner();
-        let token = self.token.clone().unwrap_or_else(|| env::panic_str("token not set"));
         require!(amount.0 > 0, "amount must be positive");
         require!(!ref_id.is_empty() && ref_id.len() <= 128, "bad ref_id");
+        let locked = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
+        let free = env::account_balance().as_yoctonear().saturating_sub(locked + RESERVE.as_yoctonear());
+        require!(amount.0 <= free, "not enough NEAR for this payout");
         require!(self.payouts.insert(ref_id.clone()), "already paid");
-        Promise::new(token.clone())
-            .function_call(
-                "storage_deposit".to_string(),
-                json!({ "account_id": receiver_id, "registration_only": true }).to_string().into_bytes(),
-                STORAGE_DEPOSIT,
-                GAS_STORAGE,
-            )
-            .then(Promise::new(token).function_call(
-                "ft_transfer".to_string(),
-                json!({ "receiver_id": receiver_id, "amount": amount, "memo": ref_id }).to_string().into_bytes(),
-                NearToken::from_yoctonear(1),
-                GAS_FT_TRANSFER,
-            ))
+        Promise::new(receiver_id)
+            .transfer(NearToken::from_yoctonear(amount.0))
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_payout(ref_id))
     }
 
@@ -151,40 +127,35 @@ impl Pokenear {
 
     /* ---------- player ---------- */
 
-    /// NEP-141 receiver: a rip paid in $POKENEAR. Panics (= full refund) on any mismatch.
-    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
-        require!(self.token.as_ref() == Some(&env::predecessor_account_id()), "only $POKENEAR is accepted");
-        let m: RipMsg = serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("bad rip message"));
-        require!(is_seed(&m.seed), "seed must be 64 lowercase hex characters");
-        require!(m.count >= 1 && m.count <= MAX_PER_RIP, "bad card count");
-        let price = self.prices.get(m.pack as usize).unwrap_or_else(|| env::panic_str("unknown pack")).0;
-        let due = price.checked_mul(m.count as u128).unwrap_or_else(|| env::panic_str("price overflow"));
-        require!(amount.0 == due, "wrong amount for this pack");
-        require!(!self.draws.contains_key(&m.seed), "seed already drawn");
+    /// A rip paid in NEAR. Attach exactly price[pack] x count. Panics (= full refund) on any mismatch.
+    #[payable]
+    pub fn rip(&mut self, seed: String, pack: u8, count: u8) -> Draw {
+        let amount = env::attached_deposit().as_yoctonear();
+        require!(is_seed(&seed), "seed must be 64 lowercase hex characters");
+        require!(count >= 1 && count <= MAX_PER_RIP, "bad card count");
+        let price = self.prices.get(pack as usize).unwrap_or_else(|| env::panic_str("unknown pack")).0;
+        let due = price.checked_mul(count as u128).unwrap_or_else(|| env::panic_str("price overflow"));
+        require!(amount == due, "wrong amount for this pack");
+        require!(!self.draws.contains_key(&seed), "seed already drawn");
 
+        let account = env::predecessor_account_id();
         let height = env::block_height();
         let mut input = env::random_seed();
-        input.extend_from_slice(m.seed.as_bytes());
-        input.extend_from_slice(sender_id.as_bytes());
+        input.extend_from_slice(seed.as_bytes());
+        input.extend_from_slice(account.as_bytes());
         input.extend_from_slice(&height.to_le_bytes());
         let randomness = hex(&env::sha256(&input));
 
-        let draw = Draw {
-            account: sender_id,
-            randomness,
-            block_height: height,
-            timestamp_ms: env::block_timestamp_ms(),
-            pack: m.pack,
-            count: m.count,
-            amount,
-        };
+        let draw = Draw { account, randomness, block_height: height, timestamp_ms: env::block_timestamp_ms(), pack, count, amount: U128(amount) };
         env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"pokenear\",\"version\":\"2.0.0\",\"event\":\"rip\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
-            m.seed, draw.account, draw.randomness, draw.pack, draw.count, amount.0, height
+            "EVENT_JSON:{{\"standard\":\"pokenear\",\"version\":\"3.0.0\",\"event\":\"rip\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
+            seed, draw.account, draw.randomness, pack, count, amount, height
         ));
-        self.draws.insert(m.seed, draw);
+        self.draws.insert(seed, draw.clone());
         self.total += 1;
-        PromiseOrValue::Value(U128(0))
+        // The payment goes straight to the treasury.
+        let _ = Promise::new(self.treasury.clone()).transfer(NearToken::from_yoctonear(amount));
+        draw
     }
 
     /* ---------- views ---------- */
@@ -194,7 +165,7 @@ impl Pokenear {
     }
 
     pub fn get_config(&self) -> serde_json::Value {
-        json!({ "owner": self.owner, "token": self.token, "prices": self.prices, "max_per_rip": MAX_PER_RIP })
+        json!({ "owner": self.owner, "treasury": self.treasury, "prices": self.prices, "max_per_rip": MAX_PER_RIP, "currency": "NEAR" })
     }
 
     pub fn is_paid(&self, ref_id: String) -> bool {
@@ -236,156 +207,163 @@ mod tests {
 
     const SEED_A: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
     const SEED_B: &str = "bb00000000000000000000000000000000000000000000000000000000000002";
-    const UNIT: u128 = 1_000_000_000_000_000_000; // 18 decimals
+    const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
 
     fn game() -> AccountId { "pokenearfun.near".parse().unwrap() }
-    fn token() -> AccountId { "pokenear.tkn.near".parse().unwrap() }
+    fn treasury() -> AccountId { "pokenear.near".parse().unwrap() }
     fn player() -> AccountId { accounts(1) }
 
-    fn ctx(predecessor: AccountId, random: u8, height: u64) {
+    fn ctx(predecessor: AccountId, deposit: u128, random: u8, height: u64) {
         let mut b = VMContextBuilder::new();
         b.current_account_id(game())
             .predecessor_account_id(predecessor)
+            .attached_deposit(NearToken::from_yoctonear(deposit))
+            .account_balance(NearToken::from_near(10))
             .random_seed([random; 32])
             .block_height(height);
         testing_env!(b.build());
     }
 
     fn setup() -> Pokenear {
-        ctx(game(), 7, 100);
-        Pokenear::new(game(), Some(token()), Some(vec![U128(1000 * UNIT), U128(2500 * UNIT)]))
+        ctx(game(), 0, 7, 100);
+        Pokenear::new(game(), treasury(), Some(vec![U128(4 * NEAR), U128(10 * NEAR)]))
     }
 
-    fn msg(seed: &str, pack: u8, count: u8) -> String {
-        format!("{{\"seed\":\"{}\",\"pack\":{},\"count\":{}}}", seed, pack, count)
-    }
-
-    fn rip(c: &mut Pokenear, seed: &str, pack: u8, count: u8, amount: u128) -> Draw {
-        ctx(token(), 7, 100);
-        c.ft_on_transfer(player(), U128(amount), msg(seed, pack, count));
-        c.get_draw(seed.to_string()).unwrap()
+    fn rip(c: &mut Pokenear, seed: &str, pack: u8, count: u8, deposit: u128) -> Draw {
+        ctx(player(), deposit, 7, 100);
+        c.rip(seed.to_string(), pack, count)
     }
 
     #[test]
     fn paid_rip_stores_a_draw() {
         let mut c = setup();
-        let d = rip(&mut c, SEED_A, 1, 5, 5 * 2500 * UNIT);
+        let d = rip(&mut c, SEED_A, 1, 5, 50 * NEAR);
         assert_eq!(d.account, player());
-        assert_eq!((d.pack, d.count, d.amount), (1, 5, U128(5 * 2500 * UNIT)));
-        assert_eq!(d.block_height, 100);
+        assert_eq!((d.pack, d.count, d.amount), (1, 5, U128(50 * NEAR)));
+        assert_eq!(c.get_draw(SEED_A.to_string()), Some(d));
         assert_eq!(c.total_draws(), 1);
         assert!(get_logs()[0].starts_with("EVENT_JSON:"));
         assert_eq!(c.get_draw(SEED_B.to_string()), None);
+        assert_eq!(c.get_config()["treasury"], "pokenear.near");
+    }
+
+    #[test]
+    fn payment_is_forwarded_to_the_treasury() {
+        let mut c = setup();
+        rip(&mut c, SEED_A, 1, 2, 20 * NEAR);
+        let receipts = near_sdk::test_utils::get_created_receipts();
+        let to_treasury: Vec<_> = receipts.iter().filter(|r| r.receiver_id == treasury()).collect();
+        assert_eq!(to_treasury.len(), 1, "{:?}", receipts);
+        let shown = format!("{:?}", to_treasury[0].actions);
+        assert!(shown.contains("Transfer") && shown.contains(&(20 * NEAR).to_string()), "{}", shown);
     }
 
     #[test]
     fn randomness_matches_documented_formula() {
         let mut c = setup();
-        let d = rip(&mut c, SEED_A, 0, 1, 1000 * UNIT);
+        let d = rip(&mut c, SEED_A, 0, 1, 4 * NEAR);
         let mut input = vec![7u8; 32];
         input.extend_from_slice(SEED_A.as_bytes());
         input.extend_from_slice(player().as_bytes());
         input.extend_from_slice(&100u64.to_le_bytes());
         assert_eq!(d.randomness, hex(&env::sha256(&input)));
-        let e = rip(&mut c, SEED_B, 0, 1, 1000 * UNIT);
-        assert_ne!(d.randomness, e.randomness);
-    }
-
-    #[test]
-    #[should_panic(expected = "only $POKENEAR is accepted")]
-    fn other_tokens_are_refused() {
-        let mut c = setup();
-        ctx(accounts(3), 7, 100);
-        c.ft_on_transfer(player(), U128(1000 * UNIT), msg(SEED_A, 0, 1));
+        assert_ne!(d.randomness, rip(&mut c, SEED_B, 0, 1, 4 * NEAR).randomness);
     }
 
     #[test]
     #[should_panic(expected = "wrong amount for this pack")]
     fn amount_must_match_price() {
         let mut c = setup();
-        rip(&mut c, SEED_A, 0, 1, 999 * UNIT);
+        rip(&mut c, SEED_A, 0, 1, 3 * NEAR);
     }
 
     #[test]
     #[should_panic(expected = "seed already drawn")]
     fn a_seed_can_only_be_drawn_once() {
         let mut c = setup();
-        rip(&mut c, SEED_A, 0, 1, 1000 * UNIT);
-        rip(&mut c, SEED_A, 0, 1, 1000 * UNIT);
+        rip(&mut c, SEED_A, 0, 1, 4 * NEAR);
+        rip(&mut c, SEED_A, 0, 1, 4 * NEAR);
     }
 
     #[test]
     #[should_panic(expected = "unknown pack")]
     fn pack_must_exist() {
         let mut c = setup();
-        rip(&mut c, SEED_A, 9, 1, 1000 * UNIT);
+        rip(&mut c, SEED_A, 9, 1, 4 * NEAR);
     }
 
     #[test]
     #[should_panic(expected = "bad card count")]
     fn count_is_limited() {
         let mut c = setup();
-        rip(&mut c, SEED_A, 0, 6, 6000 * UNIT);
+        rip(&mut c, SEED_A, 0, 6, 24 * NEAR);
     }
 
     #[test]
     #[should_panic(expected = "seed must be 64 lowercase hex")]
     fn seed_format_is_checked() {
         let mut c = setup();
-        rip(&mut c, "ABC", 0, 1, 1000 * UNIT);
+        rip(&mut c, "ABC", 0, 1, 4 * NEAR);
     }
 
     #[test]
-    #[should_panic(expected = "only $POKENEAR is accepted")]
-    fn rips_are_closed_until_token_is_set() {
-        ctx(game(), 7, 100);
-        let mut c = Pokenear::new(game(), None, Some(vec![U128(1)]));
-        ctx(token(), 7, 100);
-        c.ft_on_transfer(player(), U128(1), msg(SEED_A, 0, 1));
+    #[should_panic(expected = "unknown pack")]
+    fn rips_are_closed_until_prices_are_set() {
+        ctx(game(), 0, 7, 100);
+        let mut c = Pokenear::new(game(), treasury(), None);
+        rip(&mut c, SEED_A, 0, 1, NEAR);
     }
 
     #[test]
-    fn owner_sets_token_and_prices() {
-        ctx(game(), 7, 100);
-        let mut c = Pokenear::new(accounts(0), None, None);
-        ctx(accounts(0), 7, 100);
-        c.set_token(token());
+    fn owner_sets_prices_and_treasury() {
+        ctx(game(), 0, 7, 100);
+        let mut c = Pokenear::new(accounts(0), treasury(), None);
+        ctx(accounts(0), 0, 7, 100);
         c.set_prices(vec![U128(5)]);
+        c.set_treasury(accounts(2));
         let cfg = c.get_config();
-        assert_eq!(cfg["token"], "pokenear.tkn.near");
         assert_eq!(cfg["prices"][0], "5");
+        assert_eq!(cfg["treasury"], accounts(2).to_string());
     }
 
     #[test]
     #[should_panic(expected = "owner only")]
-    fn players_cannot_set_prices() {
+    fn players_cannot_change_the_treasury() {
         let mut c = setup();
-        ctx(player(), 7, 100);
-        c.set_prices(vec![U128(1)]);
+        ctx(player(), 0, 7, 100);
+        c.set_treasury(player());
     }
 
     #[test]
     fn payout_pays_each_ref_once() {
         let mut c = setup();
-        ctx(game(), 7, 100); // function-call key on pokenearfun.near
-        let _ = c.payout(player(), U128(900 * UNIT), "sell:near:bob.near:1".to_string());
-        assert!(c.is_paid("sell:near:bob.near:1".to_string()));
+        ctx(game(), 0, 7, 100); // function-call key on pokenearfun.near
+        let _ = c.payout(player(), U128(NEAR), "sell:abc".to_string());
+        assert!(c.is_paid("sell:abc".to_string()));
     }
 
     #[test]
     #[should_panic(expected = "already paid")]
     fn payout_ref_cannot_repeat() {
         let mut c = setup();
-        ctx(game(), 7, 100);
+        ctx(game(), 0, 7, 100);
         let _ = c.payout(player(), U128(1), "sell:x".to_string());
         let _ = c.payout(player(), U128(1), "sell:x".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "not enough NEAR for this payout")]
+    fn payout_keeps_the_reserve() {
+        let mut c = setup();
+        ctx(game(), 0, 7, 100); // balance 10 NEAR
+        let _ = c.payout(player(), U128(10 * NEAR), "sell:big".to_string());
     }
 
     #[test]
     #[should_panic(expected = "owner only")]
     fn players_cannot_pay_themselves() {
         let mut c = setup();
-        ctx(player(), 7, 100);
+        ctx(player(), 0, 7, 100);
         let _ = c.payout(player(), U128(1), "sell:y".to_string());
     }
 }
