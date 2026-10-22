@@ -18,9 +18,9 @@
   // the server's TREASURY_SOL env var overrides it. This wallet also opens packs free (owner).
   var TREASURY_SOL = '8mTFXXZtXvb7oBWztYf1j2H14T1QwFJjtT5rkR7t8Beb';
   // StonkPacks token contract address (Solana mint), shown on the site with a copy button.
-  var TOKEN_CA = 'DGSDaMUp2HT4ZLQ3kdswVYu15Qr5CK4swAkGf6mgfeF4';
+  var TOKEN_CA = ''; // empty = no CA on the site
   var LAUNCHPAD = { name: 'www.stonkfun.xyz', url: 'https://www.stonkfun.xyz/' }; // where the token launches
-  var VERSION = '20261023.6'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261023.7'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the StonkPacks interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on

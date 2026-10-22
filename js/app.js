@@ -326,7 +326,7 @@
     var starter = D.PACKS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
-        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on Solana · token live on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a></span>' +
+        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on Solana · token launching on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a></span>' +
         '<h1>Open real <span class="gold">Pokémon</span> packs with SOL.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and every pull is decided by the Solana block your payment lands in.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
@@ -572,7 +572,7 @@
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The pack stays unopened: press Continue to pay and open it, or Cancel to drop it.'],
           ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the pack and opens nothing, so always pay from the site.'],
           ['Why does the SOL amount change?', 'Packs are priced in USD. The SOL amount follows the live SOL market price and is locked when you open the pack.'],
-          ['Where does the token launch?', 'On ' + D.LAUNCHPAD.name + ' (' + D.LAUNCHPAD.url + '). The official contract address (CA) is ' + D.TOKEN_CA + '. Only trust this CA and the one posted by @' + D.X_HANDLE + ' on X.'],
+          ['Where does the token launch?', 'On ' + D.LAUNCHPAD.name + ' (' + D.LAUNCHPAD.url + '). ' + (D.TOKEN_CA ? 'The official contract address (CA) is ' + D.TOKEN_CA + '. Only trust this CA and the one posted by @' + D.X_HANDLE + ' on X.' : 'Only trust the contract address posted by @' + D.X_HANDLE + ' on X.')],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
           ['How strong is the randomness?', 'It comes from the Solana block that includes your payment. A player cannot predict it; in theory a block leader could skip a block, which for card values like these costs far more than it could win.']
         ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
