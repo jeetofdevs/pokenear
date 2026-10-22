@@ -166,7 +166,7 @@ test('ripStart reserves a seed and the amount to pay; ripFinish delivers cards w
   assert.equal(started.state.pendingRip.seed, SEED);
   assert.equal(started.state.pendingRip.amount, '1000');
   assert.equal(started.state.vault.length, 0);
-  assert.throws(() => engine.apply(started.state, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED }, ctx()), /open rip/);
+  assert.throws(() => engine.apply(started.state, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED }, ctx()), /unopened pack/);
   assert.throws(() => engine.apply(started.state, { type: 'ripFinish', proof: { randomness: 'zz' } }, ctx()), /Bad randomness/);
   const { state, result } = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: RAND, source: 'pokenear-near', ref: 'pokenearfun.near', tx: 'sig', paid: '1000' } }, ctx());
   assert.equal(state.pendingRip, null);
@@ -174,7 +174,7 @@ test('ripStart reserves a seed and the amount to pay; ripFinish delivers cards w
   assert.equal(result.items[0].id, engine.cardsFromRandomness('starter', 1, RAND, SEED)[0].id);
   assert.deepEqual(state.vault[0].proof, { source: 'pokenear-near', chain: 'near', seed: SEED, randomness: RAND, ref: 'pokenearfun.near', tx: 'sig', paid: '1000' });
   assert.equal(state.totalPulls, 1);
-  assert.throws(() => engine.apply(state, { type: 'ripFinish', proof: { randomness: RAND } }, ctx()), /no open rip/);
+  assert.throws(() => engine.apply(state, { type: 'ripFinish', proof: { randomness: RAND } }, ctx()), /no unopened pack/);
 });
 
 test('5x rip gives 5 unique items', () => {

@@ -3,7 +3,7 @@
    No runtime dependencies. Sign-in is a signed message with a one-time nonce.
    Rips are paid in NEAR: the player calls rip() on the interaction wallet's contract (GAME_ACCOUNT,
    pokenearfun.near) with the pack price attached; it draws the randomness and forwards the NEAR to
-   the treasury (pokenear.near) in the same transaction. The server reads the draw back.
+   the treasury (nearpacks.near) in the same transaction. The server reads the draw back.
    Buybacks are paid in NEAR by that contract, called with a function-call key (PAYOUT_KEY).
    Game state lives in a JSON file (DB_FILE). */
 const http = require('node:http');
@@ -259,7 +259,7 @@ const notReady = () => ({ error: 'Packs open soon. Follow @' + D.X_HANDLE + ' fo
 function payFor(game, pr) {
   if (pr.source === 'near-transfer') return { method: 'transfer', receiver: pr.treasury || TREASURY, deposit: pr.amount };
   const pack = D.PACKS.findIndex((p) => p.id === pr.pack);
-  return { method: 'rip', receiver: GAME_ACCOUNT, deposit: pr.amount, args: { seed: pr.seed, pack, count: pr.count } };
+  return { method: 'open_pack', receiver: GAME_ACCOUNT, deposit: pr.amount, args: { seed: pr.seed, pack, count: pr.count } };
 }
 
 async function ripRoute(req, res, step) {
@@ -295,7 +295,7 @@ async function ripRoute(req, res, step) {
       return send(res, 200, { state: out.state, rip: out.result.rip, pay: payFor(game, out.result.rip) });
     }
     const pr = st.pendingRip;
-    if (!pr) return send(res, 400, { error: 'There is no open rip.' });
+    if (!pr) return send(res, 400, { error: 'There is no unopened pack.' });
     if (pr.source === 'dev' || (isDev(st) && step === 'cancel')) {
       const out = engine.apply(st, { type: 'ripCancel' }, ctx());
       db.users[uid] = out.state;
@@ -305,7 +305,7 @@ async function ripRoute(req, res, step) {
     if (pr.source === 'near-transfer') return directRip(req, res, step, uid, st, pr, body, game);
     const r = await withNearRpc((url) => onchain.nearDraw(url, GAME_ACCOUNT, pr.seed));
     if (step === 'cancel') {
-      if (r.status !== 'missing') return send(res, 409, { error: 'This rip is already paid. Finish it instead.' });
+      if (r.status !== 'missing') return send(res, 409, { error: 'This pack is already paid. Open it instead.' });
       const out = engine.apply(st, { type: 'ripCancel' }, ctx());
       db.users[uid] = out.state;
       saveDb();
@@ -315,7 +315,7 @@ async function ripRoute(req, res, step) {
     const index = D.PACKS.findIndex((p) => p.id === pr.pack);
     if (r.account !== st.user.address || r.pack !== index || r.count !== pr.count || (pr.amount && String(r.amount) !== String(pr.amount))) {
       console.warn('[rip] payment mismatch', { user: st.user.address, draw: r, rip: pr });
-      return send(res, 400, { error: 'The payment on chain does not match this rip.' });
+      return send(res, 400, { error: 'The payment on chain does not match this pack.' });
     }
     const proof = { randomness: r.randomness, source: 'pokenear-near', ref: GAME_ACCOUNT, paid: r.amount, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null };
     const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
@@ -357,7 +357,7 @@ async function directRip(req, res, step, uid, st, pr, body, game) {
   const usedBy = db.usedTx[txHash];
   if (usedBy && usedBy !== uid + ':' + pr.seed) {
     st.pendingRip.tx = null; save(st);
-    return send(res, 400, { error: 'That transaction was already used for another rip.' });
+    return send(res, 400, { error: 'That transaction was already used for another pack.' });
   }
   const t = await withNearRpc((url) => onchain.nearTransferTx(url, txHash, st.user.address));
   if (t.status === 'pending') return send(res, 202, { status: 'pending', rip: pr, pay: payFor(game, pr) });
@@ -366,10 +366,10 @@ async function directRip(req, res, step, uid, st, pr, body, game) {
   const treasury = pr.treasury || TREASURY;
   if (t.signer !== st.user.address || t.receiver !== treasury || t.deposit !== String(pr.amount)) {
     console.warn('[rip] transfer mismatch', { user: st.user.address, tx: txHash, t, rip: pr });
-    return fail('That transaction is not the payment for this rip (it must send the exact amount to ' + treasury + ').');
+    return fail('That transaction is not the payment for this pack (it must send the exact amount to ' + treasury + ').');
   }
   const block = await withNearRpc((url) => onchain.nearBlock(url, t.blockHash));
-  if (block.timestampMs < pr.at - 5000) return fail('That payment was sent before this rip started.');
+  if (block.timestampMs < pr.at - 5000) return fail('That payment was sent before this pack was started.');
   db.usedTx[txHash] = uid + ':' + pr.seed;
   const proof = { randomness: transferRandomness(t.blockHash, pr.seed), source: 'near-transfer', ref: treasury, tx: txHash, block: t.blockHash, paid: t.deposit };
   const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());

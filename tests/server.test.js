@@ -32,7 +32,7 @@ function nearSign(kp, { message, nonce, recipient, callbackUrl }) {
 
 test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', async () => {
   const GAME = 'pokenearfun.near';
-  const TREASURY = 'pokenear.near';
+  const TREASURY = 'nearpacks.near';
   const UNIT = 10n ** 24n; // yoctoNEAR
   const nearKeys = {}; // account -> "ed25519:..." full-access key
   const draws = {}; // seed -> draw as returned by get_draw
@@ -152,7 +152,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(closed.status, 503);
     assert.match(closed.body.error, /Packs open soon/);
 
-    // Direct mode (no contract yet): the live NEAR price opens packs; players send NEAR to pokenear.near.
+    // Direct mode (no contract yet): the live NEAR price opens packs; players send NEAR to nearpacks.near.
     priceUsd = 2.5;
     srv.resetGameCache();
     const cfgD = (await get('/api/config')).body.game;
@@ -169,10 +169,10 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const pay = (o) => { const h = hash(); txs[h] = { signer: 'bob.near', receiver: TREASURY, deposit: String(10n * UNIT), ok: true, blockHash, ...o }; return h; };
     assert.equal((await post('/api/rip/finish', { tx: 'not-a-hash' }, bob)).status, 400);
     assert.equal((await post('/api/rip/finish', { tx: hash() }, bob)).status, 202); // not on chain yet
-    assert.match((await post('/api/rip/finish', { tx: pay({ receiver: 'mallory.near' }) }, bob)).body.error, /not the payment for this rip/);
+    assert.match((await post('/api/rip/finish', { tx: pay({ receiver: 'mallory.near' }) }, bob)).body.error, /not the payment for this pack/);
     assert.match((await post('/api/rip/finish', { tx: pay({ deposit: String(9n * UNIT) }) }, bob)).body.error, /not the payment/);
     assert.match((await post('/api/rip/finish', { tx: pay({ ok: false }) }, bob)).body.error, /failed on NEAR/);
-    assert.match((await post('/api/rip/finish', { tx: pay({ blockHash: oldBlock }) }, bob)).body.error, /before this rip started/);
+    assert.match((await post('/api/rip/finish', { tx: pay({ blockHash: oldBlock }) }, bob)).body.error, /before this pack was started/);
     const good = pay();
     const df = await post('/api/rip/finish', { tx: good }, bob);
     assert.equal(df.status, 200, JSON.stringify(df.body));
@@ -202,7 +202,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const start = await post('/api/rip/start', { pack: 'rare', count: 5 }, bob);
     assert.equal(start.status, 200, JSON.stringify(start.body));
     const seed = start.body.rip.seed;
-    assert.deepEqual(start.body.pay, { method: 'rip', receiver: GAME, deposit: String(5n * 10n * UNIT), args: { seed, pack: 1, count: 5 } });
+    assert.deepEqual(start.body.pay, { method: 'open_pack', receiver: GAME, deposit: String(5n * 10n * UNIT), args: { seed, pack: 1, count: 5 } });
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 400); // one open rip at a time
     const wait = await post('/api/rip/finish', {}, bob);
     assert.equal(wait.status, 202);
@@ -259,7 +259,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(sent.length, 1); // no payout transaction for the dev wallet
     // Admin endpoints answer only the admin wallets (pokenearfun.near, pokenear.near).
     assert.equal((await get('/api/admin/status', bob)).status, 403);
-    const owner = (await nearLogin(register(TREASURY), TREASURY)).cookie;
+    const owner = (await nearLogin(register('pokenear.near'), 'pokenear.near')).cookie;
     const admOwner = await get('/api/admin/status', owner);
     assert.equal(admOwner.status, 200);
     assert.equal(admOwner.body.mode, 'contract');
@@ -291,7 +291,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 503);
 
     // HOT / Meteor sign without callbackUrl even though the page sends one; redirect wallets may sign it.
-    const page = 'https://pokenear.fun/#packs';
+    const page = 'https://nearpacks.fun/#packs';
     assert.equal((await nearLogin(nk, 'bob.near', { sent: page, wallet: 'HOT Wallet' })).status, 200);
     assert.equal((await nearLogin(nk, 'bob.near', { sent: page, signed: page, wallet: 'MyNearWallet' })).status, 200);
     assert.equal((await nearLogin(nk, 'bob.near', { sent: page, bareKey: true })).status, 200);

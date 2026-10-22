@@ -1,5 +1,5 @@
 /* Near Packs UI. Renders from store.state; all game rules live in engine.js.
-   Gacha model: tiered packs, one card per rip, published odds, instant 96% buyback.
+   Gacha model: tiered packs, one card per pack, published odds, instant 96% buyback.
    Cards are drawn from real set data (js/cards.js). When remote images are allowed,
    the official card scan fades in over the drawn card. */
 (function (root) {
@@ -16,7 +16,6 @@
     route: 'packs',
     pack: D.PACKS[0].id,
     vaultSort: 'value',
-    showAllOdds: false,
     opening: null,        // { pack, items, stage, revealed: {}, count, sold: {} }
     busy: false,
     leaderboard: null
@@ -241,18 +240,31 @@
     '</div>';
   }
 
-  // Full odds table: every card in the pack with its value and chance.
-  function oddsHTML(p) {
-    var list = ui.showAllOdds ? p.pool : p.pool.slice(0, 25);
-    var rows = list.map(function (e) {
-      var c = D.cardById[e.id];
-      return '<tr><td><button class="linkish" data-act="zoom" data-id="' + c.id + '">' + esc(c.name) + '</button><div class="muted small">' + esc(seriesOf(c).name) + ' · ' + esc(c.no) + '</div></td>' +
-        '<td><span class="rbadge" style="--rc:var(--r-' + c.tier + ')">' + esc(c.code) + '</span></td>' +
-        '<td class="num">' + usd(c.usd) + '</td><td class="num"><b>' + fmtChance(e.p) + '</b></td><td class="num muted">' + oneIn(e.p) + '</td></tr>';
-    }).join('');
-    return '<div class="table-scroll"><table class="rates"><thead><tr><th>Card</th><th>Rarity</th><th class="num">Est. value</th><th class="num">Chance</th><th class="num">Odds</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      (p.pool.length > 25 ? '<button class="btn btn-sm" data-act="all-odds">' + (ui.showAllOdds ? 'Show top 25' : 'Show all ' + p.pool.length + ' cards') + '</button>' : '') +
-      '<p class="muted small">Every card in this pack is listed with its exact chance. Chances are set so the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the pack price (' + usd(p.ev) + ' for ' + usd(p.usd) + '). Values are estimates and will follow a live price feed at launch. Each rip is independent; there is no pity.</p>';
+  // Top tier cards of a pack: every card worth at least the pack price, best first.
+  function topTier(p) {
+    var list = p.pool.map(function (e) { return { c: D.cardById[e.id], p: e.p }; })
+      .filter(function (x) { return x.c.usd >= p.usd; })
+      .sort(function (x, y) { return y.c.usd - x.c.usd; });
+    return list.length ? list : p.top.slice(0, 12).map(function (c) { return { c: c, p: chanceOf(p, c.id) }; });
+  }
+
+  // Modal shown when a pack is clicked: its top tier cards with value and chance.
+  function openPackOdds(p) {
+    var list = topTier(p);
+    var total = list.reduce(function (a, x) { return a + x.p; }, 0);
+    var shown = list.slice(0, 30);
+    $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal pack-odds" role="dialog" aria-modal="true" aria-label="' + esc(p.name) + ' top tier">' +
+      '<div class="section-head"><div><div class="eyebrow">' + usd(p.usd) + ' · ' + p.pool.length + ' cards</div><h2>' + esc(p.name) + ': top tier</h2></div>' +
+      '<button class="btn btn-ghost btn-sm" data-act="close-modal">Close</button></div>' +
+      packStatsHTML(p) +
+      '<p class="muted small">' + list.length + ' cards worth ' + usd(p.usd) + ' or more · ' + fmtChance(total) + ' chance per pack to pull one.' + (list.length > shown.length ? ' Showing the top ' + shown.length + '.' : '') + '</p>' +
+      '<div class="odds-grid">' + shown.map(function (x) {
+        return '<div class="slot"><button data-act="zoom" data-id="' + esc(x.c.id) + '" aria-label="' + esc(x.c.name + ', ' + x.c.rarity) + '">' + cardHTML(x.c) + '</button>' +
+          '<div class="slot-cap"><b>' + usd(x.c.usd) + '</b><span>' + fmtChance(x.p) + '</span></div>' +
+          '<div class="slot-name"><span class="rbadge" style="--rc:var(--r-' + x.c.tier + ')">' + esc(x.c.code) + '</span> ' + esc(x.c.name) + '</div></div>';
+      }).join('') + '</div>' +
+      (store.state.user ? '<div class="modal-actions" style="justify-content:start"><button class="btn btn-gold" data-act="go-pack" data-id="' + p.id + '">Open the ' + esc(p.name) + '</button></div>' : '') +
+    '</div></div>';
   }
 
   /* ---------- layout ---------- */
@@ -305,7 +317,7 @@
     return '<section class="hero">' +
       '<div class="hero-copy">' +
         '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on NEAR, paid in ' + D.TOKEN + '</span>' +
-        '<h1>Rip real <span class="gold">Pokémon</span> cards. Sell back instantly.</h1>' +
+        '<h1>Open real <span class="gold">Pokémon</span> packs. Sell back instantly.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
       '</div>' +
@@ -315,14 +327,13 @@
       hits.concat(hits).map(function (c) { return '<div class="mq-card">' + cardHTML(c) + '<span class="mq-val">' + usd(c.usd) + '</span></div>'; }).join('') +
     '</div></div></section>' +
     '<section class="view" style="gap:14px"><div class="section-head"><h2>Packs</h2><span class="muted">' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + ' · ' + fmt(D.ALL_CARDS.length) + ' real cards</span></div>' +
-      '<div class="pack-grid">' + D.PACKS.map(function (p) { return packTileHTML(p, false); }).join('') + '</div></section>' +
+      '<div class="pack-grid" id="rates">' + D.PACKS.map(function (p) { return packTileHTML(p, true); }).join('') + '</div><p class="muted small">Tap a pack to see its top tier cards and odds.</p></section>' +
     '<section class="panel"><div class="steps">' +
       step(1, 'Connect a NEAR wallet', 'HOT, Meteor, MyNearWallet, Sender or Intear. One signature, no transaction, no fee.') +
-      step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you rip.') +
+      step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you open it.') +
       step(3, 'Pay in NEAR', 'One transaction pays for the pack and draws your card\'s randomness on chain.') +
       step(4, 'Keep or sell back', 'Hold the card in your vault or sell it for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value, paid in ' + D.TOKEN + '.') +
-    '</div></section>' +
-    '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(starter.name) + ' odds</h2><span class="muted">Every pack publishes its full card list</span></div>' + packStatsHTML(starter) + oddsHTML(starter) + '</section>';
+    '</div></section>';
   }
 
   /* ---------- packs ---------- */
@@ -332,30 +343,29 @@
     var recent = st.history.slice(0, 10).filter(function (h) { return D.cardById[h.id]; });
     var buttons = D.MULTI.map(function (n, i) {
       return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="rip" data-count="' + n + '"' + (payReady() ? '' : ' disabled') + '>' +
-        '<span class="buy-name">Rip ' + n + (n > 1 ? ' cards' : ' card') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
+        '<span class="buy-name">Open ' + n + (n > 1 ? ' packs' : ' pack') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
         '<small>' + COIN + (nearQuote(p, n) ? '≈ ' + nearQuote(p, n) + ' NEAR now' : 'Paid in ' + D.TOKEN) + '</small></button>';
     }).join('');
     var pr = st.pendingRip;
-    var openRip = pr ? '<section class="panel open-rip"><div><b>You have an open rip</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' card' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
-      '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel rip</button></div></section>' : '';
-    var launch = store.isDev() ? '<p class="demo-note gold-note">Dev wallet ' + esc(st.user.address) + ': rips need no payment and are recorded as dev rips.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
+    var openRip = pr ? '<section class="panel open-rip"><div><b>You have an unopened pack</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' pack' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
+      '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel</button></div></section>' : '';
+    var launch = store.isDev() ? '<p class="demo-note gold-note">Dev wallet ' + esc(st.user.address) + ': packs open free and are recorded as dev openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
         '<div class="daily-right"><a class="btn btn-gold" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + 'Follow @' + D.X_HANDLE + '</a></div></section>';
     return openRip + launch +
       '<section class="panel pull-stage">' +
-        '<div class="stage-pack">' + packArtHTML(p) + '</div>' +
+        '<button class="stage-pack" data-act="pack-odds" data-id="' + p.id + '" aria-label="See top tier cards">' + packArtHTML(p) + '</button>' +
         '<div class="pull-info">' +
-          '<div><div class="eyebrow">Pokémon TCG · ' + p.pool.length + ' cards from ' + usd(p.min) + ' to ' + usd(p.top[0].usd) + ' · ' + (st.pulls[p.id] || 0) + ' ripped</div><h2>' + esc(p.name) + '</h2></div>' +
+          '<div><div class="eyebrow">Pokémon TCG · ' + p.pool.length + ' cards from ' + usd(p.min) + ' to ' + usd(p.top[0].usd) + ' · ' + (st.pulls[p.id] || 0) + ' opened</div><h2>' + esc(p.name) + '</h2></div>' +
           '<div class="pull-buttons">' + buttons + '</div>' +
-          (store.mode === 'local' ? '<p class="demo-note">Preview: rips are free here and use browser randomness. On the live site you pay in NEAR and the randomness is drawn on chain in that payment.</p>' : '') +
+          (store.mode === 'local' ? '<p class="demo-note">Preview: packs open free here and use browser randomness. On the live site you pay in NEAR and the randomness is drawn on chain in that payment.</p>' : '') +
           packStatsHTML(p) +
-          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits</div><div class="chase-row">' +
+          '<div><div class="eyebrow" style="margin-bottom:10px">Top hits · <button class="linkish" data-act="pack-odds" data-id="' + p.id + '">See all top tier</button></div><div class="chase-row">' +
             p.top.slice(0, 6).map(function (c) { return slotHTML(c, { chance: chanceOf(p, c.id) }); }).join('') + '</div></div>' +
         '</div></section>' +
-      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">One card per rip · odds published for every card</span></div>' +
+      '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">Tap a pack to see its top tier</span></div>' +
         '<div class="pack-grid">' + D.PACKS.map(function (x) { return packTileHTML(x, true); }).join('') + '</div></section>' +
       (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#vault" class="muted">Open vault</a></div><div class="mini-cards">' +
-        recent.map(function (h) { return slotHTML(D.cardById[h.id], {}); }).join('') + '</div></section>' : '') +
-      '<section class="panel" id="rates"><div class="section-head" style="margin-bottom:12px"><h2>' + esc(p.name) + ' odds</h2><span class="muted">' + p.pool.length + ' cards</span></div>' + oddsHTML(p) + '</section>';
+        recent.map(function (h) { return slotHTML(D.cardById[h.id], {}); }).join('') + '</div></section>' : '');
   }
 
   // A card with its value (and optionally its chance) underneath; opens the zoom view.
@@ -385,7 +395,7 @@
               '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
               '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens soon"') + '>Sell back ' + buybackUsd([c]) + '</button></div>';
           }).join('') + '</div>'
-        : '<div class="panel empty">Your vault is empty. <a href="#packs">Rip a pack</a> to pull your first card.</div>');
+        : '<div class="panel empty">Your vault is empty. <a href="#packs">Open a pack</a> to pull your first card.</div>');
   }
 
   /* ---------- leaderboard ---------- */
@@ -423,7 +433,7 @@
     ['odds', 'Odds and value'],
     ['token', 'Paying with ' + D.TOKEN],
     ['rng', 'On-chain RNG'],
-    ['verify', 'Verify a rip'],
+    ['verify', 'Verify a pack'],
     ['buyback', 'Vault and buyback'],
     ['fees', 'Fees'],
     ['security', 'Wallet safety'],
@@ -460,7 +470,7 @@
         D.PACKS.map(function (p) {
           return '<tr><td><b>' + esc(p.name) + '</b></td><td class="num">' + usd(p.usd) + '</td><td class="num">' + usd(p.ev) + '</td><td class="num">' + p.pool.length + '</td><td class="num">' + usd(D.cardById[p.pool[p.pool.length - 1].id].usd) + ' – ' + usd(D.cardById[p.pool[0].id].usd) + '</td><td class="num">' + fmtChance(p.beat) + '</td><td class="num">' + fmtChance(p.x3) + '</td></tr>';
         }).join('') + '</tbody></table></div>' +
-        '<p class="muted small">Prices are in USD and paid in ' + D.TOKEN + '. You can rip ' + D.MULTI.join(' or ') + ' at a time; a 5-rip is one payment and gives five independent cards.</p>'),
+        '<p class="muted small">Prices are in USD and paid in ' + D.TOKEN + '. You can open ' + D.MULTI.join(' or ') + ' at a time; opening 5 is one payment and gives five independent cards.</p>'),
       docSec('odds', 'Odds and value',
         '<p>Every card has a value in USD, estimated from market prices for its rarity and popularity. A card\'s chance falls as its value rises: each card gets a weight of <code>value<sup>−k</sup></code>, and <code>k</code> is solved per pack so the average card is worth exactly <b>' + pct(D.EV_RATIO) + '</b> of the pack price. The remaining ' + pct(1 - D.EV_RATIO) + ' is the house edge.</p>' +
         '<p>The full list, with every card\'s chance, is shown on each pack. The chance of each rarity per pack:</p>' +
@@ -468,31 +478,31 @@
         rarities.map(function (r) {
           return '<tr><td>' + esc(r) + '</td>' + rarityRows.map(function (x) { return '<td class="num">' + (x.by[r] ? fmtChance(x.by[r]) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>' +
-        '<p class="muted small">Every rip is independent. There is no pity timer and no hidden adjustment: the odds you see are the odds the code uses, and the randomness comes from the chain.</p>'),
+        '<p class="muted small">Every pack is independent. There is no pity timer and no hidden adjustment: the odds you see are the odds the code uses, and the randomness comes from the chain.</p>'),
       docSec('token', 'Paying with NEAR',
         '<p>Packs are paid in <b>NEAR</b>. There are no credits, points or off-chain balances: the balance in the top bar is the NEAR in your wallet.</p>' +
         '<ul class="doc-list">' +
-          '<li><b>Live price.</b> Packs are priced in USD. When you open one, the NEAR amount is taken from the live NEAR market price at that moment and locked for that rip, so $10 is always $10 of NEAR.</li>' +
-          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Near Packs treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Near Packs contract is live, a <code>rip</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
+          '<li><b>Live price.</b> Packs are priced in USD. When you open one, the NEAR amount is taken from the live NEAR market price at that moment and locked for that pack, so $10 is always $10 of NEAR.</li>' +
+          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Near Packs treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Near Packs contract is live, a <code>open_pack</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
           '<li><b>Exact amount.</b> The site always asks for the exact quoted amount. A payment with a different amount does not open the pack.</li>' +
           '<li><b>Buybacks</b> are paid in NEAR from ' + GA + ' straight to your wallet.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
-        '<p>Nobody at Near Packs picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
+        '<p>Nobody at Near Packs picks your card, and the server cannot change it after the fact. Each pack opening works like this:</p>' +
         '<ol class="doc-list">' +
-          '<li><b>Seed.</b> When you rip, the server gives you a one-time 32-byte <code>seed</code>. It is shown in the rip proof.</li>' +
-          '<li><b>Pay.</b> Your wallet calls <code>rip</code> on ' + GA + ' with that seed and the pack price in NEAR. The server never holds your keys and cannot pay for you.</li>' +
+          '<li><b>Seed.</b> When you open a pack, the server gives you a one-time 32-byte <code>seed</code>. It is shown in the proof.</li>' +
+          '<li><b>Pay.</b> Your wallet calls <code>open_pack</code> on ' + GA + ' with that seed and the pack price in NEAR. The server never holds your keys and cannot pay for you.</li>' +
           '<li><b>Draw.</b> Inside that transaction the contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores it under the seed. A seed can be drawn only once.</li>' +
-          '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this rip, computes your cards with the public formula, and your browser computes them again to check.</li>' +
+          '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this pack, computes your cards with the public formula, and your browser computes them again to check.</li>' +
         '</ol>' +
         '<p class="small"><b>Direct transfers.</b> When you pay with a plain transfer to <code>' + esc(D.TREASURY) + '</code>, the randomness is <code>sha256("pokenear-transfer:v1" || hash of the block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands, and the proof links the transaction so anyone can check it.</p>' +
         '<h3>The formula</h3>' +
         '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("pokenear-rip:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
         '<p class="muted small">The pack list is ordered by value, highest first, as on the pack page. The same code runs in the server and in your browser.</p>'),
-      docSec('verify', 'Verify a rip',
-        '<p>After every rip the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness and links to your payment transaction and to ' + GA + ' on NearBlocks.</p>' +
+      docSec('verify', 'Verify a pack',
+        '<p>After every opening the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness and links to your payment transaction and to ' + GA + ' on NearBlocks.</p>' +
         '<ol class="doc-list">' +
-          '<li>Open the transaction link: the <code>rip</code> event logged by ' + GA + ' shows the same seed, randomness, pack and amount.</li>' +
+          '<li>Open the transaction link: the <code>open_pack</code> event logged by ' + GA + ' shows the same seed, randomness, pack and amount.</li>' +
           '<li>Your browser already re-ran the formula: <span class="done-txt">✓ Verified in your browser</span> means it got the same cards.</li>' +
           '<li>To check it yourself, call <code>get_draw</code> on ' + GA + ' with the seed and run the formula above with any SHA-256 tool.</li>' +
         '</ol>'),
@@ -504,22 +514,22 @@
       docSec('fees', 'Fees',
         '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Action</th><th>You pay</th></tr></thead><tbody>' +
           '<tr><td>Connect wallet</td><td>Nothing (message signature)</td></tr>' +
-          '<tr><td>Rip 1 or 5 cards</td><td>The pack price in NEAR, plus NEAR gas (a fraction of a cent)</td></tr>' +
+          '<tr><td>Open 1 or 5 packs</td><td>The pack price in NEAR, plus NEAR gas (a fraction of a cent)</td></tr>' +
           '<tr><td>Sell back</td><td>Nothing. ' + D.GAME_ACCOUNT + ' pays the gas</td></tr>' +
         '</tbody></table></div>'),
       docSec('security', 'Wallet safety',
         '<ul class="doc-list">' +
           '<li>Sign-in is one plain-text message with a one-time code. It never asks for a transaction, approval or seed phrase.</li>' +
-          '<li>The only transaction Near Packs asks for is <code>rip</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
+          '<li>The only transaction Near Packs asks for is <code>open_pack</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
           '<li>Near Packs will never DM you, ask for your seed phrase, or ask you to send NEAR or tokens to any address.</li>' +
           '<li>The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
         '</ul>'),
       docSec('faq', 'FAQ',
         [
-          ['Can Near Packs change my card after I rip?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
+          ['Can Near Packs change my card after I open a pack?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
           ['Can Near Packs see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
-          ['What if I reject the transaction or close the page?', 'Nothing is paid. The rip stays open: press Continue to pay and finish it, or Cancel rip to drop it.'],
-          ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the rip and opens nothing, so always pay from the site.'],
+          ['What if I reject the transaction or close the page?', 'Nothing is paid. The pack stays unopened: press Continue to pay and open it, or Cancel to drop it.'],
+          ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the pack and opens nothing, so always pay from the site.'],
           ['Why does the NEAR amount change?', 'Packs are priced in USD. The NEAR amount follows the live NEAR market price and is locked when you open the pack.'],
           ['Why NEAR only?', 'Payments, randomness and buybacks all happen on NEAR, in one place you can verify.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
@@ -614,7 +624,7 @@
     var quote = st.nearUsd ? D.PACKS.map(function (p) { return esc(p.name.replace(' Pack', '')) + ' ' + usd(p.usd) + ' ≈ ' + (p.usd / st.nearUsd).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' NEAR'; }).join(' · ') : '';
     var src = st.priceSource === 'manual' ? 'your backup price (live sources unreachable)' : st.priceSource === 'contract' ? 'fixed prices on the contract' : st.priceSource ? 'live market (' + esc(st.priceSource) + ')' : null;
     var s2 = adminStep(2, Boolean(st.ready), 'Live NEAR price',
-      (st.nearUsd ? '<p class="small">1 NEAR = <b>' + usd(st.nearUsd) + '</b> from ' + src + '. Every rip is quoted at the price of that moment.</p><p class="muted small">' + quote + '</p>'
+      (st.nearUsd ? '<p class="small">1 NEAR = <b>' + usd(st.nearUsd) + '</b> from ' + src + '. Every pack is quoted at the price of that moment.</p><p class="muted small">' + quote + '</p>'
         : '<p class="small err">No NEAR price yet: the live sources did not answer. Enter a backup price below so packs can open.</p>') +
       '<div class="admin-form two"><label>Backup USD price of 1 NEAR (used only if live sources fail)<input id="admin-usd" value="' + esc(st.manualNearUsd || '') + '" placeholder="2.50" inputmode="decimal" autocomplete="off"></label>' +
       '<button class="btn" data-act="admin-manual-price"' + busy('Backup price') + '>Save backup</button></div>');
@@ -624,7 +634,7 @@
     var tre = cfg && cfg.treasury;
     var s3 = adminStep(3, st.initialized ? tre === D.TREASURY : st.directTreasury === D.TREASURY, 'Payments go to ' + esc(D.TREASURY),
       !st.initialized ? '<p class="muted small">Direct mode: players send NEAR straight to <code>' + esc(st.directTreasury) + '</code>. After the contract is deployed it forwards every payment there.</p>'
-        : tre === D.TREASURY ? '<p class="muted small">Every rip payment is forwarded to <code>' + esc(tre) + '</code> in the same transaction' + (st.treasury && st.treasury.exists === false ? '. <b class="err">That account does not exist on NEAR yet; payments would fail.</b>' : '.') + '</p>'
+        : tre === D.TREASURY ? '<p class="muted small">Every pack payment is forwarded to <code>' + esc(tre) + '</code> in the same transaction' + (st.treasury && st.treasury.exists === false ? '. <b class="err">That account does not exist on NEAR yet; payments would fail.</b>' : '.') + '</p>'
         : '<p class="small">The contract sends payments to <code>' + esc(tre || '?') + '</code>. Switch it to <code>' + esc(D.TREASURY) + '</code>:</p>' + (canOwn ? '<button class="btn btn-gold" data-act="admin-treasury"' + busy('Set treasury') + '>Set treasury with wallet</button>' : needOwner));
 
     // 4. Buyback key
@@ -813,7 +823,7 @@
       '<div class="zoom-info"><div class="eyebrow">Pokémon TCG</div><h2>' + esc(card.name) + '</h2>' +
       '<dl>' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>' +
       (item && item.proof ? '<div class="eyebrow">How this card was pulled</div>' + proofSingleHTML(item) : '') +
-      '<div class="modal-actions" style="justify-content:start">' + (best && store.state.user ? '<button class="btn btn-gold" data-act="go-pack" data-id="' + best.id + '">Rip the ' + esc(best.name) + '</button>' : '') + '<button class="btn btn-ghost" data-act="close-modal">Close</button></div></div>' +
+      '<div class="modal-actions" style="justify-content:start">' + (best && store.state.user ? '<button class="btn btn-gold" data-act="go-pack" data-id="' + best.id + '">Open the ' + esc(best.name) + '</button>' : '') + '<button class="btn btn-ghost" data-act="close-modal">Close</button></div></div>' +
       '</div></div>';
   }
   function closeModal() { $('#modal').innerHTML = ''; }
@@ -837,7 +847,7 @@
     store.ripStart(ui.pack, count).then(function (rip) {
       ui.busy = false;
       beginRandomness(rip, false);
-    }).catch(function (e) { ui.busy = false; toast(e.message || 'Could not start the rip.', true); });
+    }).catch(function (e) { ui.busy = false; toast(e.message || 'Could not open the pack.', true); });
   }
 
   function resumeRip() {
@@ -847,7 +857,7 @@
 
   function rngSourceName(user) {
     if (store.mode !== 'live') return 'Demo randomness';
-    if (store.isDev()) return 'Dev rip · ' + user.address;
+    if (store.isDev()) return 'Dev opening · ' + user.address;
     return 'Paid on NEAR · ' + D.GAME_ACCOUNT;
   }
 
@@ -934,7 +944,7 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'pokenear-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev rip · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
+    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'pokenear-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
       (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';
@@ -965,14 +975,14 @@
       var steps = [
         [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
           live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Dev wallet: no payment needed' : 'Demo: nothing is paid in this preview',
-          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Rips from ' + esc(u.address) + ' are free and recorded as dev rips' : 'This preview is not connected to a chain'],
+          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as dev openings' : 'This preview is not connected to a chain'],
         [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Randomness drawn on chain',
-          o.status === 'slow' ? 'Taking longer than usual. Your rip is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
+          o.status === 'slow' ? 'Taking longer than usual. Your pack is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
       ];
       var actions = '';
       if (o.status === 'error') {
-        actions = '<button class="btn btn-gold" data-act="rip-retry">Try again</button><button class="btn" data-act="rip-refund">Cancel rip</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
-        if (live && direct) actions += '<div class="tx-paste"><span class="muted small">Already paid? Paste the transaction hash:</span><div class="ref-row"><input id="rip-tx" placeholder="Transaction hash" autocomplete="off"><button class="btn" data-act="rip-tx">Check</button></div><span class="muted small">Cancel only if you did not pay: a payment sent for a cancelled rip cannot be matched.</span></div>';
+        actions = '<button class="btn btn-gold" data-act="rip-retry">Try again</button><button class="btn" data-act="rip-refund">Cancel</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
+        if (live && direct) actions += '<div class="tx-paste"><span class="muted small">Already paid? Paste the transaction hash:</span><div class="ref-row"><input id="rip-tx" placeholder="Transaction hash" autocomplete="off"><button class="btn" data-act="rip-tx">Check</button></div><span class="muted small">Cancel only if you did not pay: a payment sent for a cancelled pack cannot be matched.</span></div>';
       } else if (o.status === 'slow') {
         actions = '<button class="btn btn-gold" data-act="rip-check">Check again</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
       }
@@ -983,12 +993,12 @@
           return '<li class="cs ' + st[0] + '"><span class="cs-dot" aria-hidden="true">' + (st[0] === 'done' ? '✓' : st[0] === 'error' ? '!' : '') + '</span><div><b>' + st[1] + '</b><small>' + st[2] + '</small></div></li>';
         }).join('') + '</ol>' +
         (o.error ? '<p class="err" role="alert">' + esc(o.error) + '</p>' : '') +
-        '<p class="muted small seed-line">Rip seed <span class="num">' + esc(o.rip.seed.slice(0, 16)) + '…</span></p>' +
+        '<p class="muted small seed-line">Pack seed <span class="num">' + esc(o.rip.seed.slice(0, 16)) + '…</span></p>' +
         (actions ? '<div class="open-actions">' + actions + '</div>' : '') + '</div>';
     } else if (o.stage === 'pack') {
       html = '<div class="open-stage"><div class="eyebrow">' + esc(p.name) + ' · ' + o.items.length + ' card' + (o.items.length > 1 ? 's' : '') + '</div>' +
         '<button class="big-pack" data-act="tear" aria-label="Tear open the pack">' + packArtHTML(p) + '</button>' +
-        '<h2>Tap the pack to rip it</h2></div>';
+        '<h2>Tap the pack to open it</h2></div>';
     } else {
       var all = allRevealed();
       var grid = o.items.map(function (it, i) {
@@ -1015,7 +1025,7 @@
           '<span class="' + (total >= spent ? 'up' : 'down') + '">' + (total >= spent ? '+' : '−') + usd(Math.abs(Math.round((total - spent) * 100) / 100)) + '</span></div>';
         summary += proofHTML(o.proof, o.items.map(function (it) { return it.id; }), o.pack, o.items.length);
         actions = (unsold.length > 1 && buybackReady() ? '<button class="btn" data-act="sell-all-rip">Sell back all · ' + buybackUsd(unsold.map(function (it) { return D.cardById[it.id]; })) + '</button>' : '') +
-          '<button class="btn btn-gold" data-act="again"' + (payReady() ? '' : ' disabled') + '>Rip again · ' + usd(p.usd * o.count) + '</button>' +
+          '<button class="btn btn-gold" data-act="again"' + (payReady() ? '' : ' disabled') + '>Open again · ' + usd(p.usd * o.count) + '</button>' +
           '<button class="btn" data-act="close-open">Keep in vault</button>';
       } else {
         actions = o.items.length > 1 ? '<button class="btn btn-gold" data-act="reveal-all">Reveal all</button>' : '';
@@ -1091,9 +1101,11 @@
         try { root.history.replaceState(null, '', '#docs/' + el.getAttribute('data-to')); } catch (err) { /* ignore */ }
         break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
-      case 'pack': ui.pack = id; ui.showAllOdds = false; render(); var st = $('.pull-stage'); if (st) st.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+      case 'pack':
+        if ($('.pull-stage')) { ui.pack = id; render(); }
+        openPackOdds(D.packById[id]); break;
+      case 'pack-odds': openPackOdds(D.packById[id]); break;
       case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
-      case 'all-odds': ui.showAllOdds = !ui.showAllOdds; render(); break;
       case 'zoom': openZoom(id, Number(el.getAttribute('data-uid')) || null); break;
       case 'rip': startRip(Number(el.getAttribute('data-count'))); break;
       case 'rip-resume': resumeRip(); break;
@@ -1106,7 +1118,7 @@
         break;
       case 'rip-later': ui.opening = null; renderOverlay(); render(); break;
       case 'rip-refund':
-        store.ripCancel().then(function () { ui.opening = null; renderOverlay(); render(); toast('Rip cancelled. Nothing was paid.'); },
+        store.ripCancel().then(function () { ui.opening = null; renderOverlay(); render(); toast('Cancelled. Nothing was paid.'); },
           function (e) { toast(e.message, true); });
         break;
       case 'vsort': ui.vaultSort = id; render(); break;

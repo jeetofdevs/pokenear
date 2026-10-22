@@ -3,12 +3,12 @@
 //! Deployed on the Pokenear interaction wallet (pokenearfun.near).
 //!
 //! Rip: the Pokenear server issues a one-time 32-byte `seed` and quotes the price from the live NEAR
-//! price. The player calls `rip({seed, pack, count})` attaching that amount. If fixed prices are set
+//! price. The player calls `open_pack({seed, pack, count})` attaching that amount. If fixed prices are set
 //! on chain the amount must equal price x count; otherwise any amount >= MIN_RIP is accepted and the
 //! server checks it against its quote before giving cards. The
 //! contract mixes NEAR's protocol randomness (`env::random_seed()`) with the seed, the player and
 //! the block height, stores the draw under the seed, and forwards the NEAR to the treasury
-//! (pokenear.near) in the same transaction. Any check failing panics, so the player's NEAR is
+//! (nearpacks.near) in the same transaction. Any check failing panics, so the player's NEAR is
 //! returned. Anyone can read a draw back with `get_draw(seed)` and re-derive the cards.
 //!
 //! Buyback: the owner (or a function-call key on this account limited to `payout`) calls
@@ -53,7 +53,7 @@ pub struct Draw {
 #[derive(PanicOnDefault)]
 pub struct Pokenear {
     owner: AccountId,
-    /// Where rip payments are forwarded (pokenear.near).
+    /// Where pack payments are forwarded (nearpacks.near).
     treasury: AccountId,
     /// Fixed price of one card per pack, in yoctoNEAR. Index = pack. Empty = live quotes.
     prices: Vec<U128>,
@@ -133,9 +133,9 @@ impl Pokenear {
 
     /* ---------- player ---------- */
 
-    /// A rip paid in NEAR. Attach exactly price[pack] x count. Panics (= full refund) on any mismatch.
+    /// A pack opening paid in NEAR. Attach exactly price[pack] x count. Panics (= full refund) on any mismatch.
     #[payable]
-    pub fn rip(&mut self, seed: String, pack: u8, count: u8) -> Draw {
+    pub fn open_pack(&mut self, seed: String, pack: u8, count: u8) -> Draw {
         let amount = env::attached_deposit().as_yoctonear();
         require!(is_seed(&seed), "seed must be 64 lowercase hex characters");
         require!(count >= 1 && count <= MAX_PER_RIP, "bad card count");
@@ -160,7 +160,7 @@ impl Pokenear {
 
         let draw = Draw { account, randomness, block_height: height, timestamp_ms: env::block_timestamp_ms(), pack, count, amount: U128(amount) };
         env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"pokenear\",\"version\":\"3.0.0\",\"event\":\"rip\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
+            "EVENT_JSON:{{\"standard\":\"pokenear\",\"version\":\"3.0.0\",\"event\":\"open_pack\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
             seed, draw.account, draw.randomness, pack, count, amount, height
         ));
         self.draws.insert(seed, draw.clone());
@@ -243,7 +243,7 @@ mod tests {
 
     fn rip(c: &mut Pokenear, seed: &str, pack: u8, count: u8, deposit: u128) -> Draw {
         ctx(player(), deposit, 7, 100);
-        c.rip(seed.to_string(), pack, count)
+        c.open_pack(seed.to_string(), pack, count)
     }
 
     #[test]

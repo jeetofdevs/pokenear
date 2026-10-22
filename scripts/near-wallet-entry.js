@@ -57,7 +57,7 @@ async function pay(walletId, params) {
     receiverId: params.receiverId,
     actions: [params.method === 'transfer'
       ? actionCreators.transfer(BigInt(params.deposit))
-      : actionCreators.functionCall(params.method || 'rip', params.args, BigInt('50000000000000'), BigInt(params.deposit))]
+      : actionCreators.functionCall(params.method || 'open_pack', params.args, BigInt('50000000000000'), BigInt(params.deposit))]
   });
   if (!outcome) return null;
   return { tx: outcome.transaction_outcome ? outcome.transaction_outcome.id : (outcome.transaction && outcome.transaction.hash) || null };

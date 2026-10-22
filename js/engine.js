@@ -117,7 +117,7 @@
       case 'ripStart': {
         // Reserve a seed for a rip. The player then pays on chain; the payment draws the randomness.
         requireUser(state);
-        if (state.pendingRip) throw GameError('Finish or cancel your open rip first.');
+        if (state.pendingRip) throw GameError('Finish or cancel your unopened pack first.');
         var pack = D.packById[action.pack];
         if (!pack) throw GameError('That pack is not available.');
         var count = D.MULTI.indexOf(action.count) >= 0 ? action.count : 1;
@@ -129,7 +129,7 @@
       case 'ripFinish': {
         requireUser(state);
         var pr = state.pendingRip;
-        if (!pr) throw GameError('There is no open rip.');
+        if (!pr) throw GameError('There is no unopened pack.');
         var proof = action.proof || {};
         var randomness = String(proof.randomness || '');
         if (!(isHex(randomness, 32) || isHex(randomness, 64))) throw GameError('Bad randomness.');
@@ -153,7 +153,7 @@
       case 'ripCancel': {
         // Drop an unpaid rip (the server checks nothing was paid for its seed).
         requireUser(state);
-        if (!state.pendingRip) throw GameError('There is no open rip.');
+        if (!state.pendingRip) throw GameError('There is no unopened pack.');
         state.pendingRip = null;
         result.cancelled = true;
         break;
