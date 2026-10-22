@@ -1,4 +1,4 @@
-/* Pokenear UI. Renders from store.state; all game rules live in engine.js.
+/* Near Packs UI. Renders from store.state; all game rules live in engine.js.
    Gacha model: tiered packs, one card per rip, published odds, instant 96% buyback.
    Cards are drawn from real set data (js/cards.js). When remote images are allowed,
    the official card scan fades in over the drawn card. */
@@ -59,7 +59,7 @@
   function buybackReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready && store.game.buyback); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
-  var COIN = '<span class="coin" aria-hidden="true">P</span>';
+  var COIN = '<span class="coin" aria-hidden="true">N</span>';
   var WALLET_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a3 3 0 0 1 3-3h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm14 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
   var CHAIN_BADGE = {
     solana: '<span class="chain-dot sol" title="Solana" aria-label="Solana"></span>',
@@ -183,10 +183,10 @@
 
   // Booster wrapper look per pack tier: foil colours, hero Pokémon and two companions behind it.
   var PACK_LOOK = {
-    starter: { hero: 25, side: [1, 7], foil: ['#ffe14d', '#f7a51c', '#c4560f'], ink: '#3a1d00', stars: 1, label: 'Starter' },
-    rare: { hero: 94, side: [92, 93], foil: ['#c7a2ff', '#7a3fe0', '#2a1263'], ink: '#ffffff', stars: 2, label: 'Rare' },
-    elite: { hero: 448, side: [282, 359], foil: ['#8fe9ff', '#2a8fe0', '#0d2f73'], ink: '#ffffff', stars: 3, label: 'Elite' },
-    legend: { hero: 6, side: [150, 151], foil: ['#ffcf6b', '#c0262d', '#1c0306'], ink: '#ffe8a8', stars: 4, label: 'Legend' }
+    starter: { hero: 25, side: [1, 7], foil: ['#7dffcb', '#00ec97', '#00744a'], ink: '#00170e', stars: 1, label: 'Starter' },
+    rare: { hero: 94, side: [92, 93], foil: ['#cfc7ff', '#8b7bff', '#2c1f86'], ink: '#ffffff', stars: 2, label: 'Rare' },
+    elite: { hero: 448, side: [282, 359], foil: ['#a8ecff', '#2db7ff', '#08376a'], ink: '#ffffff', stars: 3, label: 'Elite' },
+    legend: { hero: 6, side: [150, 151], foil: ['#5a6270', '#1b1f25', '#050607'], ink: '#00ec97', stars: 4, label: 'Legend' }
   };
   // Zig-zag crimp along the top and bottom of the wrapper.
   var CRIMP = (function () {
@@ -205,7 +205,7 @@
         '<div class="bw-rays"></div><div class="bw-holo"></div>' +
         '<div class="bw-crimp top"></div><div class="bw-crimp bottom"></div>' +
         '<div class="bw-tear">TEAR ▸</div>' +
-        '<div class="bw-logo"><span>POKENEAR</span><small>Trading Card Gacha</small></div>' +
+        '<div class="bw-logo"><span>NEAR PACKS</span><small>Pokémon card packs</small></div>' +
         '<div class="bw-stage">' +
           '<span class="bw-ring"></span>' +
           '<img class="bw-side l" src="' + artUrl(look.side[0]) + '" alt="" decoding="async">' +
@@ -269,13 +269,13 @@
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
-      '<a class="brand" href="#packs"><img class="brand-icon" src="assets/brand/pokenear-icon.svg" alt="" width="36" height="36"><span class="brand-name">POKENEAR</span></a>' +
+      '<a class="brand" href="#packs"><img class="brand-icon" src="assets/brand/nearpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Near<b>Packs</b></span></a>' +
       (store.mode === 'local' ? '<span class="mode-pill" title="No server connected. Progress is saved in this browser only.">Demo</span>' : '') +
       nav + '<div class="top-right">' + right + '</div></div></header>';
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in NEAR. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Pokenear is not affiliated with them.</span>' +
+    return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in NEAR. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Near Packs is not affiliated with them.</span>' +
       '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
@@ -447,11 +447,11 @@
     }).join('') + '</nav>';
     var secs = [
       docSec('start', 'Getting started',
-        '<p>Pokenear is an on-chain Pokémon TCG gacha on NEAR. You open packs of real Pokémon cards, paid in ' + D.TOKEN + ', keep them in your vault or sell them back, and every card is decided by randomness drawn on chain that you can check yourself.</p>' +
+        '<p>Near Packs is an on-chain Pokémon TCG gacha on NEAR. You open packs of real Pokémon cards, paid in ' + D.TOKEN + ', keep them in your vault or sell them back, and every card is decided by randomness drawn on chain that you can check yourself.</p>' +
         '<ol class="doc-list">' +
           '<li><b>Connect a NEAR wallet.</b> HOT, Meteor, MyNearWallet, Sender or Intear. You sign one message to prove the wallet is yours. That message is not a transaction and costs nothing.</li>' +
           '<li><b>Pick a pack.</b> Four tiers from ' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + '. Every card in the pack and its exact chance is listed before you buy.</li>' +
-          '<li><b>Pay in NEAR.</b> Your wallet sends one transaction with the pack price to the Pokenear contract ' + GA + '. The same transaction draws your randomness on chain.</li>' +
+          '<li><b>Pay in NEAR.</b> Your wallet sends one transaction with the pack price to the Near Packs contract ' + GA + '. The same transaction draws your randomness on chain.</li>' +
           '<li><b>Keep or sell.</b> Cards go to your vault. Sell any card back for ' + BB + ' of its value, paid in ' + D.TOKEN + ' to your wallet.</li>' +
         '</ol>'),
       docSec('packs', 'Packs and prices',
@@ -473,12 +473,12 @@
         '<p>Packs are paid in <b>NEAR</b>. There are no credits, points or off-chain balances: the balance in the top bar is the NEAR in your wallet.</p>' +
         '<ul class="doc-list">' +
           '<li><b>Live price.</b> Packs are priced in USD. When you open one, the NEAR amount is taken from the live NEAR market price at that moment and locked for that rip, so $10 is always $10 of NEAR.</li>' +
-          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Pokenear treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Pokenear contract is live, a <code>rip</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
+          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Near Packs treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Near Packs contract is live, a <code>rip</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
           '<li><b>Exact amount.</b> The site always asks for the exact quoted amount. A payment with a different amount does not open the pack.</li>' +
           '<li><b>Buybacks</b> are paid in NEAR from ' + GA + ' straight to your wallet.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
-        '<p>Nobody at Pokenear picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
+        '<p>Nobody at Near Packs picks your card, and the server cannot change it after the fact. Each rip works like this:</p>' +
         '<ol class="doc-list">' +
           '<li><b>Seed.</b> When you rip, the server gives you a one-time 32-byte <code>seed</code>. It is shown in the rip proof.</li>' +
           '<li><b>Pay.</b> Your wallet calls <code>rip</code> on ' + GA + ' with that seed and the pack price in NEAR. The server never holds your keys and cannot pay for you.</li>' +
@@ -510,23 +510,23 @@
       docSec('security', 'Wallet safety',
         '<ul class="doc-list">' +
           '<li>Sign-in is one plain-text message with a one-time code. It never asks for a transaction, approval or seed phrase.</li>' +
-          '<li>The only transaction Pokenear asks for is <code>rip</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
-          '<li>Pokenear will never DM you, ask for your seed phrase, or ask you to send NEAR or tokens to any address.</li>' +
+          '<li>The only transaction Near Packs asks for is <code>rip</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
+          '<li>Near Packs will never DM you, ask for your seed phrase, or ask you to send NEAR or tokens to any address.</li>' +
           '<li>The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
         '</ul>'),
       docSec('faq', 'FAQ',
         [
-          ['Can Pokenear change my card after I rip?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
-          ['Can Pokenear see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
+          ['Can Near Packs change my card after I rip?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
+          ['Can Near Packs see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The rip stays open: press Continue to pay and finish it, or Cancel rip to drop it.'],
           ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the rip and opens nothing, so always pay from the site.'],
           ['Why does the NEAR amount change?', 'Packs are priced in USD. The NEAR amount follows the live NEAR market price and is locked when you open the pack.'],
           ['Why NEAR only?', 'Payments, randomness and buybacks all happen on NEAR, in one place you can verify.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
-          ['How strong is NEAR randomness?', 'It comes from the validators of each block. It cannot be predicted by players or by Pokenear; in theory a block producer could withhold a block, which for card values like these costs far more than it could win.']
+          ['How strong is NEAR randomness?', 'It comes from the validators of each block. It cannot be predicted by players or by Near Packs; in theory a block producer could withhold a block, which for card values like these costs far more than it could win.']
         ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
     ];
-    return '<section class="section-head"><div><div class="eyebrow">Docs</div><h2 class="page-title">How Pokenear works</h2></div>' +
+    return '<section class="section-head"><div><div class="eyebrow">Docs</div><h2 class="page-title">How Near Packs works</h2></div>' +
       '<a class="btn btn-sm btn-ghost" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></section>' +
       '<div class="docs">' + toc + '<div class="doc-body">' + secs.join('') + '</div></div>';
   }
@@ -592,7 +592,7 @@
     var needOwner = '<p class="small">Log in as the contract owner <b>' + esc(owner) + '</b> or as ' + GA + ' to do this.</p>';
     var modeLine = st.ready
       ? '<section class="panel admin-live ok"><b>Packs are live.</b> ' + (st.mode === 'contract'
-          ? 'Players pay through the Pokenear contract on ' + esc(st.account) + '; payments go to ' + esc((st.config && st.config.treasury) || D.TREASURY) + '.'
+          ? 'Players pay through the Near Packs contract on ' + esc(st.account) + '; payments go to ' + esc((st.config && st.config.treasury) || D.TREASURY) + '.'
           : 'Players send NEAR straight to ' + esc(st.directTreasury) + ' (direct mode). Deploy the contract below to turn on buybacks.') + '</section>'
       : '<section class="panel admin-live"><b>Packs are not open yet.</b> They open as soon as a NEAR price is available (step 2).</section>';
     var summary = modeLine + '<section class="panel admin-summary">' +
@@ -602,11 +602,11 @@
 
     // 1. Contract
     var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + D.CONTRACT_OWNER + '","treasury":"' + D.TREASURY + '","prices":null}\'';
-    var s1 = adminStep(1, st.initialized, 'Pokenear contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
+    var s1 = adminStep(1, st.initialized, 'Near Packs contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
         : !asGame ? needGame : (st.deployed
           ? '<p class="small">Code is deployed but not initialized.</p><button class="btn btn-gold" data-act="admin-init"' + busy('Initialize') + '>Initialize contract</button>'
-          : '<p class="small">Deploys the Pokenear contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
+          : '<p class="small">Deploys the Near Packs contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
             '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
             '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/pokenear_game.wasm" download>pokenear_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
 
@@ -763,7 +763,7 @@
     }).join('');
     $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal wallet-modal" id="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
       '<div class="modal-title">' + WALLET_SVG + '<h2 id="connect-title">Connect wallet</h2></div>' +
-      '<p class="muted small">Pokenear runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
+      '<p class="muted small">Near Packs runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
       '<section><div class="eyebrow">' + CHAIN_BADGE.near + ' NEAR</div><ul class="wallet-list">' + near + '</ul></section>' +
       '<div class="err" id="connect-err" role="alert"></div>' +
       (store.mode === 'local' ? '<div class="demo-wallet"><span class="muted small">No wallet in this browser? This preview can use a throwaway demo address.</span><button class="btn btn-sm" data-act="wallet-demo">Use demo wallet</button></div>' : '') +
@@ -1002,7 +1002,7 @@
               : '<button class="btn btn-sm sell" data-act="sell-rip" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled') + '>Sell back ' + buybackUsd([card]) + '</button>')
           : '';
         return '<div class="rip-slot"><button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + (sold ? ' sold' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 80) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
-          '<div class="flip-inner"><div class="face back"><div class="card-back"><img src="assets/brand/pokenear-icon.svg" alt=""></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
+          '<div class="flip-inner"><div class="face back"><div class="card-back"><img src="assets/brand/nearpacks-icon.svg" alt=""></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
       }).join('');
       var summary = '', actions;
       if (all) {
@@ -1181,7 +1181,7 @@
     ['overlay', 'modal', 'toasts'].forEach(function (id) {
       if (!$('#' + id)) { var d = doc.createElement('div'); d.id = id; if (id === 'toasts') d.className = 'toasts'; doc.body.appendChild(d); }
     });
-    app.innerHTML = '<div class="wrap muted" style="padding-block:80px;text-align:center">Loading Pokenear…</div>';
+    app.innerHTML = '<div class="wrap muted" style="padding-block:80px;text-align:center">Loading Near Packs…</div>';
     doc.addEventListener('click', onClick);
     doc.addEventListener('pointermove', onMove);
     doc.addEventListener('keydown', onKey);

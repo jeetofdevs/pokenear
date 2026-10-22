@@ -1,5 +1,5 @@
 'use strict';
-/* Pokenear server: static files + NEAR wallet sign-in + authoritative game API.
+/* Near Packs server: static files + NEAR wallet sign-in + authoritative game API.
    No runtime dependencies. Sign-in is a signed message with a one-time nonce.
    Rips are paid in NEAR: the player calls rip() on the interaction wallet's contract (GAME_ACCOUNT,
    pokenearfun.near) with the pack price attached; it draws the randomness and forwards the NEAR to
@@ -580,7 +580,7 @@ const server = http.createServer((req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`Pokenear v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
+    console.log(`Near Packs v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
   });
 }
 

@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261017.9'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261022.1'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the Pokenear interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
@@ -40,10 +40,10 @@
   // Gacha packs, cheapest first. min/max bound the card values in the pool (USD).
   var PACKS = [
     // Each tier has its own value band so every pack has different chase cards.
-    { id: 'starter', name: 'Starter Pack', usd: 10, min: 2, max: 70, hue: 200, tag: 'Most popular' },
-    { id: 'rare', name: 'Rare Pack', usd: 25, min: 5, max: 130, hue: 150, tag: 'Value' },
-    { id: 'elite', name: 'Elite Pack', usd: 50, min: 12, max: 230, hue: 270, tag: 'Chase' },
-    { id: 'legend', name: 'Legend Pack', usd: 100, min: 30, max: 1000, hue: 40, tag: 'High roller' }
+    { id: 'starter', name: 'Starter Pack', usd: 10, min: 2, max: 70, hue: 158, tag: 'Most popular' },
+    { id: 'rare', name: 'Rare Pack', usd: 25, min: 5, max: 130, hue: 250, tag: 'Value' },
+    { id: 'elite', name: 'Elite Pack', usd: 50, min: 12, max: 230, hue: 200, tag: 'Chase' },
+    { id: 'legend', name: 'Legend Pack', usd: 100, min: 30, max: 1000, hue: 158, tag: 'High roller' }
   ];
   var MULTI = [1, 5];       // rips per purchase
 

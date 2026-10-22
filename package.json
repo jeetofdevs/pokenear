@@ -1,7 +1,7 @@
 {
   "name": "pokenear",
   "version": "1.0.0",
-  "description": "Pokenear: real Pokémon and One Piece TCG gacha with X login, invites and a $POKENEAR whitelist.",
+  "description": "Near Packs: open real Pokémon card packs with NEAR, with published odds and on-chain randomness.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -12,7 +12,6 @@
     "test": "node --test tests/engine.test.js tests/onchain.test.js tests/near-tx.test.js tests/price.test.js tests/server.test.js",
     "build:cards": "node scripts/build-cards.js",
     "build:near": "esbuild scripts/near-wallet-entry.js --bundle --minify --format=iife --platform=browser --target=es2019 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/near-wallet.js",
-    "build:brand": "node scripts/build-brand.js",
     "build:x-header": "node scripts/render-x-header.js",
     "payout-key": "node scripts/payout-key.js",
     "build:x-post": "node scripts/render-x-header.js post && node scripts/render-x-header.js first",

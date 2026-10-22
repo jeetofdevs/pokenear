@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Pokenear X header</title>
+<title>Near Packs X header</title>
 <!-- Source for x-header.png (1500x500). Render with: npm run build:x-header -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@700;800;900&family=JetBrains+Mono:wght@700&family=Lilita+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
 <link rel="stylesheet" href="../../css/style.css">
 <style>
   html, body { margin: 0; background: #070a1c; }
   .hdr { position: relative; width: 1500px; height: 500px; overflow: hidden;
     background:
-      radial-gradient(520px 300px at 50% 46%, rgba(0, 236, 151, 0.20), transparent 70%),
-      radial-gradient(700px 420px at 50% 40%, rgba(80, 110, 255, 0.35), transparent 70%),
-      linear-gradient(180deg, #0d1336, #070a1c);
+      radial-gradient(520px 300px at 50% 46%, rgba(0, 236, 151, 0.22), transparent 70%),
+      radial-gradient(700px 420px at 50% 40%, rgba(139, 123, 255, 0.30), transparent 70%),
+      linear-gradient(180deg, #111418, #070809);
   }
   .rays { position: absolute; inset: -40%; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.05) 0 4deg, transparent 4deg 12deg); }
   .dots { position: absolute; inset: 0; background: radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1.3px) 0 0 / 22px 22px; -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 25%, #000 80%); mask-image: radial-gradient(ellipse at 50% 50%, transparent 25%, #000 80%); }
@@ -26,11 +26,14 @@
   .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -54%); display: grid; justify-items: center; gap: 14px; z-index: 3; width: 760px; text-align: center; }
   .center img { width: 560px; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.55)); }
     .tag { white-space: nowrap; }
-  .tag { font: 800 20px/1.2 Figtree, sans-serif; color: #eef0ff; letter-spacing: 0.01em; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+  .tag { font: 800 20px/1.2 Inter, sans-serif; color: #eef0ff; letter-spacing: 0.01em; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
   .chips { display: flex; gap: 10px; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: rgba(10, 14, 40, 0.75); border: 1px solid rgba(255, 255, 255, 0.18); font: 800 15px/1 Figtree, sans-serif; color: #fff; }
-  .chip b { color: #ffd84a; font-family: 'JetBrains Mono', monospace; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: rgba(10, 14, 40, 0.75); border: 1px solid rgba(255, 255, 255, 0.18); font: 800 15px/1 Inter, sans-serif; color: #fff; }
+  .chip b { color: #00ec97; font-family: 'JetBrains Mono', monospace; }
   .chip .chain-dot { width: 16px; height: 16px; margin: 0; }
+  .np-word { display: flex; align-items: center; gap: 0.32em; font: 700 1em/1 'Space Grotesk', sans-serif; letter-spacing: -0.035em; color: #fff; }
+  .np-word img { width: 1.15em; height: 1.15em; border-radius: 0.26em; filter: drop-shadow(0 0.08em 0.25em rgba(0, 236, 151, 0.45)); }
+  .np-word b { color: #00ec97; font-weight: 700; margin-left: 0.18em; }
 </style>
 </head>
 <body>
@@ -41,11 +44,11 @@
   <div class="pack p3" data-pack="elite"></div>
   <div class="pack p4" data-pack="legend"></div>
   <div class="center">
-    <img src="pokenear-logo.svg" alt="Pokenear">
-    <div class="tag">Rip real Pokémon cards · Odds for every card · 96% instant buyback</div>
+    <div style="font-size:84px"><div class="np-word"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span></div></div>
+    <div class="tag">Real Pokémon packs · On-chain odds · 96% buyback</div>
     <div class="chips">
       <span class="chip">Packs from <b>$10</b></span>
-      <span class="chip">Paid in <b>$POKENEAR</b></span>
+      <span class="chip">Paid in <b>NEAR</b></span>
             <span class="chip"><span class="chain-dot near"></span>NEAR</span>
       <span class="chip">On-chain RNG</span>
       <span class="chip"><b>@pokenearfun</b></span>

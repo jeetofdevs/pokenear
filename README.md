@@ -1,4 +1,4 @@
-# Pokenear
+# Near Packs
 
 On-chain Pokémon TCG gacha on NEAR: packs are paid in **NEAR** through the contract on **pokenearfun.near**, which draws the randomness and forwards every payment to the treasury **pokenear.near** in the same transaction.
 
@@ -44,7 +44,7 @@ Packs open as soon as the server knows the NEAR price; no contract is needed for
 
 Log in to the site with **pokenearfun.near** and open **Admin** (`#admin`, only shown to that wallet). Each step is one transaction your wallet approves; the server never holds the wallet's keys:
 
-1. **Deploy** the Pokenear contract (treasury pokenear.near is set at deploy). If your wallet cannot deploy from a website, the page shows the one CLI command instead.
+1. **Deploy** the Near Packs contract (treasury pokenear.near is set at deploy). If your wallet cannot deploy from a website, the page shows the one CLI command instead.
 2. **Prices**: enter the USD price of 1 NEAR, calculate, save. Packs open for players right away. Update when the NEAR price moves.
 3. **Treasury**: shows that payments go to pokenear.near (and can switch it if needed).
 4. **Buyback key**: generated in your browser and shown once. Paste it into your hosting as `PAYOUT_KEY`, approve adding it (it can only call `payout`), redeploy. Keep NEAR on pokenearfun.near for buybacks.
@@ -74,7 +74,7 @@ The server runs on Node 18+ and has no runtime dependencies (no `npm install` ne
 | `PUBLIC_URL` | (empty) | Set to your `https://` URL so the session cookie is `Secure` |
 | `NEAR_NETWORK` | `mainnet` | `testnet` for NEAR testnet (also set `nearNetwork` in `index.html`) |
 | `NEAR_RPC` | FastNEAR, then near.org | NEAR RPC URL(s), comma separated |
-| `GAME_ACCOUNT` | `pokenearfun.near` | Interaction wallet running the Pokenear contract |
+| `GAME_ACCOUNT` | `pokenearfun.near` | Interaction wallet running the Near Packs contract |
 | `PAYOUT_KEY` | (empty) | `ed25519:...` function-call key of `GAME_ACCOUNT` for `payout`; empty = buyback closed |
 | `DEV_ACCOUNTS` | `pokenearfun.near` | Wallets that rip without paying (recorded as dev rips) |
 | `DB_FILE` | `data/db.json` | Where game state is stored |
@@ -85,18 +85,16 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 
 ## Brand
 
-`assets/brand/` holds the Pokenear brand kit:
+`assets/brand/` holds the Near Packs brand kit (NEAR green #00ec97, violet #8b7bff, near-black; Space Grotesk + Inter):
 
 | File | Use |
 | --- | --- |
-| `pokenear-logo.svg` / `.png` | Wordmark with the orb as the O and the "Trading Card Gacha" ribbon (vector outlines, no font needed) |
-| `pokenear-icon.svg` / `.png` | The orb: collector ball with the NEAR symbol in the centre button. Site favicon and topbar icon |
+| `nearpacks-icon.svg` / `.png` | Logo icon: a holo-foil booster pack with the NEAR mark. Favicon, top bar, card backs |
 | `x-profile.png` | 400×400 X profile picture |
 | `x-header.png` | 1500×500 X header (source: `x-header.html`) |
-| `x-post.png` | 1600×900 X post image (source: `x-post.html`) |
-| `x-first-post.png` | Launch-day first post: same image with a "Live on NEAR" badge (`x-post.html?first`) |
+| `x-post.png`, `x-first-post.png` | 1600×900 X post images (source: `x-post.html`, `?first` for the launch badge) |
 
-Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header` and `npm run build:x-post` (need Playwright + Chromium).
+Rebuild the X images with `npm run build:x-header` and `npm run build:x-post` (need Playwright + Chromium).
 
 ## Layout
 
@@ -116,7 +114,7 @@ Rebuild with `npm run build:brand` (logo, icon, profile) `npm run build:x-header
 | `server/server.js`, `server/wallet-verify.js` | Static files, wallet sign-in and signature checks, game API |
 | `server/onchain.js` | NEAR view calls: contract config, draws, token metadata and balances |
 | `server/near-tx.js` | Dependency-free NEAR transaction signer for buyback payouts |
-| `contracts/near-rng/` | Pokenear contract for pokenearfun.near: NEAR payments forwarded to pokenear.near, randomness, payouts (Rust, near-sdk 5.11) |
+| `contracts/near-rng/` | Near Packs contract for pokenearfun.near: NEAR payments forwarded to pokenear.near, randomness, payouts (Rust, near-sdk 5.11) |
 | `tests/` | `node --test` suites |
 
 ## Notes before launch
