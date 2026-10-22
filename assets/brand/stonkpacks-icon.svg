@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- StonkPacks icon: a crimped booster pack in Solana green-to-purple holo foil carrying a rising stonk chart. -->
+  <!-- StonkPacks icon: a crimped booster pack in StonkFun steel-blue foil carrying the StonkFun S mark. -->
   <defs>
-    <radialGradient id="bg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#16231f"/><stop offset="1" stop-color="#08090b"/></radialGradient>
-    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5dffc6"/><stop offset="0.45" stop-color="#14f195"/><stop offset="1" stop-color="#9945ff"/></linearGradient>
+    <radialGradient id="bg" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#13222a"/><stop offset="1" stop-color="#0a1216"/></radialGradient>
+    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3f1f6"/><stop offset="0.45" stop-color="#a9c7d3"/><stop offset="1" stop-color="#5f8798"/></linearGradient>
     <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
     <clipPath id="pack"><path d="M64 48 L70.4 40 L76.8 48 L83.2 40 L89.6 48 L96.0 40 L102.4 48 L108.8 40 L115.2 48 L121.6 40 L128.0 48 L134.4 40 L140.8 48 L147.2 40 L153.6 48 L160.0 40 L166.4 48 L172.8 40 L179.2 48 L185.6 40 L192.0 48 L192 208 L185.6 216 L179.2 208 L172.8 216 L166.4 208 L160.0 216 L153.6 208 L147.2 216 L140.8 208 L134.4 216 L128.0 208 L121.6 216 L115.2 208 L108.8 216 L102.4 208 L96.0 216 L89.6 208 L83.2 216 L76.8 208 L70.4 216 L64.0 208 Z"/></clipPath>
     <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="10"/></filter>
   </defs>
   <rect width="256" height="256" rx="0" fill="url(#bg)"/>
-  <path d="M64 48 L70.4 40 L76.8 48 L83.2 40 L89.6 48 L96.0 40 L102.4 48 L108.8 40 L115.2 48 L121.6 40 L128.0 48 L134.4 40 L140.8 48 L147.2 40 L153.6 48 L160.0 40 L166.4 48 L172.8 40 L179.2 48 L185.6 40 L192.0 48 L192 208 L185.6 216 L179.2 208 L172.8 216 L166.4 208 L160.0 216 L153.6 208 L147.2 216 L140.8 208 L134.4 216 L128.0 208 L121.6 216 L115.2 208 L108.8 216 L102.4 208 L96.0 216 L89.6 208 L83.2 216 L76.8 208 L70.4 216 L64.0 208 Z" fill="#14f195" opacity="0.45" filter="url(#glow)"/>
+  <path d="M64 48 L70.4 40 L76.8 48 L83.2 40 L89.6 48 L96.0 40 L102.4 48 L108.8 40 L115.2 48 L121.6 40 L128.0 48 L134.4 40 L140.8 48 L147.2 40 L153.6 48 L160.0 40 L166.4 48 L172.8 40 L179.2 48 L185.6 40 L192.0 48 L192 208 L185.6 216 L179.2 208 L172.8 216 L166.4 208 L160.0 216 L153.6 208 L147.2 216 L140.8 208 L134.4 216 L128.0 208 L121.6 216 L115.2 208 L108.8 216 L102.4 208 L96.0 216 L89.6 208 L83.2 216 L76.8 208 L70.4 216 L64.0 208 Z" fill="#a9c7d3" opacity="0.35" filter="url(#glow)"/>
   <g transform="rotate(-8 128 128)">
     <path d="M64 48 L70.4 40 L76.8 48 L83.2 40 L89.6 48 L96.0 40 L102.4 48 L108.8 40 L115.2 48 L121.6 40 L128.0 48 L134.4 40 L140.8 48 L147.2 40 L153.6 48 L160.0 40 L166.4 48 L172.8 40 L179.2 48 L185.6 40 L192.0 48 L192 208 L185.6 216 L179.2 208 L172.8 216 L166.4 208 L160.0 216 L153.6 208 L147.2 216 L140.8 208 L134.4 216 L128.0 208 L121.6 216 L115.2 208 L108.8 216 L102.4 208 L96.0 216 L89.6 208 L83.2 216 L76.8 208 L70.4 216 L64.0 208 Z" fill="url(#foil)"/>
     <g clip-path="url(#pack)">
@@ -16,9 +16,11 @@
       <rect x="40" y="52" width="176" height="14" fill="#000" opacity="0.12"/>
       <rect x="40" y="190" width="176" height="14" fill="#000" opacity="0.12"/>
     </g>
-    <circle cx="128" cy="128" r="44" fill="#0b0d0f"/>
-    <g transform="translate(-5 6)"><path d="M100 150 L118 130 L130 140 L156 108" fill="none" stroke="#14f195" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M142 104 L160 104 L160 122" fill="none" stroke="#14f195" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <circle cx="128" cy="128" r="46" fill="#0a1216"/>
+    <g transform="translate(70.5 70.5) scale(1.15)" fill="#a9c7d3">
+      <path id="sock" d="M36.5 47.6 C30.5 49.4 26.6 46.9 26.1 42.6 C25.6 38.3 28.3 35.4 33.4 34.1 L52.6 29.3 C55.6 28.5 57.4 27.4 58.4 25.0 L59.6 22.4 C60.3 20.9 61.6 20.3 63.2 20.7 L77.4 24.4 C79.3 24.9 79.9 26.7 78.8 28.3 L69.4 41.6 C68.4 43.0 66.9 43.3 65.4 42.4 C62.5 40.6 59.3 40.6 55.0 41.9 Z"/>
+      <use href="#sock" transform="rotate(180 50 50)"/>
+    </g>
   </g>
   <path d="M206 50 l5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5z" fill="#fff" opacity="0.9"/>
 </svg>
