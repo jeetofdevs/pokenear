@@ -7,7 +7,7 @@ Players connect a NEAR wallet, open Pokémon card packs with published odds, kee
 ## Features
 
 - **NEAR wallet sign-in**: HOT, Meteor, MyNearWallet, Sender, Intear via NEAR Wallet Selector (bundled in `vendor/near-wallet.js`). The wallet signs a NEP-413 message (no transaction, no fee); the server verifies it and checks the key is a full-access key of the account.
-- **Tiered packs, one card per pack**, priced in USD and paid in NEAR (the NEAR amount is set on chain and follows the NEAR price). Each tier has its own value band so every pack has different chase cards:
+- **Tiered packs, one card per pack**, priced in USD and paid in NEAR (the NEAR amount is set on chain and follows the NEAR price). Every Pokémon is in exactly one pack (Pokémon cards only, one print each), so every pack has its own cards:
 
   | Pack | Price | Card values in pool |
   | --- | --- | --- |

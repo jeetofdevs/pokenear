@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261022.7'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261022.8'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the Near Packs interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
@@ -37,13 +37,14 @@
   var EV_RATIO = 0.98;      // expected card value / pack price
   var BUYBACK_RATE = 0.96;  // instant sell-back as a share of card value
 
-  // Gacha packs, cheapest first. min/max bound the card values in the pool (USD).
+  // Gacha packs, cheapest first. Every Pokémon appears in exactly one pack (see splitPacks).
+  //   size: cards in the pack (legend) or cheaper "base" cards (elite, rare); chases: extra hit slots;
+  //   maxHit: the most valuable card the pack may hold.
   var PACKS = [
-    // Each tier has its own value band so every pack has different chase cards.
-    { id: 'starter', name: 'Starter Pack', usd: 10, min: 2, max: 70, hue: 158, tag: 'Most popular' },
-    { id: 'rare', name: 'Rare Pack', usd: 25, min: 5, max: 130, hue: 250, tag: 'Value' },
-    { id: 'elite', name: 'Elite Pack', usd: 50, min: 12, max: 230, hue: 200, tag: 'Chase' },
-    { id: 'legend', name: 'Legend Pack', usd: 100, min: 30, max: 1000, hue: 158, tag: 'High roller' }
+    { id: 'starter', name: 'Starter Pack', usd: 10, chases: 6, maxHit: 75, hue: 158, tag: 'Most popular' },
+    { id: 'rare', name: 'Rare Pack', usd: 25, base: 25, chases: 7, maxHit: 200, hue: 250, tag: 'Value' },
+    { id: 'elite', name: 'Elite Pack', usd: 50, base: 10, chases: 6, hue: 200, tag: 'Chase' },
+    { id: 'legend', name: 'Legend Pack', usd: 100, base: 0, chases: 10, hue: 158, tag: 'High roller' }
   ];
   var MULTI = [1, 5];       // rips per purchase
 
@@ -119,27 +120,50 @@
     });
   });
 
+  /* Split the cards between the packs so no Pokémon is in two packs.
+     Only Pokémon cards (they all have artwork), one print per name (the most valuable), worth $5+.
+     Cards under $12 are base cards: elite takes the best ones, then rare, starter gets the rest.
+     Hits ($12+) go one by one, most valuable first, to the pack that still needs the most value
+     per free slot to reach its expected value (+4% headroom); the top card goes to legend.
+     Starter then drops its cheapest cards until its average reaches the target. Deterministic. */
+  function splitPacks() {
+    var best = {};
+    ALL_CARDS.forEach(function (c) {
+      if (c.cat !== 'Pokemon' || c.usd < 5) return;
+      if (!best[c.name] || c.usd > best[c.name].usd) best[c.name] = c;
+    });
+    var list = Object.keys(best).map(function (k) { return best[k]; })
+      .sort(function (a, b) { return b.usd - a.usd || (a.id < b.id ? -1 : 1); });
+    var hits = list.filter(function (c) { return c.usd >= 12; });
+    var base = list.filter(function (c) { return c.usd < 12; });
+    var byId = {};
+    PACKS.forEach(function (p) { byId[p.id] = p; p.cards = []; p.goal = p.usd * EV_RATIO * 1.04; });
+    var at = 0;
+    ['elite', 'rare'].forEach(function (id) { var p = byId[id]; p.cards = base.slice(at, at + p.base); at += p.base; });
+    byId.starter.cards = base.slice(at);
+    PACKS.forEach(function (p) { p.cap = p.cards.length + p.chases; });
+    function sum(p) { return p.cards.reduce(function (n, c) { return n + c.usd; }, 0); }
+    hits.forEach(function (c, i) {
+      var pick = null, need = -Infinity;
+      PACKS.forEach(function (p) {
+        if (p.cards.length >= p.cap || (p.maxHit && c.usd > p.maxHit)) return;
+        var n = i === 0 && p.id === 'legend' ? Infinity : (p.goal * p.cap - sum(p)) / (p.cap - p.cards.length);
+        if (n > need) { need = n; pick = p; }
+      });
+      (pick || byId.legend).cards.push(c);
+    });
+    var s = byId.starter;
+    s.cards.sort(function (a, b) { return b.usd - a.usd; });
+    while (sum(s) / s.cards.length < s.goal) s.cards.pop();
+  }
+
   /* Pack odds: weight each card by value^-k and pick k so the expected value hits the target.
      Cheaper cards are more likely; the chase cards are rare. Deterministic, so the browser
      and the server always publish the same odds. */
   function buildPool(pack) {
     var target = pack.usd * EV_RATIO;
-    // One card per Pokémon name in a pack: when several prints fit, keep the most valuable one.
-    function inRange() {
-      var best = {};
-      ALL_CARDS.forEach(function (c) {
-        if (c.usd < pack.min || c.usd > pack.max) return;
-        if (!best[c.name] || c.usd > best[c.name].usd) best[c.name] = c;
-      });
-      return ALL_CARDS.filter(function (c) { return best[c.name] === c; });
-    }
-    function mean(list) { return list.reduce(function (n, c) { return n + c.usd; }, 0) / list.length; }
-    // Raise the floor until the pool can reach the target without favouring expensive cards.
-    var cards = inRange();
-    while (mean(cards) < target) {
-      pack.min = Math.round(pack.min * 1.1 + 1);
-      cards = inRange();
-    }
+    var cards = pack.cards;
+    pack.min = Math.min.apply(null, cards.map(function (c) { return c.usd; }));
     function ev(k) {
       var wsum = 0, vsum = 0;
       cards.forEach(function (c) { var w = Math.pow(c.usd, -k); wsum += w; vsum += w * c.usd; });
@@ -174,7 +198,9 @@
     pack.x3 = chanceAbove(pack.usd * 3);
     pack.x10 = chanceAbove(pack.usd * 10);
   }
+  splitPacks();
   PACKS.forEach(buildPool);
+  PACKS.forEach(function (p) { delete p.cards; delete p.goal; delete p.cap; });
 
   var data = {
     TOKEN: TOKEN,

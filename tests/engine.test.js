@@ -42,17 +42,21 @@ test('cheapest pack is $10 and no fixed token amounts exist before launch', () =
 });
 
 test('every pack publishes odds that sum to 100% and hit the EV target', () => {
+  const packOf = {};
   for (const p of D.PACKS) {
     const sum = p.pool.reduce((n, e) => n + e.p, 0);
     assert.ok(Math.abs(sum - 1) < 1e-9, `${p.id} odds sum ${sum}`);
     assert.ok(Math.abs(p.ev - p.usd * D.EV_RATIO) < 0.02, `${p.id} EV ${p.ev}`);
     for (const e of p.pool) {
       const c = D.cardById[e.id];
-      assert.ok(c.usd >= p.min && c.usd <= p.max, `${c.id} $${c.usd} outside ${p.id}`);
+      assert.equal(c.cat, 'Pokemon', `${c.id} has no Pokémon artwork`);
+      assert.ok(!p.maxHit || c.usd <= p.maxHit, `${c.id} $${c.usd} above ${p.id} max`);
+      assert.ok(!packOf[c.name], `${c.name} is in ${packOf[c.name]} and ${p.id}`);
+      packOf[c.name] = p.id;
     }
     // Pricier cards are never more likely than cheaper ones.
     for (let i = 1; i < p.pool.length; i++) assert.ok(p.pool[i].p >= p.pool[i - 1].p - 1e-12);
-    assert.ok(p.pool.length >= 20);
+    assert.ok(p.pool.length >= 8);
   }
 });
 

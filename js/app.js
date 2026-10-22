@@ -490,7 +490,7 @@
           '<li><b>Keep or sell.</b> Cards go to your vault. Sell any card back for ' + BB + ' of its value, paid in ' + D.TOKEN + ' to your wallet.</li>' +
         '</ol>'),
       docSec('packs', 'Packs and prices',
-        '<p>Each pack holds one card from a published list of real cards from the Scarlet &amp; Violet era (151, Mega Evolution, Black Bolt and White Flare). Higher tiers drop the low-value cards from the list, so their floor and top hits are higher.</p>' +
+        '<p>Each pack holds one card from a published list of real cards from the Scarlet &amp; Violet era (151, Mega Evolution, Black Bolt and White Flare). Every Pokémon is in exactly one pack, so each pack has its own cards and its own chase hits. Only Pokémon cards are used, one print per Pokémon.</p>' +
         '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Pack</th><th class="num">Price</th><th class="num">Expected value</th><th class="num">Cards</th><th class="num">Card values</th><th class="num">Beat the price</th><th class="num">3× the price</th></tr></thead><tbody>' +
         D.PACKS.map(function (p) {
           return '<tr><td><b>' + esc(p.name) + '</b></td><td class="num">' + usd(p.usd) + '</td><td class="num">' + usd(p.ev) + '</td><td class="num">' + p.pool.length + '</td><td class="num">' + usd(D.cardById[p.pool[p.pool.length - 1].id].usd) + ' – ' + usd(D.cardById[p.pool[0].id].usd) + '</td><td class="num">' + fmtChance(p.beat) + '</td><td class="num">' + fmtChance(p.x3) + '</td></tr>';
