@@ -58,7 +58,7 @@
   function buybackReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready && store.game.buyback)); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
-  var COIN = '<span class="coin" aria-hidden="true">N</span>';
+  var COIN = '<span class="coin" aria-hidden="true"></span>';
   var WALLET_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a3 3 0 0 1 3-3h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm14 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
   var CHAIN_BADGE = {
     solana: '<span class="chain-dot sol" title="Solana" aria-label="Solana"></span>',
