@@ -18,7 +18,7 @@
   // the server's TREASURY_SOL env var overrides it. This wallet also opens packs free (owner).
   var TREASURY_SOL = '8mTFXXZtXvb7oBWztYf1j2H14T1QwFJjtT5rkR7t8Beb';
   var LAUNCHPAD = { name: 'StonkFun', url: 'https://www.stonkfun.xyz/' }; // where the token launches
-  var VERSION = '20261023.3'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261023.4'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the StonkPacks interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
@@ -27,7 +27,8 @@
   var TREASURY = 'nearpacks.near'; // receives every pack payment
   var CONTRACT_OWNER = 'nearpacks.near'; // owner of the StonkPacks contract (prices, treasury)
   var ADMIN_ACCOUNTS = ['nearpacks.near']; // wallets that see the admin page
-  var X_HANDLE = 'NearPacks'; // official X account (link only)
+  var X_HANDLE = 'StonkPacksStore'; // official X account (link only)
+  var WEBSITE = 'stonkpacks.store'; // official website
 
   // On-chain pack prices for set_prices: each pack's USD price converted to the smallest unit
   // (yoctoNEAR: 24 decimals), given the USD price of one NEAR as a decimal string. Exact BigInt math.
@@ -224,6 +225,7 @@
     VERSION: VERSION,
     EV_RATIO: EV_RATIO,
     X_HANDLE: X_HANDLE,
+    WEBSITE: WEBSITE,
     BUYBACK_RATE: BUYBACK_RATE,
     PACKS: PACKS,
     MULTI: MULTI,

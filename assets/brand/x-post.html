@@ -8,15 +8,15 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
 <link rel="stylesheet" href="../../css/style.css">
 <style>
-  html, body { margin: 0; background: #040506; }
-  .post { position: relative; width: 1600px; height: 900px; overflow: hidden; background: #040506; }
+  html, body { margin: 0; background: #0a1216; }
+  .post { position: relative; width: 1600px; height: 900px; overflow: hidden; background: #0a1216; }
   /* light bursting out of the pack */
   .burst { position: absolute; left: 1150px; top: 330px; width: 2200px; height: 2200px; transform: translate(-50%, -50%);
     background: repeating-conic-gradient(from 0deg, rgba(255, 214, 120, 0.16) 0 3deg, transparent 3deg 11deg);
     -webkit-mask-image: radial-gradient(closest-side, #000 8%, transparent 62%); mask-image: radial-gradient(closest-side, #000 8%, transparent 62%); }
   .halo { position: absolute; left: 1150px; top: 360px; width: 1100px; height: 900px; transform: translate(-50%, -50%);
     background: radial-gradient(closest-side, rgba(255, 196, 92, 0.55), rgba(245, 120, 40, 0.18) 45%, transparent 70%); }
-  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: linear-gradient(0deg, #040506 20%, transparent); z-index: 3; }
+  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: linear-gradient(0deg, #0a1216 20%, transparent); z-index: 3; }
   .grain { position: absolute; inset: 0; z-index: 6; pointer-events: none; opacity: 0.35; background: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1.2px) 0 0 / 5px 5px; }
 
   /* the pack, torn open at the top */
@@ -48,9 +48,9 @@
   .copy { position: absolute; z-index: 5; left: 90px; top: 92px; width: 720px; }
   .logo { display: flex; align-items: center; gap: 16px; font: 700 40px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
   .logo img { width: 58px; height: 58px; }
-  .logo b { color: #14f195; margin-left: 0.2em; }
-  .live { display: inline-flex; align-items: center; gap: 10px; margin-left: 10px; padding: 8px 14px; border-radius: 999px; background: #14f195; color: #00170e; font: 900 14px/1 Inter, sans-serif; letter-spacing: 0.14em; }
-  .live i { width: 8px; height: 8px; border-radius: 50%; background: #00170e; }
+  .logo b { color: #a9c7d3; margin-left: 0.2em; }
+  .live { display: inline-flex; align-items: center; gap: 10px; margin-left: 10px; padding: 8px 14px; border-radius: 999px; background: #a9c7d3; color: #0a1216; font: 900 14px/1 Inter, sans-serif; letter-spacing: 0.14em; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: #0a1216; }
   h1 { margin: 64px 0 0; font: 700 96px/0.95 'Space Grotesk', sans-serif; letter-spacing: -0.05em; color: #fff; }
   h1 .gold { background: linear-gradient(90deg, #ffe7a3, #ffb84a 60%, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .lede { margin: 30px 0 0; font: 600 27px/1.4 Inter, sans-serif; color: rgba(255, 255, 255, 0.75); max-width: 640px; }
@@ -59,9 +59,9 @@
   .stat { padding: 18px 22px; min-width: 150px; border-radius: 18px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); }
   .stat b { display: block; font: 700 38px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
   .stat span { display: block; margin-top: 8px; font: 700 15px/1 Inter, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
-  .stat.g b { color: #14f195; }
-  .url { position: absolute; z-index: 5; right: 70px; bottom: 84px; display: flex; align-items: center; gap: 14px; padding: 18px 26px; border-radius: 18px; background: #14f195; color: #00170e;
-    font: 700 34px/1 'Space Grotesk', sans-serif; letter-spacing: -0.02em; box-shadow: 0 18px 40px rgba(0, 236, 151, 0.35); }
+  .stat.g b { color: #a9c7d3; }
+  .url { position: absolute; z-index: 5; right: 70px; bottom: 84px; display: flex; align-items: center; gap: 14px; padding: 18px 26px; border-radius: 18px; background: #a9c7d3; color: #0a1216;
+    font: 700 34px/1 'Space Grotesk', sans-serif; letter-spacing: -0.02em; box-shadow: 0 18px 40px rgba(169, 199, 211, 0.35); }
   .url svg { width: 30px; height: 30px; }
 </style>
 </head>
@@ -81,9 +81,10 @@
   <div class="stats">
     <div class="stat g"><b>98%</b><span>Avg value</span></div>
     <div class="stat"><b>$10</b><span>Packs from</span></div>
+    <div class="stat"><b>SOL</b><span>On StonkFun</span></div>
     <div class="stat"><b>100%</b><span>On-chain RNG</span></div>
   </div>
-  <div class="url">Launching on StonkFun<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+  <div class="url">stonkpacks.store<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
   <div class="grain"></div>
 </div>
 <script>window.PN_CONFIG = { remoteImages: false };</script>
