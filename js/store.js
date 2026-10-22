@@ -57,6 +57,15 @@
         .then(function () { store.emit(); return store.state; });
     },
 
+    // Re-reads the live game config (price, mode) so a closed site opens without a reload.
+    refreshGame: function () {
+      if (store.mode !== 'live') return Promise.resolve(null);
+      return fetchJSON('api/config').then(function (cfg) {
+        if (cfg && cfg.game) { store.game = cfg.game; store.devAccounts = cfg.devAccounts || store.devAccounts; store.emit(); }
+        return store.game;
+      }).catch(function () { return null; });
+    },
+
     // Local (demo) mode only: run the engine in the browser.
     dispatch: function (action) {
       return new Promise(function (resolve) {

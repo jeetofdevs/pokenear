@@ -1269,6 +1269,8 @@
       }
       setRoute();
       refreshBalance();
+      // Keep the NEAR price fresh; a closed site opens by itself once a price is available.
+      root.setInterval(function () { if (!ui.opening && !doc.hidden) store.refreshGame(); }, 30000);
       // Back from a redirect wallet after paying: continue the open rip with that transaction.
       try {
         var q = new URLSearchParams(root.location.search);
