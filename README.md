@@ -59,6 +59,16 @@ cargo +stable test                                       # 15 unit tests
 cargo build --release --target wasm32-unknown-unknown    # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/nearpacks_game.wasm
 ```
 
+## Deploy on Vercel
+
+The site and the game server both run on Vercel: static files are served as is, and every `/api/*` request goes to the serverless function `api/server.js` (same code as `npm start`, see `vercel.json`). Vercel keeps no files between requests, so game data lives in **Upstash Redis** (`server/kv.js`).
+
+1. Vercel project → **Storage** (or Marketplace) → add **Upstash Redis** (free plan) and connect it to this project. It sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` also work).
+2. Redeploy. `https://<domain>/api/config` must answer JSON with `"mode":"live"`.
+3. Optional env vars: `PAYOUT_KEY` (buyback), `NEAR_USD` (backup price).
+
+Without Redis the packs page says "Game database not connected". Requests that change data hold a short Redis lock, so payments are checked one at a time.
+
 ## Run it
 
 ```bash

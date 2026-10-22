@@ -56,7 +56,8 @@
   }
   // Why packs are closed, in plain words (shown on the packs page).
   function closedReason() {
-    if (store.mode !== 'live') return 'Game server not connected: this site cannot reach /api/config. Run the Near Packs server (npm start) for this domain.';
+    if (store.mode !== 'live') return 'Game server not connected: this site cannot reach /api/config.';
+    if (store.game && store.game.reason === 'storage') return 'Game database not connected: add Upstash Redis to the Vercel project, then redeploy.';
     return 'Waiting for the live NEAR price. Packs open automatically as soon as it loads.';
   }
   function payReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready)); }
@@ -274,7 +275,7 @@
         return '<a href="' + link(n[0]) + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
       }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="' + link('docs') + '"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
     var right = u
-      ? '<div class="balance" title="' + D.TOKEN + ' in your wallet">' + COIN + '<span class="num">' + (store.mode === 'live' ? (ui.balance ? fmtToken(ui.balance.amount, ui.balance.decimals) : '—') : '—') + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
+      ? '<div class="balance" title="' + D.TOKEN + ' in your wallet">' + COIN + '<span class="num">' + (ui.balance ? fmtToken(ui.balance.amount, ui.balance.decimals) : '…') + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
         '<div class="user-chip" title="' + esc(u.address) + '">' + CHAIN_BADGE[u.chain] + '<span class="uh num">' + esc(u.name) + '</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
@@ -1275,7 +1276,7 @@
       setRoute();
       refreshBalance();
       // Keep the NEAR price fresh; a closed site opens by itself once a price is available.
-      root.setInterval(function () { if (!ui.opening && !doc.hidden) store.refreshGame(); }, 30000);
+      root.setInterval(function () { if (!ui.opening && !doc.hidden) { store.refreshGame(); refreshBalance(); } }, 30000);
       // Back from a redirect wallet after paying: continue the open rip with that transaction.
       try {
         var q = new URLSearchParams(root.location.search);

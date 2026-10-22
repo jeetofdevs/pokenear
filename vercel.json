@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "api/server.js": { "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/server?__p=:path*" },
+    { "source": "/packs", "destination": "/index.html" },
+    { "source": "/vault", "destination": "/index.html" },
+    { "source": "/ranks", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/docs", "destination": "/index.html" },
+    { "source": "/docs/:section", "destination": "/index.html" }
+  ]
+}

@@ -178,9 +178,13 @@
     },
 
     // On-chain NEAR balance of the signed-in wallet: { amount, decimals } or null.
+    // NEAR in the player's wallet: from the server, or straight from a public NEAR RPC if the
+    // server cannot answer.
     balance: function () {
-      if (store.mode !== 'live' || !store.state.user) return Promise.resolve(null);
-      return fetchJSON('api/balance').catch(function () { return null; });
+      var u = store.state.user;
+      if (!u || u.chain !== 'near') return Promise.resolve(null);
+      var fromServer = store.mode === 'live' ? fetchJSON('api/balance').catch(function () { return null; }) : Promise.resolve(null);
+      return fromServer.then(function (b) { return b && b.amount != null ? b : rpcBalance(u.address); });
     },
 
     logout: function () {
@@ -231,6 +235,19 @@
         return b;
       });
     });
+  }
+
+  function rpcBalance(account) {
+    var cfg = root.PN_CONFIG || {};
+    var urls = cfg.nearNetwork === 'testnet' ? ['https://rpc.testnet.fastnear.com', 'https://rpc.testnet.near.org'] : ['https://rpc.mainnet.fastnear.com', 'https://rpc.mainnet.near.org'];
+    function ask(i) {
+      if (i >= urls.length) return Promise.resolve(null);
+      return fetch(urls[i], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 'np', method: 'query', params: { request_type: 'view_account', finality: 'final', account_id: account } }) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { return j && j.result && j.result.amount ? { amount: j.result.amount, decimals: 24, symbol: 'NEAR' } : ask(i + 1); })
+        .catch(function () { return ask(i + 1); });
+    }
+    return ask(0);
   }
 
   function fetchJSON(url) {

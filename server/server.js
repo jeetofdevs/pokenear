@@ -18,6 +18,7 @@ const verify = require('./wallet-verify.js');
 const onchain = require('./onchain.js');
 const nearTx = require('./near-tx.js');
 const price = require('./price.js');
+const kv = require('./kv.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
@@ -25,7 +26,7 @@ const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
 const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
-const SECURE_COOKIE = PUBLIC_URL.startsWith('https://');
+const SECURE_COOKIE = PUBLIC_URL.startsWith('https://') || Boolean(process.env.VERCEL);
 const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
 // NEAR_RPC may list several URLs (comma separated); each call falls back to the next on failure.
 // rpc.*.near.org is deprecated and heavily rate limited, so FastNEAR's free RPC goes first.
@@ -59,6 +60,8 @@ const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_A
 const CHAINS = ['near'];
 // Direct mode (no contract yet): players send NEAR straight to the treasury.
 const TREASURY = envAccounts('TREASURY')[0] || D.TREASURY;
+// On Vercel the file system is not kept between requests: the game needs Upstash Redis there.
+const NO_STORAGE = Boolean(process.env.VERCEL) && !kv.enabled;
 const YOCTO = 10n ** 24n;
 const ROUND = 10n ** 20n; // quotes are rounded up to 0.0001 NEAR
 
@@ -79,15 +82,16 @@ function loadDotEnv(file) {
 function loadDb() {
   try {
     const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    return { users: {}, sessions: {}, settings: {}, usedTx: {}, ...db };
+    return { users: {}, sessions: {}, settings: {}, usedTx: {}, nonces: {}, ...db };
   } catch {
-    return { users: {}, sessions: {}, settings: {}, usedTx: {} };
+    return { users: {}, sessions: {}, settings: {}, usedTx: {}, nonces: {} };
   }
 }
 const db = loadDb();
 for (const id of Object.keys(db.users)) db.users[id] = engine.migrate(db.users[id]);
 let saveTimer = null;
 function saveDb() {
+  if (kv.enabled || process.env.VERCEL) return; // serverless: written back per request (server/kv.js)
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
@@ -97,7 +101,6 @@ function saveDb() {
   }, 100);
 }
 
-const nonces = new Map(); // nonce -> issued at
 const NONCE_TTL = 10 * 60 * 1000;
 
 function ctx() { return { now: Date.now(), mode: 'server' }; }
@@ -125,6 +128,12 @@ function sessionCookie(value, maxAge) {
   return `pn_sid=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + (SECURE_COOKIE ? '; Secure' : '');
 }
 function readBody(req, limit = 4096) {
+  // Vercel's Node runtime may hand over the body already read.
+  if ('body' in req && req.body !== undefined) {
+    const b = req.body;
+    const text = typeof b === 'string' ? b : Buffer.isBuffer(b) ? b.toString('utf8') : b == null ? '' : JSON.stringify(b);
+    return text.length > limit ? Promise.reject(new Error('too large')) : Promise.resolve(text);
+  }
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -145,9 +154,10 @@ function currentUserId(req) {
 /* ---------- wallet sign-in ---------- */
 function issueNonce(res) {
   const now = Date.now();
-  for (const [k, at] of nonces) if (now - at > NONCE_TTL) nonces.delete(k);
+  for (const [k, at] of Object.entries(db.nonces)) if (now - at > NONCE_TTL) delete db.nonces[k];
   const nonce = crypto.randomBytes(32).toString('hex');
-  nonces.set(nonce, now);
+  db.nonces[nonce] = now;
+  saveDb();
   send(res, 200, { nonce, nearRecipient: auth.NEAR_RECIPIENT, nearNetwork: NEAR_NETWORK });
 }
 
@@ -155,8 +165,8 @@ async function walletLogin(req, res) {
   let body;
   try { body = JSON.parse(await readBody(req, 8192)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
   const { chain, nonce, signature } = body || {};
-  const issued = nonces.get(nonce);
-  nonces.delete(nonce);
+  const issued = typeof nonce === 'string' ? db.nonces[nonce] : undefined;
+  if (issued) { delete db.nonces[nonce]; saveDb(); }
   if (!issued || Date.now() - issued > NONCE_TTL) return send(res, 400, { error: 'Sign-in expired. Try again.' });
   if (!CHAINS.includes(chain)) return send(res, 400, { error: 'Sign in with a NEAR wallet.' });
 
@@ -194,6 +204,7 @@ async function walletLogin(req, res) {
   }
 
   const id = chain + ':' + address;
+  if (kvReq) await kv.ensure(db, kvReq.snap, 'users', [id], engine.migrate);
   let state0 = db.users[id];
   if (!state0) state0 = engine.apply(engine.emptyState(), { type: 'connect', chain, address, wallet: body.wallet }, ctx()).state;
   db.users[id] = state0;
@@ -254,11 +265,12 @@ async function gameConfig() {
     currency: 'NEAR', decimals: 24, prices, maxPerRip: 5,
     priceSource: fixed ? 'contract' : market ? market.source : null,
     nearUsd: market ? market.usd : null, priceAt: market ? market.at : null,
-    ready: prices.length >= D.PACKS.length,
+    ready: prices.length >= D.PACKS.length && !NO_STORAGE,
+    reason: NO_STORAGE ? 'storage' : prices.length >= D.PACKS.length ? null : 'price',
     buyback: chain.initialized && Boolean(PAYOUT_KEY) && Boolean(fixed || market)
   };
 }
-const notReady = () => ({ error: 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
+const notReady = () => ({ error: NO_STORAGE ? 'The game database is not connected yet.' : 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
 
 /* ---------- on-chain rips ----------
    start:  reserve a one-time seed. The player calls rip({seed, pack, count}) on GAME_ACCOUNT with the
@@ -364,6 +376,7 @@ async function directRip(req, res, step, uid, st, pr, body, game) {
   }
   const txHash = st.pendingRip.tx;
   if (!txHash) return send(res, 202, { status: 'missing', rip: pr, pay: payFor(game, pr) });
+  if (kvReq) await kv.ensure(db, kvReq.snap, 'usedTx', [txHash]);
   const usedBy = db.usedTx[txHash];
   if (usedBy && usedBy !== uid + ':' + pr.seed) {
     st.pendingRip.tx = null; save(st);
@@ -600,6 +613,65 @@ const server = http.createServer((req, res) => {
   });
 });
 
+/* ---------- serverless (Vercel) ----------
+   Each API request: lock (if it changes data), load what it needs from Redis into db, run the
+   normal route into a buffered response, write back the changes, then send the response. */
+let kvReq = null; // { snap } while a serverless request runs
+let kvQueue = Promise.resolve(); // one request at a time per instance
+function bufferedRes() {
+  let finish;
+  const done = new Promise((r) => { finish = r; });
+  const rec = { status: 200, headers: {}, body: undefined };
+  const res = {
+    headersSent: false,
+    writeHead(status, headers) { rec.status = status; Object.assign(rec.headers, headers || {}); this.headersSent = true; return this; },
+    setHeader(k, v) { rec.headers[k] = v; },
+    end(body) { rec.body = body; finish(); }
+  };
+  return { res, done, replay(real) { real.writeHead(rec.status, rec.headers); real.end(rec.body); } };
+}
+async function serverlessOnce(req, res) {
+  let p = '/';
+  try { p = new URL(req.url, 'http://localhost').pathname; } catch { /* bad url: route() answers */ }
+  if (!kv.enabled) {
+    if (p === '/api/config') return route(req, res);
+    return send(res, 503, { error: 'The game database is not connected yet (add Upstash Redis to the Vercel project).' });
+  }
+  const writes = req.method !== 'GET' && req.method !== 'HEAD';
+  let token = null;
+  if (writes) {
+    try { token = await kv.lock(); } catch (err) {
+      return send(res, 503, { error: err.busy ? 'Busy right now. Try again in a moment.' : 'Database error. Try again.' });
+    }
+  }
+  try {
+    const sid = cookies(req).pn_sid;
+    const all = [];
+    if (p === '/api/leaderboard' || p === '/api/admin/status') all.push('users');
+    if (p === '/api/auth/nonce' || p === '/api/auth/wallet') all.push('nonces');
+    const snap = await kv.load(db, { all, fields: { sessions: [sid] } }, engine.migrate);
+    const uid = sid && db.sessions[sid];
+    if (uid) await kv.ensure(db, snap, 'users', [uid], engine.migrate);
+    kvReq = { snap };
+    const out = bufferedRes();
+    try { await route(req, out.res); } catch (err) { console.error(err); if (!out.res.headersSent) send(out.res, 500, { error: 'Server error. Try again.' }); }
+    await out.done;
+    await kv.flush(db, snap);
+    out.replay(res);
+  } finally {
+    kvReq = null;
+    if (token) await kv.unlock(token);
+  }
+}
+function handle(req, res) {
+  const run = kvQueue.then(() => serverlessOnce(req, res)).catch((err) => {
+    console.error(err);
+    if (!res.headersSent) send(res, 500, { error: 'Server error. Try again.' });
+  });
+  kvQueue = run;
+  return run;
+}
+
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Near Packs v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
@@ -607,4 +679,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, db, resetGameCache: () => { gameCache = { at: 0, ttl: 0, value: null }; price.reset(); } };
+module.exports = { server, db, handle, resetGameCache: () => { gameCache = { at: 0, ttl: 0, value: null }; price.reset(); } };

@@ -104,8 +104,14 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
   const rpcPort = await listen(rpc);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nearpacks-'));
   Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, NEAR_PRICE_URL: `http://127.0.0.1:${rpcPort}/price`, PAYOUT_KEY: payoutKey, DB_FILE: path.join(dir, 'db.json') });
+  // TEST_KV=1: run the same test as on Vercel (serverless handler + Upstash Redis mock).
+  let redis = null;
+  if (process.env.TEST_KV) {
+    redis = require('./redis-mock.js').createRedisMock('test-token');
+    Object.assign(process.env, { KV_REST_API_URL: `http://127.0.0.1:${await listen(redis.server)}`, KV_REST_API_TOKEN: 'test-token', VERCEL: '1' });
+  }
   const srv = require('../server/server.js');
-  const { server } = srv;
+  const server = redis ? http.createServer((req, res) => srv.handle(req, res)) : srv.server;
   const port = await listen(server);
   const base = `http://127.0.0.1:${port}`;
   const engine = require('../js/engine.js');
@@ -331,8 +337,15 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal((await fetch(`${base}/`)).status, 200);
     assert.equal((await fetch(`${base}/assets/brand/nearpacks-icon.svg`)).headers.get('content-type'), 'image/svg+xml');
     assert.equal((await fetch(`${base}/assets/brand/x-header.html`)).status, 404);
+    if (redis) {
+      // Everything above went through Redis: players, sessions and used payments are stored there.
+      assert.ok(redis.hashes.get('np:users').size >= 3);
+      assert.ok(redis.hashes.get('np:sessions').size >= 3);
+      assert.ok(redis.hashes.get('np:usedTx').size >= 1);
+    }
   } finally {
     server.close();
     rpc.close();
+    if (redis) redis.server.close();
   }
 });
