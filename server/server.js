@@ -267,6 +267,7 @@ async function gameConfig() {
     nearUsd: market ? market.usd : null, priceAt: market ? market.at : null,
     ready: prices.length >= D.PACKS.length && !NO_STORAGE,
     reason: NO_STORAGE ? 'storage' : prices.length >= D.PACKS.length ? null : 'price',
+    storage: kv.enabled ? 'redis-' + kv.transport : process.env.VERCEL ? { connected: false, redisEnvSeen: kv.seenEnv } : 'file',
     buyback: chain.initialized && Boolean(PAYOUT_KEY) && Boolean(fixed || market)
   };
 }

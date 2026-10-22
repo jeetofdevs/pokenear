@@ -63,7 +63,7 @@ cargo build --release --target wasm32-unknown-unknown    # toolchain 1.81 (rust-
 
 The site and the game server both run on Vercel: static files are served as is, and every `/api/*` request goes to the serverless function `api/server.js` (same code as `npm start`, see `vercel.json`). Vercel keeps no files between requests, so game data lives in **Upstash Redis** (`server/kv.js`).
 
-1. Vercel project → **Storage** (or Marketplace) → add **Upstash Redis** (free plan) and connect it to this project. It sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` also work).
+1. Vercel project → **Storage** → add a Redis store (Upstash Redis or Redis) and connect it to this project. Any of these work, with or without a name prefix: `KV_REST_API_URL` + `KV_REST_API_TOKEN`, `UPSTASH_REDIS_REST_URL` + `_TOKEN`, or `REDIS_URL` / `KV_URL` (redis:// or rediss://). `/api/config` shows `game.storage` (and, when not connected, the names of the Redis variables it can see).
 2. Redeploy. `https://<domain>/api/config` must answer JSON with `"mode":"live"`.
 3. Optional env vars: `PAYOUT_KEY` (buyback), `NEAR_USD` (backup price).
 

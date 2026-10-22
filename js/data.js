@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261022.12'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261022.13'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the Near Packs interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
