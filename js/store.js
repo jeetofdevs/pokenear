@@ -170,6 +170,7 @@
       return store.mode === 'live' && !!u && u.chain === (store.chain || root.PN.data.CHAIN) && admins.indexOf(u.address) >= 0;
     },
     adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
+    adminPurge: function () { return postJSON('api/admin/purge', {}); },
     adminSetPrice: function (nearUsd) { return postJSON('api/admin/price', { nearUsd: nearUsd }); },
 
     // Dev wallet (nearpacks.near): rips without paying, recorded as dev rips.

@@ -594,7 +594,9 @@ async function adminStatus(req, res) {
       chain: 'solana', mode: 'direct', ready: game.ready, reason: game.reason,
       usd: game.usd, priceSource: game.priceSource, priceAt: game.priceAt, manualUsd: db.settings[MANUAL_KEY] || null,
       treasury: TREASURY_SOL || null, treasuryLamports: bal && !bal.error ? bal : null,
-      players: Object.keys(db.users).length, storage: game.storage
+      players: Object.values(db.users).filter((u) => u.user && u.user.chain === CHAIN).length,
+      otherChainPlayers: Object.values(db.users).filter((u) => u.user && u.user.chain !== CHAIN).length,
+      storage: game.storage
     });
   }
   gameCache = { at: 0, ttl: 0, value: null };
@@ -633,6 +635,21 @@ async function adminStatus(req, res) {
   send(res, 200, out);
 }
 
+// Admin: delete every player (and their sessions and used payments) from another chain, e.g. the
+// NEAR players left from before the move to Solana.
+async function adminPurge(req, res) {
+  if (!adminOnly(req, res)) return;
+  const gone = new Set(Object.keys(db.users).filter((id) => !db.users[id].user || db.users[id].user.chain !== CHAIN));
+  for (const id of gone) delete db.users[id];
+  let sessions = 0;
+  for (const [sid, id] of Object.entries(db.sessions)) if (gone.has(id)) { delete db.sessions[sid]; sessions++; }
+  let payments = 0;
+  for (const [tx, ref] of Object.entries(db.usedTx)) if (gone.has(String(ref).split(':').slice(0, -1).join(':'))) { delete db.usedTx[tx]; payments++; }
+  saveDb();
+  console.log('[admin] purged players from other chains', { players: gone.size, sessions, payments });
+  send(res, 200, { ok: true, players: gone.size, sessions, payments });
+}
+
 // Admin: manual NEAR/USD price, used only when no live price source answers.
 async function adminPrice(req, res) {
   if (!adminOnly(req, res)) return;
@@ -659,8 +676,9 @@ async function balanceRoute(req, res) {
 }
 
 function leaderboard() {
+  // Only players of this site's chain (old NEAR players are hidden on the Solana site).
   return Object.values(db.users)
-    .filter((s) => s.user)
+    .filter((s) => s.user && s.user.chain === CHAIN)
     .map((s) => ({
       chain: s.user.chain,
       address: s.user.address,
@@ -707,6 +725,7 @@ async function route(req, res) {
   if (p === '/api/sol/blockhash' && req.method === 'GET') return solBlockhashRoute(req, res);
   if (p === '/api/admin/status' && req.method === 'GET') return adminStatus(req, res);
   if (p === '/api/admin/price' && req.method === 'POST') return adminPrice(req, res);
+  if (p === '/api/admin/purge' && req.method === 'POST') return adminPurge(req, res);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
   if (p === '/api/rip/finish' && req.method === 'POST') return ripRoute(req, res, 'finish');
   if (p === '/api/rip/cancel' && req.method === 'POST') return ripRoute(req, res, 'cancel');
@@ -768,6 +787,7 @@ async function serverlessOnce(req, res) {
     const sid = cookies(req).pn_sid;
     const all = [];
     if (p === '/api/leaderboard' || p === '/api/admin/status') all.push('users');
+    if (p === '/api/admin/purge') all.push('users', 'sessions', 'usedTx');
     if (p === '/api/auth/nonce' || p === '/api/auth/wallet') all.push('nonces');
     const snap = await kv.load(db, { all, fields: { sessions: [sid] } }, engine.migrate);
     const uid = sid && db.sessions[sid];

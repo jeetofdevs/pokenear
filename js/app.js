@@ -629,6 +629,8 @@
         '<div class="stat"><b>' + (st.usd ? usd(st.usd) : '—') + '</b><span>SOL price now' + (st.priceSource ? ' (' + esc(st.priceSource) + ')' : '') + '</span></div>' +
         '<div class="stat"><b>' + fmt(st.players || 0) + '</b><span>Players</span></div>' +
       '</div><p class="small">Treasury: <code class="break">' + esc(st.treasury || 'not set') + '</code></p></section>' +
+      (st.otherChainPlayers ? '<section class="panel"><h3>Old NEAR data</h3><p class="small">' + fmt(st.otherChainPlayers) + ' player' + (st.otherChainPlayers > 1 ? 's' : '') + ' from the NEAR version (incl. nearpacks.near) are still stored. They are hidden from Ranks; delete them for good:</p>' +
+        '<button class="btn" data-act="admin-purge"' + (a.busy === 'Purge' ? ' disabled' : '') + '>Delete NEAR players</button></section>' : '') +
       '<section class="panel"><h3>Backup SOL price</h3><p class="muted small">Used only when every live price source fails.</p>' +
         '<div class="admin-form two"><label>USD price of 1 SOL<input id="admin-usd" value="' + esc(st.manualUsd || '') + '" placeholder="150.00" inputmode="decimal" autocomplete="off"></label>' +
         '<button class="btn" data-act="admin-manual-price"' + (a.busy === 'Backup price' ? ' disabled' : '') + '>Save</button></div></section>';
@@ -743,6 +745,11 @@
         break;
       case 'admin-init':
         adminTx('Initialize', { receiverId: GA, actions: [{ type: 'call', method: 'new', args: { owner: D.CONTRACT_OWNER, treasury: D.TREASURY, prices: null } }] });
+        break;
+      case 'admin-purge':
+        if (!root.confirm('Delete every NEAR player, their vaults and sessions? This cannot be undone.')) break;
+        a.busy = 'Purge'; render();
+        store.adminPurge().then(function (r) { a.busy = null; toast('Deleted ' + r.players + ' NEAR player' + (r.players === 1 ? '' : 's') + '.'); loadAdmin(); }, function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
       case 'admin-manual-price':
         var v = (($('#admin-usd') || {}).value || '').trim().replace(',', '.');

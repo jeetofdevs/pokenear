@@ -39,6 +39,11 @@ test('SOL packs: sign in with a Solana wallet, pay the treasury in SOL, get card
   });
   const rpcPort = await listen(rpc);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stonkpacks-'));
+  // Left over from the NEAR version: one player with a session and a used payment.
+  const engine = require('../js/engine.js');
+  const old = engine.apply(engine.emptyState(), { type: 'connect', chain: 'near', address: 'nearpacks.near', wallet: 'Meteor' }, { now: 1, mode: 'server' }).state;
+  old.vault.push({ uid: 1, id: 'mew-199', pack: 'legend', at: 1, proof: {} });
+  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ users: { 'near:nearpacks.near': old }, sessions: { oldsid: 'near:nearpacks.near' }, settings: {}, usedTx: { NEARTX: 'near:nearpacks.near:abcd' }, nonces: {} }));
   Object.assign(process.env, { CHAIN: 'solana', SOLANA_RPC: `http://127.0.0.1:${rpcPort}`, PRICE_URL: `http://127.0.0.1:${rpcPort}/price`, TREASURY_SOL: owner.address, DB_FILE: path.join(dir, 'db.json') });
   const srv = require('../server/server.js');
   const port = await listen(srv.server);
@@ -127,6 +132,15 @@ test('SOL packs: sign in with a Solana wallet, pay the treasury in SOL, get card
     assert.equal(adm.body.treasury, owner.address);
     assert.equal(adm.body.treasuryLamports, '2500000000');
     assert.equal((await post('/api/admin/price', { usd: '149.5' }, o)).body.usd, '149.5');
+    // Old NEAR players: hidden from Ranks, counted on /admin, deleted by the purge.
+    assert.ok(!(await get('/api/leaderboard', b)).body.rows.some((r) => r.chain === 'near'));
+    assert.equal(adm.body.otherChainPlayers, 1);
+    assert.equal((await post('/api/admin/purge', {}, b)).status, 403);
+    assert.deepEqual((await post('/api/admin/purge', {}, o)).body, { ok: true, players: 1, sessions: 1, payments: 1 });
+    assert.equal((await get('/api/admin/status', o)).body.otherChainPlayers, 0);
+    assert.equal(srv.db.users['near:nearpacks.near'], undefined);
+    assert.equal(srv.db.usedTx.NEARTX, undefined);
+    assert.equal(srv.db.usedTx[good], 'solana:' + bob.address + ':' + seed);
     // Buyback is not live on Solana yet.
     assert.equal((await post('/api/buyback', { uids: [item.uid] }, b)).status, 503);
   } finally {

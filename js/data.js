@@ -18,7 +18,7 @@
   // the server's TREASURY_SOL env var overrides it. This wallet also opens packs free (owner).
   var TREASURY_SOL = '8mTFXXZtXvb7oBWztYf1j2H14T1QwFJjtT5rkR7t8Beb';
   var LAUNCHPAD = { name: 'StonkFun', url: 'https://www.stonkfun.xyz/' }; // where the token launches
-  var VERSION = '20261023.2'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261023.3'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the StonkPacks interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
