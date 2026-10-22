@@ -3,69 +3,88 @@
 <head>
 <meta charset="utf-8">
 <title>Near Packs X post</title>
-<!-- Source for x-post.png (1600x900, 16:9 so X shows it uncropped). Render with: npm run build:x-post -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
+<!-- Source for x-post.png / x-first-post.png (1600x900, 16:9 so X shows it uncropped).
+     Render with: npm run build:x-post. No contract address on the image. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
 <link rel="stylesheet" href="../../css/style.css">
 <style>
-  html, body { margin: 0; background: #070a1c; }
-  .post { position: relative; width: 1600px; height: 900px; overflow: hidden;
-    background:
-      radial-gradient(600px 420px at 74% 52%, rgba(0, 236, 151, 0.22), transparent 70%),
-      radial-gradient(900px 600px at 70% 45%, rgba(139, 123, 255, 0.30), transparent 70%),
-      linear-gradient(160deg, #13171c, #070809 70%);
-  }
-  .rays { position: absolute; inset: -40%; left: 10%; background: repeating-conic-gradient(from 0deg at 64% 50%, rgba(255, 255, 255, 0.045) 0 4deg, transparent 4deg 12deg); }
-  .dots { position: absolute; inset: 0; background: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.3px) 0 0 / 24px 24px; -webkit-mask-image: linear-gradient(90deg, #000, transparent 60%); mask-image: linear-gradient(90deg, #000, transparent 60%); }
-  .copy { position: absolute; left: 90px; top: 0; bottom: 0; width: 720px; display: flex; flex-direction: column; justify-content: center; gap: 30px; z-index: 3; }
-  .copy .logo { width: 520px; margin-left: -10px; filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.5)); }
-  h1 { margin: 0; font: 700 72px/1.02 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.035em; }
-  h1 em { font-style: normal; color: #00ec97; }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
-  li { display: flex; align-items: center; gap: 14px; font: 800 27px/1.2 Inter, sans-serif; color: #eef0ff; }
-  li i { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #00ec97; color: #00170e; font: 900 19px/1 Inter, sans-serif; font-style: normal; }
-  .socials { display: flex; gap: 12px; align-items: center; }
-  .chip { display: inline-flex; align-items: center; gap: 10px; padding: 11px 20px; border-radius: 999px; background: rgba(10, 14, 40, 0.8); border: 1px solid rgba(255, 255, 255, 0.2); font: 800 22px/1 Inter, sans-serif; color: #fff; }
-  .chip b { color: #00ec97; font-family: 'JetBrains Mono', monospace; }
-  .chip .chain-dot { width: 22px; height: 22px; margin: 0; }
-  .showcase { position: absolute; right: 40px; top: 0; bottom: 0; width: 760px; } /* no z-index: a stacking context here would isolate the packs color-dodge foil and wash it out */
-  .pack { position: absolute; width: 230px; }
-  .pack .booster { filter: drop-shadow(0 26px 30px rgba(0, 0, 0, 0.6)); }
-  .pack .bw-sheen { display: none; } /* the moving sheen would freeze mid-sweep in a still image */
-  .pk1 { left: 40px; top: 110px; transform: rotate(-12deg); }
-  .pk2 { right: 40px; top: 110px; transform: rotate(12deg); }
-  /* Same fan as the site's landing page, scaled up. */
-  .hand { position: absolute; left: 50%; top: 54%; width: 460px; transform: translate(-50%, -50%) scale(1.32); }
-  .badge { position: absolute; right: 70px; bottom: 70px; z-index: 4; transform: rotate(-6deg); padding: 16px 26px; border-radius: 18px; background: linear-gradient(135deg, #00ec97, #7b6bff); color: #00170e; font: 400 36px/1 'Space Grotesk', sans-serif; box-shadow: 0 14px 26px rgba(0, 0, 0, 0.5), inset 0 -4px 0 rgba(0, 0, 0, 0.2); }
-  .badge small { display: block; font: 800 16px/1.3 Inter, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9; }
-  .np-word { display: flex; align-items: center; gap: 0.32em; font: 700 1em/1 'Space Grotesk', sans-serif; letter-spacing: -0.035em; color: #fff; }
-  .np-word img { width: 1.15em; height: 1.15em; border-radius: 0; filter: drop-shadow(0 0.08em 0.25em rgba(0, 236, 151, 0.45)); }
-  .np-word b { color: #00ec97; font-weight: 700; margin-left: 0.18em; }
+  html, body { margin: 0; background: #040506; }
+  .post { position: relative; width: 1600px; height: 900px; overflow: hidden; background: #040506; }
+  /* light bursting out of the pack */
+  .burst { position: absolute; left: 1150px; top: 330px; width: 2200px; height: 2200px; transform: translate(-50%, -50%);
+    background: repeating-conic-gradient(from 0deg, rgba(255, 214, 120, 0.16) 0 3deg, transparent 3deg 11deg);
+    -webkit-mask-image: radial-gradient(closest-side, #000 8%, transparent 62%); mask-image: radial-gradient(closest-side, #000 8%, transparent 62%); }
+  .halo { position: absolute; left: 1150px; top: 360px; width: 1100px; height: 900px; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(255, 196, 92, 0.55), rgba(245, 120, 40, 0.18) 45%, transparent 70%); }
+  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: linear-gradient(0deg, #040506 20%, transparent); z-index: 3; }
+  .grain { position: absolute; inset: 0; z-index: 6; pointer-events: none; opacity: 0.35; background: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1.2px) 0 0 / 5px 5px; }
+
+  /* the pack, torn open at the top */
+  .pack { position: absolute; z-index: 2; left: 1150px; top: 520px; width: 330px; transform: translate(-50%, 0) rotate(-4deg); }
+  .pack .bw-sheen { display: none; }
+  .pack .booster { filter: drop-shadow(0 40px 50px rgba(0, 0, 0, 0.8)); }
+  .pack .bw { -webkit-mask-image: linear-gradient(176deg, transparent 9%, #000 9.5%); mask-image: linear-gradient(176deg, transparent 9%, #000 9.5%); }
+  .flap { position: absolute; z-index: 1; left: 1300px; top: 418px; width: 340px; height: 62px; transform: rotate(-22deg); border-radius: 6px 6px 2px 2px;
+    background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0 4px, rgba(0, 0, 0, 0.25) 4px 8px), linear-gradient(180deg, #fff0b8, #f5b942 60%, #8a5200);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.6); }
+
+  /* the hit rising out of it */
+  .hit { position: absolute; z-index: 4; left: 1150px; top: 70px; width: 330px; transform: translateX(-50%) rotate(5deg); }
+  .hit .card { width: 330px; box-shadow: 0 0 0 4px rgba(255, 226, 150, 0.95), 0 0 70px rgba(255, 190, 80, 0.85), 0 40px 60px rgba(0, 0, 0, 0.7); }
+  .hit .foil { display: none; }
+  .tag { position: absolute; z-index: 5; left: 1328px; top: 92px; transform: rotate(9deg); padding: 14px 22px; border-radius: 16px; background: #0b0d10; border: 2px solid #ffd277;
+    font: 700 54px/1 'Space Grotesk', sans-serif; color: #ffd277; letter-spacing: -0.03em; box-shadow: 0 18px 36px rgba(0, 0, 0, 0.6), 0 0 30px rgba(255, 196, 92, 0.4); }
+  .tag small { display: block; font: 800 14px/1.2 Inter, sans-serif; letter-spacing: 0.16em; color: rgba(255, 255, 255, 0.7); margin-bottom: 6px; }
+
+  /* other pulls flying around */
+  .fly { position: absolute; z-index: 1; width: 170px; opacity: 0.9; filter: blur(0.4px) drop-shadow(0 20px 26px rgba(0, 0, 0, 0.7)); }
+  .fly .card { width: 170px; }
+  .fly .foil { display: none; }
+  .f1 { left: 790px; top: 150px; transform: rotate(-24deg); }
+  .f2 { left: 1400px; top: 300px; transform: rotate(18deg); }
+  .f3 { left: 820px; top: 470px; transform: rotate(-12deg) scale(0.85); opacity: 0.75; }
+
+  /* copy */
+  .copy { position: absolute; z-index: 5; left: 90px; top: 92px; width: 720px; }
+  .logo { display: flex; align-items: center; gap: 16px; font: 700 40px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
+  .logo img { width: 58px; height: 58px; }
+  .logo b { color: #00ec97; margin-left: 0.2em; }
+  .live { display: inline-flex; align-items: center; gap: 10px; margin-left: 10px; padding: 8px 14px; border-radius: 999px; background: #00ec97; color: #00170e; font: 900 14px/1 Inter, sans-serif; letter-spacing: 0.14em; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: #00170e; }
+  h1 { margin: 64px 0 0; font: 700 96px/0.95 'Space Grotesk', sans-serif; letter-spacing: -0.05em; color: #fff; }
+  h1 .gold { background: linear-gradient(90deg, #ffe7a3, #ffb84a 60%, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { margin: 30px 0 0; font: 600 27px/1.4 Inter, sans-serif; color: rgba(255, 255, 255, 0.75); max-width: 640px; }
+  .lede b { color: #fff; }
+  .stats { position: absolute; z-index: 5; left: 90px; bottom: 84px; display: flex; gap: 14px; }
+  .stat { padding: 18px 22px; min-width: 150px; border-radius: 18px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); }
+  .stat b { display: block; font: 700 38px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
+  .stat span { display: block; margin-top: 8px; font: 700 15px/1 Inter, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+  .stat.g b { color: #00ec97; }
+  .url { position: absolute; z-index: 5; right: 70px; bottom: 84px; display: flex; align-items: center; gap: 14px; padding: 18px 26px; border-radius: 18px; background: #00ec97; color: #00170e;
+    font: 700 34px/1 'Space Grotesk', sans-serif; letter-spacing: -0.02em; box-shadow: 0 18px 40px rgba(0, 236, 151, 0.35); }
+  .url svg { width: 30px; height: 30px; }
 </style>
 </head>
 <body>
 <div class="post" id="post">
-  <div class="rays"></div><div class="dots"></div>
+  <div class="halo"></div><div class="burst"></div>
+  <div class="fly f1" id="f1"></div><div class="fly f2" id="f2"></div><div class="fly f3" id="f3"></div>
+  <div class="pack" data-pack="legend"></div>
+  <div class="hit" id="hit"></div>
+  <div class="tag"><small>LEGEND PACK HIT</small>$320</div>
+  <div class="floor"></div>
   <div class="copy">
-    <div style="font-size:88px"><div class="np-word"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span></div></div>
-    <h1>Open real Pokémon packs <em>with NEAR</em></h1>
-    <ul>
-      <li><i>1</i>Packs from $10, paid in NEAR</li>
-      <li><i>2</i>Exact odds for every card</li>
-      <li><i>3</i>On-chain randomness you can verify</li>
-      <li><i>4</i>Sell any pull back for 96%</li>
-    </ul>
-    <div class="socials">
-      <span class="chip"><span class="chain-dot near"></span>NEAR</span>
-      <span class="chip"><b>@NearPacks</b></span>
-      <span class="chip">nearpacks.fun</span>
-    </div>
+    <div class="logo"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span><span class="live"><i></i>LIVE</span></div>
+    <h1>One pack.<br>One card.<br><span class="gold">Could be $320.</span></h1>
+    <p class="lede">Real Pokémon cards. Packs from <b>$10</b>, paid in <b>NEAR</b>. Every pull drawn on-chain.</p>
   </div>
-  <div class="showcase">
-    <div class="pack pk1" data-pack="elite"></div>
-    <div class="pack pk2" data-pack="legend"></div>
-    <div class="hand"><div class="fan" id="cards"></div></div>
+  <div class="stats">
+    <div class="stat g"><b>98%</b><span>Avg value</span></div>
+    <div class="stat"><b>96%</b><span>Buyback</span></div>
+    <div class="stat"><b>100%</b><span>On-chain RNG</span></div>
   </div>
-  <div class="badge"><small>Near Packs</small>Live on NEAR</div>
+  <div class="url">nearpacks.fun<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+  <div class="grain"></div>
 </div>
 <script>window.PN_CONFIG = { remoteImages: false };</script>
 <script src="../../js/cards.js"></script>
@@ -77,15 +96,14 @@
 <script src="../../js/wallets.js"></script>
 <script src="../../js/app.js"></script>
 <script>
-  // Asset paths in app.js are relative to the site root.
   var fix = function (h) { return h.replace(/src="assets\//g, 'src="../../assets/'); };
-  document.querySelectorAll('[data-pack]').forEach(function (el) {
-    el.innerHTML = fix(PN.ui.packArtHTML(PN.data.packById[el.getAttribute('data-pack')]));
-  });
-  document.getElementById('cards').innerHTML = ['meg-188', 'mew-199', 'blk-171'].map(function (id) { return fix(PN.ui.cardHTML(PN.data.cardById[id])); }).join('');
-  // ?first: launch-day version (first post with the CA): the token is live, not "coming soon".
-  if (/[?&]first\b/.test(location.search)) document.querySelector('.badge').innerHTML = '<small>Near Packs</small>Live on NEAR';
-  document.body.setAttribute('data-ready', '1');
+  var card = function (id) { return fix(PN.ui.cardHTML(PN.data.cardById[id])); };
+  document.querySelectorAll('[data-pack]').forEach(function (el) { el.innerHTML = fix(PN.ui.packArtHTML(PN.data.packById[el.getAttribute('data-pack')])); });
+  document.getElementById('hit').innerHTML = card('mew-199');   // Charizard ex, $320
+  document.getElementById('f1').innerHTML = card('blk-171');    // Victini
+  document.getElementById('f2').innerHTML = card('meg-188');    // Mega Lucario ex
+  document.getElementById('f3').innerHTML = card('blk-172');    // Zekrom ex
+  Promise.all(Array.from(document.images).map(function (im) { return im.decode().catch(function () {}); })).then(function () { document.body.setAttribute('data-ready', '1'); });
 </script>
 </body>
 </html>

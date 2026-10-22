@@ -3,61 +3,53 @@
 <head>
 <meta charset="utf-8">
 <title>Near Packs X header</title>
-<!-- Source for x-header.png (1500x500). Render with: npm run build:x-header -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
+<!-- Source for x-header.png (1500x500). Render with: npm run build:x-header
+     The bottom-left corner stays quiet: X puts the profile picture there. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
 <link rel="stylesheet" href="../../css/style.css">
 <style>
-  html, body { margin: 0; background: #070a1c; }
-  .hdr { position: relative; width: 1500px; height: 500px; overflow: hidden;
+  html, body { margin: 0; background: #050607; }
+  .hdr { position: relative; width: 1500px; height: 500px; overflow: hidden; background: #050607; }
+  /* tilted wall of real cards on the right, fading into the dark */
+  .wall { position: absolute; right: -170px; top: -230px; width: 1250px; height: 1000px; perspective: 1400px; }
+  .grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, 150px); gap: 18px; justify-content: center; align-content: center;
+    transform: rotateX(28deg) rotateY(-24deg) rotateZ(14deg); transform-style: preserve-3d; }
+  .grid .card { width: 150px; box-shadow: 0 18px 30px rgba(0, 0, 0, 0.6); }
+  .grid .card .foil { display: none; }
+  .grid .hot { box-shadow: 0 0 0 3px #00ec97, 0 0 46px rgba(0, 236, 151, 0.75); }
+  .fade { position: absolute; inset: 0; z-index: 1; pointer-events: none;
     background:
-      radial-gradient(520px 300px at 50% 46%, rgba(0, 236, 151, 0.22), transparent 70%),
-      radial-gradient(700px 420px at 50% 40%, rgba(139, 123, 255, 0.30), transparent 70%),
-      linear-gradient(180deg, #111418, #070809);
-  }
-  .rays { position: absolute; inset: -40%; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.05) 0 4deg, transparent 4deg 12deg); }
-  .dots { position: absolute; inset: 0; background: radial-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1.3px) 0 0 / 22px 22px; -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 25%, #000 80%); mask-image: radial-gradient(ellipse at 50% 50%, transparent 25%, #000 80%); }
-  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.5)); }
-  .pack { position: absolute; width: 168px; }
-  .pack .booster { filter: drop-shadow(0 22px 26px rgba(0, 0, 0, 0.6)); }
-  .p1 { left: 46px; top: 52px; transform: rotate(-11deg); }
-  .p2 { left: 236px; top: 30px; transform: rotate(-3deg); z-index: 2; }
-  .p3 { right: 236px; top: 30px; transform: rotate(3deg); z-index: 2; }
-  .p4 { right: 46px; top: 52px; transform: rotate(11deg); }
-  .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -54%); display: grid; justify-items: center; gap: 14px; z-index: 3; width: 760px; text-align: center; }
-  .center img { width: 560px; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.55)); }
-    .tag { white-space: nowrap; }
-  .tag { font: 800 20px/1.2 Inter, sans-serif; color: #eef0ff; letter-spacing: 0.01em; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
-  .chips { display: flex; gap: 10px; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: rgba(10, 14, 40, 0.75); border: 1px solid rgba(255, 255, 255, 0.18); font: 800 15px/1 Inter, sans-serif; color: #fff; }
-  .chip b { color: #00ec97; font-family: 'JetBrains Mono', monospace; }
-  .chip .chain-dot { width: 16px; height: 16px; margin: 0; }
-  .np-word { display: flex; align-items: center; gap: 0.32em; font: 700 1em/1 'Space Grotesk', sans-serif; letter-spacing: -0.035em; color: #fff; }
-  .np-word img { width: 1.15em; height: 1.15em; border-radius: 0; filter: drop-shadow(0 0.08em 0.25em rgba(0, 236, 151, 0.45)); }
-  .live { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 8px 18px; border-radius: 999px; background: #00ec97; color: #00170e; font: 800 18px/1 Inter, sans-serif; letter-spacing: 0.14em; box-shadow: 0 0 34px rgba(0, 236, 151, 0.55); }
-  .live i { width: 10px; height: 10px; border-radius: 50%; background: #00170e; animation: none; }
-  .np-word b { color: #00ec97; font-weight: 700; margin-left: 0.18em; }
+      linear-gradient(90deg, #050607 0%, #050607 34%, rgba(5, 6, 7, 0.85) 52%, rgba(5, 6, 7, 0.2) 72%, rgba(5, 6, 7, 0.05) 100%),
+      linear-gradient(0deg, rgba(5, 6, 7, 0.9), transparent 30%, transparent 75%, rgba(5, 6, 7, 0.7)); }
+  .glow { position: absolute; z-index: 1; left: -200px; top: -120px; width: 900px; height: 700px; background: radial-gradient(closest-side, rgba(0, 236, 151, 0.2), transparent); }
+  .scan { position: absolute; inset: 0; z-index: 1; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px); }
+  .copy { position: absolute; z-index: 2; left: 84px; top: 64px; width: 900px; }
+  .kick { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border-radius: 999px; background: rgba(0, 236, 151, 0.12); border: 1px solid rgba(0, 236, 151, 0.5); color: #00ec97; font: 800 15px/1 Inter, sans-serif; letter-spacing: 0.16em; }
+  .kick i { width: 10px; height: 10px; border-radius: 50%; background: #00ec97; box-shadow: 0 0 0 5px rgba(0, 236, 151, 0.2), 0 0 14px #00ec97; }
+  h1 { margin: 22px 0 0; font: 700 80px/0.95 'Space Grotesk', sans-serif; letter-spacing: -0.045em; color: #fff; }
+  h1 span { display: block; background: linear-gradient(90deg, #00ec97, #7df3ff 55%, #a99bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { margin-top: 22px; display: flex; align-items: center; gap: 14px; font: 700 21px/1 Inter, sans-serif; color: rgba(255, 255, 255, 0.78); }
+  .sub b { color: #fff; }
+  .sub .sep { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+  .brand { position: absolute; z-index: 2; right: 46px; bottom: 34px; display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 12px; border-radius: 16px; background: rgba(5, 6, 7, 0.78); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(8px); }
+  .brand img { width: 44px; height: 44px; }
+  .brand span { font: 700 28px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
+  .brand span b { color: #00ec97; margin-left: 0.2em; }
+  .brand em { font: 700 17px/1 'JetBrains Mono', monospace; font-style: normal; color: rgba(255, 255, 255, 0.7); padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, 0.2); }
 </style>
 </head>
 <body>
 <div class="hdr" id="hdr">
-  <div class="rays"></div><div class="dots"></div><div class="floor"></div>
-  <div class="pack p1" data-pack="starter"></div>
-  <div class="pack p2" data-pack="rare"></div>
-  <div class="pack p3" data-pack="elite"></div>
-  <div class="pack p4" data-pack="legend"></div>
-  <div class="center">
-    <div class="live"><i></i>LIVE NOW ON NEAR</div>
-    <div style="font-size:84px"><div class="np-word"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span></div></div>
-    <div class="tag">Open real Pokémon packs with NEAR · 96% buyback</div>
-    <div class="chips">
-      <span class="chip">Packs from <b>$10</b></span>
-      <span class="chip">Paid in <b>NEAR</b></span>
-      <span class="chip">On-chain RNG</span>
-      <span class="chip"><b>@NearPacks</b></span>
-      <span class="chip">nearpacks.fun</span>
-    </div>
+  <div class="wall"><div class="grid" id="grid"></div></div>
+  <div class="glow"></div><div class="fade"></div><div class="scan"></div>
+  <div class="copy">
+    <div class="kick"><i></i>LIVE ON NEAR</div>
+    <h1>Open real Pokémon<span>packs on-chain.</span></h1>
+    <div class="sub"><span>Packs from <b>$10</b></span><span class="sep"></span><span>Hits up to <b>$320</b></span><span class="sep"></span><span><b>96%</b> buyback</span></div>
   </div>
+  <div class="brand"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span><em>nearpacks.fun</em></div>
 </div>
+<script>window.PN_CONFIG = { remoteImages: false };</script>
 <script src="../../js/cards.js"></script>
 <script src="../../js/auth.js"></script>
 <script src="../../js/sha256.js"></script>
@@ -67,11 +59,17 @@
 <script src="../../js/wallets.js"></script>
 <script src="../../js/app.js"></script>
 <script>
-  // Pack art paths in app.js are relative to the site root.
-  document.querySelectorAll('[data-pack]').forEach(function (el) {
-    el.innerHTML = PN.ui.packArtHTML(PN.data.packById[el.getAttribute('data-pack')]).replace(/src="assets\//g, 'src="../../assets/');
-  });
-  document.body.setAttribute('data-ready', '1');
+  // Every pack's best cards, the chase cards highlighted.
+  var fix = function (h) { return h.replace(/src="assets\//g, 'src="../../assets/'); };
+  var hits = [];
+  PN.data.PACKS.forEach(function (p) { p.top.slice(0, 7).forEach(function (c) { hits.push(c); }); });
+  var order = [9, 0, 14, 21, 7, 2, 15, 22, 1, 8, 23, 3, 16, 10, 24, 4, 17, 11, 25, 5, 18, 12, 26, 6, 19, 13, 27, 20];
+  var hot = { 'mew-199': 1, 'blk-171': 1, 'meg-188': 1, 'blk-172': 1 };
+  document.getElementById('grid').innerHTML = order.concat(order).slice(0, 35).map(function (i) {
+    var c = hits[i % hits.length];
+    return fix(PN.ui.cardHTML(c)).replace('class="card ', 'class="card ' + (hot[c.id] ? 'hot ' : ''));
+  }).join('');
+  Promise.all(Array.from(document.images).map(function (im) { return im.decode().catch(function () {}); })).then(function () { document.body.setAttribute('data-ready', '1'); });
 </script>
 </body>
 </html>
