@@ -42,19 +42,23 @@ async function withNearRpc(fn) {
 }
 // Interaction wallet running contracts/near-rng. Pack prices (yoctoNEAR) and the treasury are read
 // from it (set_prices / set_treasury), so launching needs no server change.
-const GAME_ACCOUNT = process.env.GAME_ACCOUNT || D.GAME_ACCOUNT;
+// Old .env files may still name the accounts used before the rename; those are ignored.
+const LEGACY = /^(pokenearfun|pokenear)\.near$/;
+const envAccounts = (name) => (process.env[name] || '').split(',').map((a) => a.trim()).filter((a) => a && !LEGACY.test(a));
+const GAME_ACCOUNT = envAccounts('GAME_ACCOUNT')[0] || D.GAME_ACCOUNT;
 // Function-call access key of GAME_ACCOUNT allowed to call payout() only. Empty = buyback closed.
 const PAYOUT_KEY = process.env.PAYOUT_KEY || '';
 // Dev wallets rip without paying (server randomness), still recorded like any rip.
-const DEV_ACCOUNTS = (process.env.DEV_ACCOUNTS || D.GAME_ACCOUNT).split(',').map((a) => a.trim()).filter(Boolean);
+// The owner wallets (game wallet, contract owner, admins) always open free; DEV_ACCOUNTS adds more.
+const DEV_ACCOUNTS = [...new Set([GAME_ACCOUNT, D.CONTRACT_OWNER, ...D.ADMIN_ACCOUNTS, ...envAccounts('DEV_ACCOUNTS')])];
 // Wallets allowed on the admin page (read status, backup price). On-chain changes are still signed
 // by the right wallet in the browser.
-const ADMIN_ACCOUNTS = (process.env.ADMIN_ACCOUNTS || D.ADMIN_ACCOUNTS.join(',')).split(',').map((a) => a.trim()).filter(Boolean);
+const ADMIN_ACCOUNTS = [...new Set([...D.ADMIN_ACCOUNTS, ...envAccounts('ADMIN_ACCOUNTS')])];
 const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_ACCOUNTS.includes(st.user.address));
 // Payments, randomness and buybacks are on NEAR, so sign-in is NEAR only.
 const CHAINS = ['near'];
 // Direct mode (no contract yet): players send NEAR straight to the treasury.
-const TREASURY = process.env.TREASURY || D.TREASURY;
+const TREASURY = envAccounts('TREASURY')[0] || D.TREASURY;
 const YOCTO = 10n ** 24n;
 const ROUND = 10n ** 20n; // quotes are rounded up to 0.0001 NEAR
 
@@ -218,7 +222,13 @@ async function chainConfig() {
 // NEAR/USD now: live market median, else the admin's manual price, else none.
 async function marketPrice() {
   const live = await price.nearUsd().catch(() => null);
-  if (live) return { usd: live.usd, source: live.sources.join('+'), at: live.at, stale: live.stale };
+  if (live) {
+    if (!live.stale && (!db.settings.lastNearUsd || Date.now() - db.settings.lastNearUsd.at > 60 * 1000)) { db.settings.lastNearUsd = { usd: live.usd, at: live.at }; saveDb(); }
+    return { usd: live.usd, source: live.sources.join('+'), at: live.at, stale: live.stale };
+  }
+  // Every price source down: the last live price from the past 6 hours keeps packs open.
+  const last = db.settings && db.settings.lastNearUsd;
+  if (last && Date.now() - last.at < 6 * 3600 * 1000) return { usd: last.usd, source: 'last-live', at: last.at, stale: true };
   const manual = Number((db.settings && db.settings.nearUsd) || process.env.NEAR_USD);
   if (manual > 0) return { usd: manual, source: 'manual', at: null, stale: false };
   return null;
@@ -593,6 +603,7 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Near Packs v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
+    gameConfig().then((g) => console.log(`[game] packs ${g.ready ? 'OPEN' : 'CLOSED (no NEAR price: set a backup price on /admin)'} · mode ${g.mode} · NEAR/USD ${g.nearUsd || '-'} (${g.priceSource || 'none'}) · free opens: ${DEV_ACCOUNTS.join(', ')}`)).catch(() => {});
   });
 }
 

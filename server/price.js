@@ -1,5 +1,5 @@
 'use strict';
-/* Live NEAR/USD price for pack quotes. Several public sources are asked in parallel and the
+/* Live NEAR/USD price for pack quotes. Six public sources (Binance, CoinGecko, Kraken, Coinbase, OKX, Bybit) are asked in parallel and the
    median of the valid answers is used, so one bad or blocked source cannot move the price.
    Cached for CACHE_MS; if every source fails, the last good price is used for up to STALE_MS.
    NEAR_PRICE_URL (env) replaces the sources with one URL returning {"usd": <number>} (tests). */
@@ -12,7 +12,10 @@ const MAX_USD = 1000;
 const SOURCES = [
   { name: 'binance', url: 'https://api.binance.com/api/v3/ticker/price?symbol=NEARUSDT', parse: (j) => Number(j.price) },
   { name: 'coingecko', url: 'https://api.coingecko.com/api/v3/simple/price?ids=near&vs_currencies=usd', parse: (j) => Number(j.near && j.near.usd) },
-  { name: 'kraken', url: 'https://api.kraken.com/0/public/Ticker?pair=NEARUSD', parse: (j) => { const r = j.result && Object.values(j.result)[0]; return Number(r && r.c && r.c[0]); } }
+  { name: 'kraken', url: 'https://api.kraken.com/0/public/Ticker?pair=NEARUSD', parse: (j) => { const r = j.result && Object.values(j.result)[0]; return Number(r && r.c && r.c[0]); } },
+  { name: 'coinbase', url: 'https://api.coinbase.com/v2/prices/NEAR-USD/spot', parse: (j) => Number(j.data && j.data.amount) },
+  { name: 'okx', url: 'https://www.okx.com/api/v5/market/ticker?instId=NEAR-USDT', parse: (j) => Number(j.data && j.data[0] && j.data[0].last) },
+  { name: 'bybit', url: 'https://api.bybit.com/v5/market/tickers?category=spot&symbol=NEARUSDT', parse: (j) => Number(j.result && j.result.list && j.result.list[0] && j.result.list[0].lastPrice) }
 ];
 
 let cache = null; // { usd, at, sources }

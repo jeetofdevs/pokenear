@@ -341,7 +341,7 @@
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an unopened pack</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' pack' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
       '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel</button></div></section>' : '';
-    var launch = store.isDev() ? '<p class="demo-note gold-note">Dev wallet ' + esc(st.user.address) + ': packs open free and are recorded as dev openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
+    var launch = store.isDev() ? '<p class="demo-note gold-note">Owner wallet ' + esc(st.user.address) + ': packs open free, no payment, and are recorded as owner openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
         '<div class="daily-right"><a class="btn btn-gold" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + 'Follow @' + D.X_HANDLE + '</a></div></section>';
     return openRip + launch +
       '<section class="panel pull-stage">' +
@@ -913,7 +913,7 @@
 
   function rngSourceName(user) {
     if (store.mode !== 'live') return 'On-chain randomness';
-    if (store.isDev()) return 'Dev opening · ' + user.address;
+    if (store.isDev()) return 'Owner opening · ' + user.address;
     return 'Paid on NEAR · ' + D.GAME_ACCOUNT;
   }
 
@@ -1000,7 +1000,7 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Off-chain randomness';
+    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Owner opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Off-chain randomness';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
       (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';
@@ -1030,8 +1030,8 @@
       var direct = !!(pay && pay.method === 'transfer');
       var steps = [
         [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
-          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Dev wallet: no payment needed' : 'Pay in NEAR',
-          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as dev openings' : 'This preview is not connected to a chain'],
+          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Owner wallet: free, no payment' : 'Pay in NEAR',
+          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as owner openings' : 'This preview is not connected to a chain'],
         [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Randomness drawn on chain',
           o.status === 'slow' ? 'Taking longer than usual. Your pack is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
       ];

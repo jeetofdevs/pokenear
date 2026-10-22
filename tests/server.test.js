@@ -284,11 +284,13 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const fallback = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
     assert.equal(fallback.body.pay.method, 'transfer');
     assert.equal((await post('/api/rip/cancel', {}, bob)).status, 200);
-    // No live price and no backup price: packs close for players.
+    // Every price source down and no backup price: the last live price (under 6 h old) keeps packs open.
     priceUsd = null;
     await post('/api/admin/price', { nearUsd: '' }, owner);
     srv.resetGameCache();
-    assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 503);
+    const lastLive = await post('/api/rip/start', { pack: 'starter', count: 1 }, bob);
+    assert.equal(lastLive.status, 200, JSON.stringify(lastLive.body));
+    assert.equal((await post('/api/rip/cancel', {}, bob)).status, 200);
 
     // HOT / Meteor sign without callbackUrl even though the page sends one; redirect wallets may sign it.
     const page = 'https://nearpacks.fun/#packs';
