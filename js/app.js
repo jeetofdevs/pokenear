@@ -42,6 +42,15 @@
     return whole.toLocaleString('en-US') + (frac ? '.' + String(frac).padStart(2, '0').replace(/0$/, '') : '');
   }
   // Live NEAR amount for a pack (from the server's market quote), e.g. "4.0123"; null if unknown.
+  // Token contract address with copy button and links (hero, packs page, footer).
+  function caHTML(compact) {
+    if (!D.TOKEN_CA) return '';
+    return '<div class="ca-box' + (compact ? ' compact' : '') + '"><span class="ca-label">CA</span>' +
+      '<code class="ca-addr">' + esc(compact ? short(D.TOKEN_CA) : D.TOKEN_CA) + '</code>' +
+      '<button class="btn btn-sm ca-copy" data-act="copy-ca" title="Copy contract address">Copy</button>' +
+      '<a class="btn btn-sm btn-ghost" href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">Trade on ' + esc(D.LAUNCHPAD.name) + '</a>' +
+      '<a class="ca-link muted small" href="https://solscan.io/token/' + D.TOKEN_CA + '" target="_blank" rel="noopener">Solscan</a></div>';
+  }
   function short(a) { a = String(a || ''); return a.length > 20 ? a.slice(0, 6) + '…' + a.slice(-6) : a; }
   function nearQuote(p, n) {
     var g = store.game;
@@ -288,7 +297,7 @@
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>Sign in with a Solana wallet. Packs are priced in USD and paid in SOL. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; StonkPacks is not affiliated with them.</span>' +
+    return '<footer><div class="wrap"><span>Sign in with a Solana wallet. Packs are priced in USD and paid in SOL. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; StonkPacks is not affiliated with them.' + (D.TOKEN_CA ? '<br>CA: <code class="break">' + esc(D.TOKEN_CA) + '</code>' : '') + '</span>' +
       '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="' + link('docs') + '">Docs</a><a href="' + link('docs/rng') + '">On-chain RNG</a><a href="' + link('docs/faq') + '">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
@@ -317,10 +326,11 @@
     var starter = D.PACKS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
-        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on Solana · token launching on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a></span>' +
+        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on Solana · token live on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a></span>' +
         '<h1>Open real <span class="gold">Pokémon</span> packs with SOL.</h1>' +
         '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and every pull is decided by the Solana block your payment lands in.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
+        caHTML(false) +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
     '</section>' +
@@ -352,7 +362,7 @@
       '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel</button></div></section>' : '';
     var launch = store.isDev() ? '<p class="demo-note gold-note">Owner wallet ' + esc(st.user.address) + ': packs open free, no payment, and are recorded as owner openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Packs paused</div><h2>' + closedReason() + '</h2></div>' +
         '<div class="daily-right"><a class="btn btn-gold" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + 'Follow @' + D.X_HANDLE + '</a></div></section>';
-    return openRip + launch +
+    return openRip + launch + (D.TOKEN_CA ? '<section class="panel ca-panel">' + caHTML(true) + '</section>' : '') +
       '<section class="panel pull-stage">' +
         '<button class="stage-pack" data-act="pack-odds" data-id="' + p.id + '" aria-label="See top tier cards">' + packArtHTML(p) + '</button>' +
         '<div class="pull-info">' +
@@ -562,7 +572,7 @@
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The pack stays unopened: press Continue to pay and open it, or Cancel to drop it.'],
           ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the pack and opens nothing, so always pay from the site.'],
           ['Why does the SOL amount change?', 'Packs are priced in USD. The SOL amount follows the live SOL market price and is locked when you open the pack.'],
-          ['Where does the token launch?', 'On ' + D.LAUNCHPAD.name + ' (' + D.LAUNCHPAD.url + '). The contract address will be posted only by @' + D.X_HANDLE + ' on X.'],
+          ['Where does the token launch?', 'On ' + D.LAUNCHPAD.name + ' (' + D.LAUNCHPAD.url + '). The official contract address (CA) is ' + D.TOKEN_CA + '. Only trust this CA and the one posted by @' + D.X_HANDLE + ' on X.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
           ['How strong is the randomness?', 'It comes from the Solana block that includes your payment. A player cannot predict it; in theory a block leader could skip a block, which for card values like these costs far more than it could win.']
         ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
@@ -1200,6 +1210,9 @@
     if (act.indexOf('admin-') === 0) { adminAction(act, el); return; }
     switch (act) {
       case 'connect': openConnect(); break;
+      case 'copy-ca':
+        (root.navigator.clipboard ? root.navigator.clipboard.writeText(D.TOKEN_CA) : Promise.reject()).then(function () { toast('Contract address copied.'); }, function () { root.prompt('Copy the contract address:', D.TOKEN_CA); });
+        break;
       case 'wallet-sol': signIn('solana', W.solanaSigner(id), el.getAttribute('data-name')); break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
