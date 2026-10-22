@@ -772,8 +772,8 @@
     if (bar) doc.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
   }
 
-  /* Clean URLs (/packs, /docs/rng) when the site runs on its server; #packs in the static preview. */
-  function cleanUrls() { return store.mode === 'live' && root.history && root.history.pushState; }
+  /* Clean URLs (/packs, /docs/rng); #packs only in previews that set PN_CONFIG.hashUrls. */
+  function cleanUrls() { return !(root.PN_CONFIG && root.PN_CONFIG.hashUrls) && root.location.protocol !== 'file:' && !!(root.history && root.history.pushState); }
   function link(path) { return cleanUrls() ? '/' + path : '#' + path; }
   function routeParts() {
     if (!cleanUrls()) return (root.location.hash || '').replace('#', '').split('/');

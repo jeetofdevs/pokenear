@@ -536,7 +536,7 @@ function sendIndex(req, res) {
   fs.readFile(path.join(ROOT, 'index.html'), 'utf8', (err, html) => {
     if (err) return send(res, 404, 'Not found');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' });
-    res.end(req.method === 'HEAD' ? undefined : html.replace('<head>', '<head>\n  <base href="/">'));
+    res.end(req.method === 'HEAD' ? undefined : (html.includes('<base') ? html : html.replace('<head>', '<head>\n  <base href="/">')));
   });
 }
 
