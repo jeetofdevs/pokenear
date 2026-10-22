@@ -1,4 +1,4 @@
-/* Pokenear static game data: card values, gacha packs and the card index.
+/* Near Packs static game data: card values, gacha packs and the card index.
    Shared by the browser (window.PN.data) and the Node server (require).
 
    Model (same as Courtyard / Collector Crypt / Phygitals):
@@ -10,15 +10,15 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261022.3'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261022.4'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
-  // Packs are priced in US dollars and paid in NEAR through the Pokenear interaction wallet's
+  // Packs are priced in US dollars and paid in NEAR through the Near Packs interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
   // chain (set_prices) and follows the NEAR price; the site never shows a fixed NEAR amount.
-  var GAME_ACCOUNT = 'pokenearfun.near'; // interaction wallet: receives payments, pays buybacks
+  var GAME_ACCOUNT = 'nearpacks.near'; // interaction wallet: receives payments, pays buybacks
   var TREASURY = 'nearpacks.near'; // receives every pack payment
-  var CONTRACT_OWNER = 'pokenear.near'; // owner of the Near Packs contract (prices, treasury)
-  var ADMIN_ACCOUNTS = ['pokenearfun.near', 'pokenear.near']; // wallets that see the admin page
+  var CONTRACT_OWNER = 'nearpacks.near'; // owner of the Near Packs contract (prices, treasury)
+  var ADMIN_ACCOUNTS = ['nearpacks.near']; // wallets that see the admin page
   var X_HANDLE = 'NearPacks'; // official X account (link only)
 
   // On-chain pack prices for set_prices: each pack's USD price converted to the smallest unit

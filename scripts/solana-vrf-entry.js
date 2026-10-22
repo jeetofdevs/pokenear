@@ -1,6 +1,6 @@
 /* Entry for vendor/solana-vrf.js (bundled by `npm run build:solana`).
    Exposes window.PNSolVrf.request(): asks ORAO VRF (Solana) for randomness for a rip seed,
-   paid and signed by the player's wallet. Pokenear's server then reads the fulfilled
+   paid and signed by the player's wallet. Near Packs's server then reads the fulfilled
    randomness from chain and derives the cards. */
 import { Buffer } from 'buffer';
 import { Connection, PublicKey } from '@solana/web3.js';

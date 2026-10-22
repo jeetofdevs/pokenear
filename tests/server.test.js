@@ -31,7 +31,7 @@ function nearSign(kp, { message, nonce, recipient, callbackUrl }) {
 }
 
 test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', async () => {
-  const GAME = 'pokenearfun.near';
+  const GAME = 'nearpacks.near';
   const TREASURY = 'nearpacks.near';
   const UNIT = 10n ** 24n; // yoctoNEAR
   const nearKeys = {}; // account -> "ed25519:..." full-access key
@@ -102,7 +102,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     });
   });
   const rpcPort = await listen(rpc);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pokenear-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nearpacks-'));
   Object.assign(process.env, { NEAR_RPC: `http://127.0.0.1:${rpcPort}`, NEAR_PRICE_URL: `http://127.0.0.1:${rpcPort}/price`, PAYOUT_KEY: payoutKey, DB_FILE: path.join(dir, 'db.json') });
   const srv = require('../server/server.js');
   const { server } = srv;
@@ -131,7 +131,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(cfg0.game.ready, false);
     assert.deepEqual(cfg0.devAccounts, [GAME]);
 
-    // Solana sign-in is closed: $POKENEAR lives on NEAR.
+    // Solana sign-in is closed: NEAR lives on NEAR.
     const sol = keypair();
     const solAddr = auth.base58Encode(sol.raw);
     const sn = await nonce();
@@ -176,7 +176,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     const good = pay();
     const df = await post('/api/rip/finish', { tx: good }, bob);
     assert.equal(df.status, 200, JSON.stringify(df.body));
-    const expectRand = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('pokenear-transfer:v1'), Buffer.from(auth.base58Decode(blockHash)), Buffer.from(dseed, 'hex')])).digest('hex');
+    const expectRand = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('nearpacks-transfer:v1'), Buffer.from(auth.base58Decode(blockHash)), Buffer.from(dseed, 'hex')])).digest('hex');
     const dItem = df.body.result.items[0];
     assert.deepEqual(dItem.proof, { source: 'near-transfer', chain: 'near', seed: dseed, randomness: expectRand, ref: TREASURY, tx: good, paid: String(10n * UNIT), block: blockHash });
     assert.equal(dItem.id, engine.cardsFromRandomness('rare', 1, expectRand, dseed)[0].id);
@@ -187,7 +187,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     // Buyback needs the contract.
     assert.equal((await post('/api/buyback', { uids: [dItem.uid] }, bob)).status, 503);
 
-    // Launch: the owner sets NEAR prices on pokenearfun.near (NEAR at $2.50: $10 = 4 NEAR).
+    // Launch: the owner sets NEAR prices on nearpacks.near (NEAR at $2.50: $10 = 4 NEAR).
     contract = { owner: GAME, treasury: TREASURY, prices: ['4', '10', '20', '40'].map((x) => String(BigInt(x) * UNIT)), max_per_rip: 5, currency: 'NEAR' };
     srv.resetGameCache();
     const cfg = (await get('/api/config')).body.game;
@@ -218,7 +218,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(fin.status, 200, JSON.stringify(fin.body));
     const items = fin.body.result.items;
     assert.deepEqual(items.map((i) => i.id), engine.cardsFromRandomness('rare', 5, 'bb'.repeat(32), seed).map((c) => c.id));
-    assert.deepEqual(items[0].proof, { source: 'pokenear-near', chain: 'near', seed, randomness: 'bb'.repeat(32), ref: GAME, tx: 'H1', paid: start.body.pay.deposit });
+    assert.deepEqual(items[0].proof, { source: 'nearpacks-near', chain: 'near', seed, randomness: 'bb'.repeat(32), ref: GAME, tx: 'H1', paid: start.body.pay.deposit });
 
     // Unpaid rip can be cancelled.
     assert.equal((await post('/api/rip/start', { pack: 'starter', count: 1 }, bob)).status, 200);
@@ -226,7 +226,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(cancel.status, 200);
     assert.equal(cancel.body.state.pendingRip, null);
 
-    // Buyback: pokenearfun.near pays BUYBACK_RATE of value in NEAR at the on-chain Starter rate (4 NEAR = $10).
+    // Buyback: nearpacks.near pays BUYBACK_RATE of value in NEAR at the on-chain Starter rate (4 NEAR = $10).
     const sell = items.slice(0, 2).map((i) => i.uid);
     const usd = Math.round(items.slice(0, 2).reduce((n, i) => n + require('../js/data.js').cardById[i.id].usd, 0) * require("../js/data.js").BUYBACK_RATE * 100) / 100;
     const sold = await post('/api/buyback', { uids: sell }, bob);
@@ -257,9 +257,9 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(devSell.status, 200);
     assert.equal(devSell.body.result.payout.dev, true);
     assert.equal(sent.length, 1); // no payout transaction for the dev wallet
-    // Admin endpoints answer only the admin wallets (pokenearfun.near, pokenear.near).
+    // Admin endpoints answer only the admin wallet (nearpacks.near).
     assert.equal((await get('/api/admin/status', bob)).status, 403);
-    const owner = (await nearLogin(register('pokenear.near'), 'pokenear.near')).cookie;
+    const owner = (await nearLogin(register('nearpacks.near'), 'nearpacks.near')).cookie;
     const admOwner = await get('/api/admin/status', owner);
     assert.equal(admOwner.status, 200);
     assert.equal(admOwner.body.mode, 'contract');
@@ -271,7 +271,7 @@ test('NEAR sign-in, NEAR rips to the treasury, dev wallet and buyback payouts', 
     assert.equal(adm.body.account, GAME);
     assert.equal(adm.body.initialized, true);
     assert.equal(adm.body.config.treasury, TREASURY);
-    assert.equal(adm.body.treasury.near, '42000000000000000000000000');
+    assert.equal(adm.body.treasury.near, '5000000000000000000000000'); // treasury and game wallet are the same account
     assert.equal(adm.body.payoutKey.configured, true);
     assert.equal(adm.body.payoutKey.publicKey, payoutPub);
     assert.equal(adm.body.payoutKey.onChain, false); // the mock reports it as a FunctionCall key without payout

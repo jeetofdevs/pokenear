@@ -93,7 +93,7 @@ async function nearKeyBelongsTo(accountId, publicKey, rpcUrl) {
     signal: AbortSignal.timeout(8000),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      jsonrpc: '2.0', id: 'pokenear', method: 'query',
+      jsonrpc: '2.0', id: 'nearpacks', method: 'query',
       params: { request_type: 'view_access_key', finality: 'final', account_id: accountId, public_key: publicKey }
     })
   });

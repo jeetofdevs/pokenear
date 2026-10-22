@@ -495,9 +495,9 @@
           '<li><b>Draw.</b> Inside that transaction the contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores it under the seed. A seed can be drawn only once.</li>' +
           '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this pack, computes your cards with the public formula, and your browser computes them again to check.</li>' +
         '</ol>' +
-        '<p class="small"><b>Direct transfers.</b> When you pay with a plain transfer to <code>' + esc(D.TREASURY) + '</code>, the randomness is <code>sha256("pokenear-transfer:v1" || hash of the block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands, and the proof links the transaction so anyone can check it.</p>' +
+        '<p class="small"><b>Direct transfers.</b> When you pay with a plain transfer to <code>' + esc(D.TREASURY) + '</code>, the randomness is <code>sha256("nearpacks-transfer:v1" || hash of the block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands, and the proof links the transaction so anyone can check it.</p>' +
         '<h3>The formula</h3>' +
-        '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("pokenear-rip:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
+        '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("nearpacks-open:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
         '<p class="muted small">The pack list is ordered by value, highest first, as on the pack page. The same code runs in the server and in your browser.</p>'),
       docSec('verify', 'Verify a pack',
         '<p>After every opening the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness and links to your payment transaction and to ' + GA + ' on NearBlocks.</p>' +
@@ -542,10 +542,10 @@
   }
 
   /* ---------- admin (interaction wallet only) ----------
-     Every change is a transaction pokenearfun.near approves in its own wallet: deploy, NEAR pack
+     Every change is a transaction nearpacks.near approves in its own wallet: deploy, NEAR pack
      prices, the treasury that receives payments, and the buyback key. The payout key
      is generated in this browser and shown once so it can be pasted into the hosting settings. */
-  var ADMIN_KEY_STORE = 'pokenear:admin-new-key';
+  var ADMIN_KEY_STORE = 'nearpacks:admin-new-key';
   var YOCTO = '000000000000000000000000';
   var STORAGE_DEPOSIT = '12500000000000000000000'; // 0.0125 NEAR in yoctoNEAR
   function adminState() {
@@ -611,14 +611,14 @@
       '<div class="stat"><b>' + (st.nearUsd ? usd(st.nearUsd) : '—') + '</b><span>NEAR price now</span></div></section>';
 
     // 1. Contract
-    var cli = 'near deploy ' + st.account + ' pokenear_game.wasm --initFunction new --initArgs \'{"owner":"' + D.CONTRACT_OWNER + '","treasury":"' + D.TREASURY + '","prices":null}\'';
+    var cli = 'near deploy ' + st.account + ' nearpacks_game.wasm --initFunction new --initArgs \'{"owner":"' + D.CONTRACT_OWNER + '","treasury":"' + D.TREASURY + '","prices":null}\'';
     var s1 = adminStep(1, st.initialized, 'Near Packs contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
         : !asGame ? needGame : (st.deployed
           ? '<p class="small">Code is deployed but not initialized.</p><button class="btn btn-gold" data-act="admin-init"' + busy('Initialize') + '>Initialize contract</button>'
           : '<p class="small">Deploys the Near Packs contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
             '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
-            '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/pokenear_game.wasm" download>pokenear_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
+            '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/nearpacks_game.wasm" download>nearpacks_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
 
     // 2. Live NEAR price (packs stay at their USD price)
     var quote = st.nearUsd ? D.PACKS.map(function (p) { return esc(p.name.replace(' Pack', '')) + ' ' + usd(p.usd) + ' ≈ ' + (p.usd / st.nearUsd).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') + ' NEAR'; }).join(' · ') : '';
@@ -678,7 +678,7 @@
       case 'admin-calc': adminCalc(); break;
       case 'admin-deploy':
         a.busy = 'Deploy'; render();
-        fetch('contracts/near-rng/res/pokenear_game.wasm').then(function (r) {
+        fetch('contracts/near-rng/res/nearpacks_game.wasm').then(function (r) {
           if (!r.ok) throw new Error('Could not load the contract file.');
           return r.arrayBuffer();
         }).then(function (buf) {
@@ -944,7 +944,7 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'pokenear-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
+    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
       (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';

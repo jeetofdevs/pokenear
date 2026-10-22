@@ -135,7 +135,7 @@ test('cards are derived deterministically from on-chain randomness', () => {
   const crypto = require('node:crypto');
   const pack = D.packById.starter;
   const expected = [0, 1, 2, 3, 4].map((i) => {
-    const h = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('pokenear-rip:v1'), Buffer.from(RAND, 'hex'), Buffer.from(SEED, 'hex'), Buffer.from([i])])).digest();
+    const h = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('nearpacks-open:v1'), Buffer.from(RAND, 'hex'), Buffer.from(SEED, 'hex'), Buffer.from([i])])).digest();
     const u = h.readUIntBE(0, 6) / 2 ** 48;
     return pack.pool.find((e) => u < e.cum).id;
   });
@@ -162,17 +162,17 @@ test('uniforms from randomness follow the published odds', () => {
 
 test('ripStart reserves a seed and the amount to pay; ripFinish delivers cards with proof', () => {
   const s0 = connected();
-  const started = engine.apply(s0, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED, amount: '1000', chain: 'near', source: 'pokenear-near' }, ctx());
+  const started = engine.apply(s0, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED, amount: '1000', chain: 'near', source: 'nearpacks-near' }, ctx());
   assert.equal(started.state.pendingRip.seed, SEED);
   assert.equal(started.state.pendingRip.amount, '1000');
   assert.equal(started.state.vault.length, 0);
   assert.throws(() => engine.apply(started.state, { type: 'ripStart', pack: 'starter', count: 1, seed: SEED }, ctx()), /unopened pack/);
   assert.throws(() => engine.apply(started.state, { type: 'ripFinish', proof: { randomness: 'zz' } }, ctx()), /Bad randomness/);
-  const { state, result } = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: RAND, source: 'pokenear-near', ref: 'pokenearfun.near', tx: 'sig', paid: '1000' } }, ctx());
+  const { state, result } = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: RAND, source: 'nearpacks-near', ref: 'nearpacks.near', tx: 'sig', paid: '1000' } }, ctx());
   assert.equal(state.pendingRip, null);
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0].id, engine.cardsFromRandomness('starter', 1, RAND, SEED)[0].id);
-  assert.deepEqual(state.vault[0].proof, { source: 'pokenear-near', chain: 'near', seed: SEED, randomness: RAND, ref: 'pokenearfun.near', tx: 'sig', paid: '1000' });
+  assert.deepEqual(state.vault[0].proof, { source: 'nearpacks-near', chain: 'near', seed: SEED, randomness: RAND, ref: 'nearpacks.near', tx: 'sig', paid: '1000' });
   assert.equal(state.totalPulls, 1);
   assert.throws(() => engine.apply(state, { type: 'ripFinish', proof: { randomness: RAND } }, ctx()), /no unopened pack/);
 });

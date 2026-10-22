@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Prints the NEAR CLI commands to launch Pokenear (the admin page at #admin does the same steps
+/* Prints the NEAR CLI commands to launch Near Packs (the admin page at #admin does the same steps
    with wallet approvals). Players pay in NEAR; the contract forwards payments to the treasury.
    Usage: node scripts/near-commands.js <USD_PER_NEAR> [account] [treasury]
    e.g.   node scripts/near-commands.js 2.50 */
@@ -15,8 +15,8 @@ const treasury = treasuryArg || D.TREASURY;
 const args = (o) => "'" + JSON.stringify(o) + "'";
 const near = (y) => (Number(BigInt(y) / 10n ** 18n) / 1e6).toString();
 console.log(`# Packs at $${usdPerNear}/NEAR: ${D.PACKS.map((p, i) => `${p.name} $${p.usd} = ${near(prices[i])} NEAR`).join(', ')}
-# 1. Deploy the Pokenear contract on ${account} (once); payments go to ${treasury}:
-near deploy ${account} contracts/near-rng/res/pokenear_game.wasm --initFunction new --initArgs ${args({ owner: account, treasury, prices })}
+# 1. Deploy the Near Packs contract on ${account} (once); payments go to ${treasury}:
+near deploy ${account} contracts/near-rng/res/nearpacks_game.wasm --initFunction new --initArgs ${args({ owner: account, treasury, prices })}
 # 2. Update prices when the NEAR price moves:
 near call ${account} set_prices ${args({ prices })} --accountId ${account}
 # 3. Buyback payouts: run "npm run payout-key" (or use the admin page), then add the printed key.

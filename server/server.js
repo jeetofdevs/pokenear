@@ -2,7 +2,7 @@
 /* Near Packs server: static files + NEAR wallet sign-in + authoritative game API.
    No runtime dependencies. Sign-in is a signed message with a one-time nonce.
    Rips are paid in NEAR: the player calls rip() on the interaction wallet's contract (GAME_ACCOUNT,
-   pokenearfun.near) with the pack price attached; it draws the randomness and forwards the NEAR to
+   nearpacks.near) with the pack price attached; it draws the randomness and forwards the NEAR to
    the treasury (nearpacks.near) in the same transaction. The server reads the draw back.
    Buybacks are paid in NEAR by that contract, called with a function-call key (PAYOUT_KEY).
    Game state lives in a JSON file (DB_FILE). */
@@ -58,7 +58,7 @@ const TREASURY = process.env.TREASURY || D.TREASURY;
 const YOCTO = 10n ** 24n;
 const ROUND = 10n ** 20n; // quotes are rounded up to 0.0001 NEAR
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/pokenear_game.wasm']);
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/nearpacks_game.wasm']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
 
@@ -163,7 +163,7 @@ async function walletLogin(req, res) {
     // Verify the exact text the wallet signed, after checking it is our sign-in message.
     const expected = auth.loginMessage('solana', address, nonce);
     const signed = typeof body.message === 'string' ? body.message.replace(/\r\n/g, '\n') : expected;
-    if (signed !== expected) return send(res, 400, { error: 'The signed message is not the Pokenear sign-in message. Try again.' });
+    if (signed !== expected) return send(res, 400, { error: 'The signed message is not the Near Packs sign-in message. Try again.' });
     if (!verify.verifySolana({ address, signature, message: signed })) {
       console.warn('[solana-login] signature mismatch', { address, wallet: body.wallet, sigLen: String(signature || '').length });
       return send(res, 401, { error: 'The wallet signature did not match this address. If you use a Ledger or a multi-account wallet, select the account you connected and try again.' });
@@ -231,7 +231,7 @@ function yoctoFor(usdCents, usdPerNear) {
   return ((raw + ROUND - 1n) / ROUND) * ROUND;
 }
 
-/* Game config. Mode 'contract' once pokenearfun.near runs the Pokenear contract, else 'direct'
+/* Game config. Mode 'contract' once nearpacks.near runs the Near Packs contract, else 'direct'
    (NEAR sent straight to the treasury). Pack prices follow the live NEAR price unless the
    contract has fixed prices set on chain. */
 async function gameConfig() {
@@ -287,7 +287,7 @@ async function ripRoute(req, res, step) {
       const count = D.MULTI.includes(body.count) ? body.count : 1;
       const amount = (BigInt(game.prices[index]) * BigInt(count)).toString();
       const seed = crypto.randomBytes(32).toString('hex');
-      const source = game.mode === 'direct' ? 'near-transfer' : 'pokenear-near';
+      const source = game.mode === 'direct' ? 'near-transfer' : 'nearpacks-near';
       const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: 'near', source }, ctx());
       if (source === 'near-transfer') out.state.pendingRip.treasury = game.treasury;
       db.users[uid] = out.state;
@@ -317,7 +317,7 @@ async function ripRoute(req, res, step) {
       console.warn('[rip] payment mismatch', { user: st.user.address, draw: r, rip: pr });
       return send(res, 400, { error: 'The payment on chain does not match this pack.' });
     }
-    const proof = { randomness: r.randomness, source: 'pokenear-near', ref: GAME_ACCOUNT, paid: r.amount, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null };
+    const proof = { randomness: r.randomness, source: 'nearpacks-near', ref: GAME_ACCOUNT, paid: r.amount, tx: typeof body.tx === 'string' ? body.tx.slice(0, 120) : null };
     const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
     db.users[uid] = out.state;
     saveDb();
@@ -332,9 +332,9 @@ async function ripRoute(req, res, step) {
 /* Direct mode rip: the player sent a plain NEAR transfer to the treasury. The server checks the
    transaction on chain (sender, receiver, exact amount, success, sent after this rip started, never
    used before) and derives the randomness from the hash of the block that included it:
-     randomness = sha256("pokenear-transfer:v1" || block_hash || seed)
+     randomness = sha256("nearpacks-transfer:v1" || block_hash || seed)
    Nobody can know that block hash before the transaction lands, and anyone can re-check it. */
-const RIP_TRANSFER_DOMAIN = Buffer.from('pokenear-transfer:v1');
+const RIP_TRANSFER_DOMAIN = Buffer.from('nearpacks-transfer:v1');
 function transferRandomness(blockHash, seedHex) {
   return crypto.createHash('sha256').update(Buffer.concat([RIP_TRANSFER_DOMAIN, Buffer.from(auth.base58Decode(blockHash)), Buffer.from(seedHex, 'hex')])).digest('hex');
 }

@@ -1,4 +1,4 @@
-/* Pokenear game engine. Pure state transitions, no DOM and no storage.
+/* Near Packs game engine. Pure state transitions, no DOM and no storage.
    The browser runs it locally in demo mode; the Node server runs the same
    code authoritatively. Payments are real NEAR transfers checked on chain by the
    server, so the state holds no balance. */
@@ -52,10 +52,10 @@
 
   /* Turn on-chain randomness into card picks. Public and deterministic, so anyone can
      re-derive a rip from its seed and randomness:
-       h_i = sha256("pokenear-rip:v1" || randomness || seed || i)
+       h_i = sha256("nearpacks-open:v1" || randomness || seed || i)
        u_i = first 6 bytes of h_i as an integer / 2^48
        card_i = first card in the pack's published list whose cumulative chance exceeds u_i */
-  var RIP_DOMAIN = H.utf8('pokenear-rip:v1');
+  var RIP_DOMAIN = H.utf8('nearpacks-open:v1');
   function uniformsFromRandomness(randomnessHex, seedHex, count) {
     var r = H.hexToBytes(randomnessHex);
     var sd = H.hexToBytes(seedHex);

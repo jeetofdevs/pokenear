@@ -27,11 +27,11 @@ test('function-call transaction bytes and signature match @near-js', { skip }, (
     const gas = 100000000000000n;
 
     const ours = nearTx.signTransaction({
-      signerId: 'pokenearfun.near', publicKey: k.publicKey, nonce, receiverId: 'pokenearfun.near', blockHash,
+      signerId: 'nearpacks.near', publicKey: k.publicKey, nonce, receiverId: 'nearpacks.near', blockHash,
       actions: [nearTx.functionCall('payout', args, gas, deposit)]
     }, k.key);
 
-    const tx = T.createTransaction('pokenearfun.near', kp.getPublicKey(), 'pokenearfun.near', nonce,
+    const tx = T.createTransaction('nearpacks.near', kp.getPublicKey(), 'nearpacks.near', nonce,
       [T.actionCreators.functionCall('payout', args, gas, deposit)], auth.base58Decode(blockHash));
     const encoded = T.encodeTransaction(tx);
     const hash = crypto.createHash('sha256').update(encoded).digest();

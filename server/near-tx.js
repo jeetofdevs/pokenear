@@ -1,6 +1,6 @@
 'use strict';
 /* Minimal NEAR transaction signer (node:crypto only) for one job: the server calling
-   payout() on the Pokenear contract with a function-call access key of the interaction wallet.
+   payout() on the Near Packs contract with a function-call access key of the interaction wallet.
 
    Borsh layout (nearcore):
      Transaction { signer_id: string, public_key: PublicKey, nonce: u64, receiver_id: string,
@@ -60,7 +60,7 @@ async function rpc(url, method, params) {
     method: 'POST',
     signal: AbortSignal.timeout(method === 'broadcast_tx_commit' ? 60000 : 8000),
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 'pokenear', method, params })
+    body: JSON.stringify({ jsonrpc: '2.0', id: 'nearpacks', method, params })
   });
   if (!res.ok) throw new Error(method + ' HTTP ' + res.status);
   const body = await res.json();

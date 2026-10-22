@@ -1,11 +1,11 @@
-/* Pokenear wallet bridge: talks to Solana browser wallets and NEAR Wallet Selector,
+/* Near Packs wallet bridge: talks to Solana browser wallets and NEAR Wallet Selector,
    and turns a sign-in nonce into a signed message for store.connectWallet(). */
 (function (root) {
   'use strict';
 
   var A = root.PN.auth;
   var CFG = root.PN_CONFIG || {};
-  var PENDING_KEY = 'pokenear:near-pending';
+  var PENDING_KEY = 'nearpacks:near-pending';
 
   function pageUrl() { return root.location.origin + root.location.pathname; }
   function isMobile() { return /Android|iPhone|iPad|iPod/i.test(root.navigator.userAgent || ''); }
@@ -133,7 +133,7 @@
   }
 
   /* ---------- on-chain randomness for a rip ---------- */
-  var NEAR_WALLET_KEY = 'pokenear:near-wallet';
+  var NEAR_WALLET_KEY = 'nearpacks:near-wallet';
 
   /* Pay for a rip in NEAR from the player's NEAR wallet. pay comes from the server:
      { method: 'rip' | 'transfer', receiver, deposit (yoctoNEAR), args? }. Resolves { tx, ref }
@@ -164,7 +164,7 @@
   // Block explorer links for a proof.
   function explorer(proof, network) {
     if (!proof) return null;
-    if (proof.source === 'pokenear-near' || proof.source === 'near-rng' || proof.source === 'near-transfer') {
+    if (proof.source === 'nearpacks-near' || proof.source === 'near-rng' || proof.source === 'near-transfer') {
       var host = network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io';
       return { label: 'NearBlocks', account: proof.ref ? host + '/address/' + proof.ref : null, tx: proof.tx ? host + '/txns/' + proof.tx : null };
     }

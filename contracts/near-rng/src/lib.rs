@@ -1,8 +1,8 @@
-//! Pokenear game contract: NEAR payments + on-chain randomness for card rips.
+//! Near Packs game contract: NEAR payments + on-chain randomness for card rips.
 //!
-//! Deployed on the Pokenear interaction wallet (pokenearfun.near).
+//! Deployed on the Near Packs interaction wallet (nearpacks.near).
 //!
-//! Rip: the Pokenear server issues a one-time 32-byte `seed` and quotes the price from the live NEAR
+//! Rip: the Near Packs server issues a one-time 32-byte `seed` and quotes the price from the live NEAR
 //! price. The player calls `open_pack({seed, pack, count})` attaching that amount. If fixed prices are set
 //! on chain the amount must equal price x count; otherwise any amount >= MIN_RIP is accepted and the
 //! server checks it against its quote before giving cards. The
@@ -51,7 +51,7 @@ pub struct Draw {
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
-pub struct Pokenear {
+pub struct NearPacks {
     owner: AccountId,
     /// Where pack payments are forwarded (nearpacks.near).
     treasury: AccountId,
@@ -67,7 +67,7 @@ fn is_seed(seed: &str) -> bool {
 }
 
 #[near]
-impl Pokenear {
+impl NearPacks {
     #[init]
     pub fn new(owner: AccountId, treasury: AccountId, prices: Option<Vec<U128>>) -> Self {
         let mut c = Self {
@@ -160,7 +160,7 @@ impl Pokenear {
 
         let draw = Draw { account, randomness, block_height: height, timestamp_ms: env::block_timestamp_ms(), pack, count, amount: U128(amount) };
         env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"pokenear\",\"version\":\"3.0.0\",\"event\":\"open_pack\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
+            "EVENT_JSON:{{\"standard\":\"nearpacks\",\"version\":\"3.0.0\",\"event\":\"open_pack\",\"data\":[{{\"seed\":\"{}\",\"account\":\"{}\",\"randomness\":\"{}\",\"pack\":{},\"count\":{},\"amount\":\"{}\",\"block_height\":{}}}]}}",
             seed, draw.account, draw.randomness, pack, count, amount, height
         ));
         self.draws.insert(seed, draw.clone());
@@ -189,7 +189,7 @@ impl Pokenear {
     }
 }
 
-impl Pokenear {
+impl NearPacks {
     fn assert_owner(&self) {
         let p = env::predecessor_account_id();
         require!(p == self.owner || p == env::current_account_id(), "owner only");
@@ -221,8 +221,8 @@ mod tests {
     const SEED_B: &str = "bb00000000000000000000000000000000000000000000000000000000000002";
     const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
 
-    fn game() -> AccountId { "pokenearfun.near".parse().unwrap() }
-    fn treasury() -> AccountId { "pokenear.near".parse().unwrap() }
+    fn game() -> AccountId { "nearpacks.near".parse().unwrap() }
+    fn treasury() -> AccountId { "nearpacks.near".parse().unwrap() }
     fn player() -> AccountId { accounts(1) }
 
     fn ctx(predecessor: AccountId, deposit: u128, random: u8, height: u64) {
@@ -236,12 +236,12 @@ mod tests {
         testing_env!(b.build());
     }
 
-    fn setup() -> Pokenear {
+    fn setup() -> NearPacks {
         ctx(game(), 0, 7, 100);
-        Pokenear::new(game(), treasury(), Some(vec![U128(4 * NEAR), U128(10 * NEAR)]))
+        NearPacks::new(game(), treasury(), Some(vec![U128(4 * NEAR), U128(10 * NEAR)]))
     }
 
-    fn rip(c: &mut Pokenear, seed: &str, pack: u8, count: u8, deposit: u128) -> Draw {
+    fn rip(c: &mut NearPacks, seed: &str, pack: u8, count: u8, deposit: u128) -> Draw {
         ctx(player(), deposit, 7, 100);
         c.open_pack(seed.to_string(), pack, count)
     }
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(c.total_draws(), 1);
         assert!(get_logs()[0].starts_with("EVENT_JSON:"));
         assert_eq!(c.get_draw(SEED_B.to_string()), None);
-        assert_eq!(c.get_config()["treasury"], "pokenear.near");
+        assert_eq!(c.get_config()["treasury"], "nearpacks.near");
     }
 
     #[test]
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn without_fixed_prices_any_quote_is_accepted() {
         ctx(game(), 0, 7, 100);
-        let mut c = Pokenear::new(game(), treasury(), None);
+        let mut c = NearPacks::new(game(), treasury(), None);
         let d = rip(&mut c, SEED_A, 3, 5, 12_345 * NEAR / 1000);
         assert_eq!(d.amount, U128(12_345 * NEAR / 1000));
     }
@@ -330,7 +330,7 @@ mod tests {
     #[should_panic(expected = "attach at least 0.1 NEAR")]
     fn dust_rips_are_refused() {
         ctx(game(), 0, 7, 100);
-        let mut c = Pokenear::new(game(), treasury(), None);
+        let mut c = NearPacks::new(game(), treasury(), None);
         rip(&mut c, SEED_A, 0, 1, NEAR / 100);
     }
 
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn owner_sets_prices_and_treasury() {
         ctx(game(), 0, 7, 100);
-        let mut c = Pokenear::new(accounts(0), treasury(), None);
+        let mut c = NearPacks::new(accounts(0), treasury(), None);
         ctx(accounts(0), 0, 7, 100);
         c.set_prices(vec![U128(5)]);
         c.set_treasury(accounts(2));
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn payout_pays_each_ref_once() {
         let mut c = setup();
-        ctx(game(), 0, 7, 100); // function-call key on pokenearfun.near
+        ctx(game(), 0, 7, 100); // function-call key on nearpacks.near
         let _ = c.payout(player(), U128(NEAR), "sell:abc".to_string());
         assert!(c.is_paid("sell:abc".to_string()));
     }

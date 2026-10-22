@@ -1,4 +1,4 @@
-/* Pokenear store: picks a backend and exposes one async API to the UI.
+/* Near Packs store: picks a backend and exposes one async API to the UI.
    - live:  the Node server (server/server.js) verifies wallet signatures and owns game state.
    - local: no server (static hosting, previews); the engine runs in the browser and state
             lives in localStorage. Wallet signatures are still requested but not verified. */
@@ -6,7 +6,7 @@
   'use strict';
 
   var engine = root.PN.engine;
-  var STORAGE_KEY = 'pokenear:v6';
+  var STORAGE_KEY = 'nearpacks:v6';
 
   function safeGet(key) {
     try { return root.localStorage.getItem(key); } catch (e) { return null; }
@@ -153,7 +153,7 @@
       return store.dispatch({ type: 'buyback', uids: uids });
     },
 
-    // Admin page: only the admin wallets (pokenearfun.near, pokenear.near), live mode.
+    // Admin page: only the admin wallet (nearpacks.near), live mode.
     isAdmin: function () {
       var u = store.state.user;
       var admins = store.adminAccounts || root.PN.data.ADMIN_ACCOUNTS;
@@ -162,7 +162,7 @@
     adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
     adminSetPrice: function (nearUsd) { return postJSON('api/admin/price', { nearUsd: nearUsd }); },
 
-    // Dev wallet (pokenearfun.near): rips without paying, recorded as dev rips.
+    // Dev wallet (nearpacks.near): rips without paying, recorded as dev rips.
     isDev: function () {
       var u = store.state.user;
       return store.mode === 'live' && !!u && store.devAccounts.indexOf(u.address) >= 0;

@@ -1,6 +1,6 @@
 /* Entry for vendor/near-wallet.js (bundled by `npm run build:near`).
    Exposes window.PNNear: a thin wrapper around NEAR Wallet Selector for sign-in (signMessage)
-   and for paying rips in NEAR (rip() on the Pokenear contract, forwarded to the treasury). */
+   and for paying rips in NEAR (rip() on the Near Packs contract, forwarded to the treasury). */
 import { Buffer } from 'buffer';
 import { setupWalletSelector, actionCreators } from '@near-wallet-selector/core';
 import { setupHotWallet } from '@near-wallet-selector/hot-wallet';
@@ -44,7 +44,7 @@ async function signIn(walletId, params) {
 }
 
 // Pay for a rip in NEAR: either a plain transfer to the treasury (direct mode) or rip({seed, pack,
-// count}) on the Pokenear contract with the price attached. The contract draws the randomness and forwards the NEAR to the treasury in the same
+// count}) on the Near Packs contract with the price attached. The contract draws the randomness and forwards the NEAR to the treasury in the same
 // transaction. Returns { tx }, or nothing when the wallet redirects away (the rip resumes on return).
 async function pay(walletId, params) {
   if (!selector) await init();
