@@ -10,7 +10,7 @@
   'use strict';
 
   var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261022.2'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  var VERSION = '20261022.3'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
   // Packs are priced in US dollars and paid in NEAR through the Pokenear interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
@@ -124,7 +124,15 @@
      and the server always publish the same odds. */
   function buildPool(pack) {
     var target = pack.usd * EV_RATIO;
-    function inRange() { return ALL_CARDS.filter(function (c) { return c.usd >= pack.min && c.usd <= pack.max; }); }
+    // One card per Pokémon name in a pack: when several prints fit, keep the most valuable one.
+    function inRange() {
+      var best = {};
+      ALL_CARDS.forEach(function (c) {
+        if (c.usd < pack.min || c.usd > pack.max) return;
+        if (!best[c.name] || c.usd > best[c.name].usd) best[c.name] = c;
+      });
+      return ALL_CARDS.filter(function (c) { return best[c.name] === c; });
+    }
     function mean(list) { return list.reduce(function (n, c) { return n + c.usd; }, 0) / list.length; }
     // Raise the floor until the pool can reach the target without favouring expensive cards.
     var cards = inRange();
@@ -153,7 +161,7 @@
     pool.forEach(function (e) { acc += e.p; e.cum = acc; });
     pack.pool = pool;
     pack.ev = round2(pool.reduce(function (n, e) { return n + e.p * cardById[e.id].usd; }, 0));
-    // Top hits: highest values, one card per Pokémon name (two Victini prints show once).
+    // Top hits: highest values (pool already has one card per name).
     var seenName = {};
     pack.top = pool.map(function (e) { return cardById[e.id]; }).filter(function (c) {
       if (seenName[c.name]) return false;
