@@ -1,4 +1,4 @@
-/* Near Packs store: picks a backend and exposes one async API to the UI.
+/* StonkPacks store: picks a backend and exposes one async API to the UI.
    - live:  the Node server (server/server.js) verifies wallet signatures and owns game state.
    - local: no server (static hosting, previews); the engine runs in the browser and state
             lives in localStorage. Wallet signatures are still requested but not verified. */
@@ -37,6 +37,7 @@
             store.mode = 'live';
             store.game = cfg.game || null;
             store.chains = cfg.chains || ['near'];
+            store.chain = cfg.chain || root.PN.data.CHAIN;
             store.devAccounts = cfg.devAccounts || [];
             store.adminAccounts = cfg.adminAccounts || null;
             store.serverVersion = cfg.version || null;
@@ -166,7 +167,7 @@
     isAdmin: function () {
       var u = store.state.user;
       var admins = store.adminAccounts || root.PN.data.ADMIN_ACCOUNTS;
-      return store.mode === 'live' && !!u && u.chain === 'near' && admins.indexOf(u.address) >= 0;
+      return store.mode === 'live' && !!u && u.chain === (store.chain || root.PN.data.CHAIN) && admins.indexOf(u.address) >= 0;
     },
     adminStatus: function () { return fetchJSONOrError('api/admin/status'); },
     adminSetPrice: function (nearUsd) { return postJSON('api/admin/price', { nearUsd: nearUsd }); },
@@ -182,9 +183,9 @@
     // server cannot answer.
     balance: function () {
       var u = store.state.user;
-      if (!u || u.chain !== 'near') return Promise.resolve(null);
+      if (!u) return Promise.resolve(null);
       var fromServer = store.mode === 'live' ? fetchJSON('api/balance').catch(function () { return null; }) : Promise.resolve(null);
-      return fromServer.then(function (b) { return b && b.amount != null ? b : rpcBalance(u.address); });
+      return fromServer.then(function (b) { return b && b.amount != null ? b : u.chain === 'solana' ? solBalance(u.address) : u.chain === 'near' ? rpcBalance(u.address) : null; });
     },
 
     logout: function () {
@@ -237,6 +238,17 @@
     });
   }
 
+  function solBalance(address) {
+    var urls = ['https://api.mainnet-beta.solana.com', 'https://solana-rpc.publicnode.com'];
+    function ask(i) {
+      if (i >= urls.length) return Promise.resolve(null);
+      return fetch(urls[i], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address] }) })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { return j && j.result && j.result.value != null ? { amount: String(j.result.value), decimals: 9, symbol: 'SOL' } : ask(i + 1); })
+        .catch(function () { return ask(i + 1); });
+    }
+    return ask(0);
+  }
   function rpcBalance(account) {
     var cfg = root.PN_CONFIG || {};
     var urls = cfg.nearNetwork === 'testnet' ? ['https://rpc.testnet.fastnear.com', 'https://rpc.testnet.near.org'] : ['https://rpc.mainnet.fastnear.com', 'https://rpc.mainnet.near.org'];

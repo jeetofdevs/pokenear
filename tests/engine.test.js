@@ -139,7 +139,7 @@ test('cards are derived deterministically from on-chain randomness', () => {
   const crypto = require('node:crypto');
   const pack = D.packById.starter;
   const expected = [0, 1, 2, 3, 4].map((i) => {
-    const h = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('nearpacks-open:v1'), Buffer.from(RAND, 'hex'), Buffer.from(SEED, 'hex'), Buffer.from([i])])).digest();
+    const h = crypto.createHash('sha256').update(Buffer.concat([Buffer.from('stonkpacks-open:v1'), Buffer.from(RAND, 'hex'), Buffer.from(SEED, 'hex'), Buffer.from([i])])).digest();
     const u = h.readUIntBE(0, 6) / 2 ** 48;
     return pack.pool.find((e) => u < e.cum).id;
   });

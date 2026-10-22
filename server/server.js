@@ -1,5 +1,5 @@
 'use strict';
-/* Near Packs server: static files + NEAR wallet sign-in + authoritative game API.
+/* StonkPacks server: static files + NEAR wallet sign-in + authoritative game API.
    No runtime dependencies. Sign-in is a signed message with a one-time nonce.
    Rips are paid in NEAR: the player calls rip() on the interaction wallet's contract (GAME_ACCOUNT,
    nearpacks.near) with the pack price attached; it draws the randomness and forwards the NEAR to
@@ -19,6 +19,7 @@ const onchain = require('./onchain.js');
 const nearTx = require('./near-tx.js');
 const price = require('./price.js');
 const kv = require('./kv.js');
+const sol = require('./solana.js');
 
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
@@ -34,6 +35,22 @@ const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
 const NEAR_RPCS = (process.env.NEAR_RPC || (NEAR_NETWORK === 'testnet'
   ? 'https://rpc.testnet.fastnear.com,https://rpc.testnet.near.org'
   : 'https://rpc.mainnet.fastnear.com,https://rpc.mainnet.near.org')).split(',').map((u) => u.trim()).filter(Boolean);
+
+// Payment chain: 'solana' (StonkPacks, SOL transfers) or 'near' (NEAR transfers / contract).
+const CHAIN = (process.env.CHAIN || D.CHAIN || 'solana').toLowerCase() === 'near' ? 'near' : 'solana';
+const IS_SOL = CHAIN === 'solana';
+const TOKEN = IS_SOL ? 'SOL' : 'NEAR';
+const SOLANA_RPCS = (process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com,https://solana-rpc.publicnode.com').split(',').map((u) => u.trim()).filter(Boolean);
+async function withSolRpc(fn) {
+  let last;
+  for (const url of SOLANA_RPCS) {
+    try { return await fn(url); } catch (err) { last = err; console.warn('[sol-rpc]', url, err.message); }
+  }
+  throw last;
+}
+// Solana wallet that receives SOL pack payments; it is also the owner (free opens, admin page).
+const TREASURY_SOL = (process.env.TREASURY_SOL || D.TREASURY_SOL || '').trim();
+const solList = (name) => (process.env[name] || '').split(',').map((a) => a.trim()).filter((a) => auth.isSolanaAddress(a));
 
 async function withNearRpc(fn) {
   let last;
@@ -52,13 +69,17 @@ const GAME_ACCOUNT = envAccounts('GAME_ACCOUNT')[0] || D.GAME_ACCOUNT;
 const PAYOUT_KEY = process.env.PAYOUT_KEY || '';
 // Dev wallets rip without paying (server randomness), still recorded like any rip.
 // The owner wallets (game wallet, contract owner, admins) always open free; DEV_ACCOUNTS adds more.
-const DEV_ACCOUNTS = [...new Set([GAME_ACCOUNT, D.CONTRACT_OWNER, ...D.ADMIN_ACCOUNTS, ...envAccounts('DEV_ACCOUNTS')])];
+const DEV_ACCOUNTS = IS_SOL
+  ? [...new Set([TREASURY_SOL, ...solList('DEV_ACCOUNTS'), ...solList('ADMIN_ACCOUNTS')].filter(Boolean))]
+  : [...new Set([GAME_ACCOUNT, D.CONTRACT_OWNER, ...D.ADMIN_ACCOUNTS, ...envAccounts('DEV_ACCOUNTS')])];
 // Wallets allowed on the admin page (read status, backup price). On-chain changes are still signed
 // by the right wallet in the browser.
-const ADMIN_ACCOUNTS = [...new Set([...D.ADMIN_ACCOUNTS, ...envAccounts('ADMIN_ACCOUNTS')])];
-const isDev = (st) => Boolean(st && st.user && st.user.chain === 'near' && DEV_ACCOUNTS.includes(st.user.address));
-// Payments, randomness and buybacks are on NEAR, so sign-in is NEAR only.
-const CHAINS = ['near'];
+const ADMIN_ACCOUNTS = IS_SOL
+  ? [...new Set([TREASURY_SOL, ...solList('ADMIN_ACCOUNTS')].filter(Boolean))]
+  : [...new Set([...D.ADMIN_ACCOUNTS, ...envAccounts('ADMIN_ACCOUNTS')])];
+const isDev = (st) => Boolean(st && st.user && st.user.chain === CHAIN && DEV_ACCOUNTS.includes(st.user.address));
+// Sign-in uses the payment chain's wallets only.
+const CHAINS = [CHAIN];
 // Direct mode (no contract yet): players send NEAR straight to the treasury.
 const TREASURY = envAccounts('TREASURY')[0] || D.TREASURY;
 // On Vercel the file system is not kept between requests: the game needs Upstash Redis there.
@@ -66,7 +87,7 @@ const NO_STORAGE = Boolean(process.env.VERCEL) && !kv.enabled;
 const YOCTO = 10n ** 24n;
 const ROUND = 10n ** 20n; // quotes are rounded up to 0.0001 NEAR
 
-const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'contracts/near-rng/res/nearpacks_game.wasm']);
+const STATIC = new Set(['index.html', 'css/style.css', 'js/cards.js', 'js/auth.js', 'js/data.js', 'js/engine.js', 'js/store.js', 'js/wallets.js', 'js/app.js', 'js/sha256.js', 'vendor/near-wallet.js', 'vendor/solana-vrf.js', 'vendor/solana-pay.js', 'contracts/near-rng/res/nearpacks_game.wasm']);
 const ART_RE = /^assets\/(art\/\d{1,4}\.webp|brand\/[a-z-]+\.(svg|png))$/;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
 
@@ -179,7 +200,7 @@ async function walletLogin(req, res) {
     // Verify the exact text the wallet signed, after checking it is our sign-in message.
     const expected = auth.loginMessage('solana', address, nonce);
     const signed = typeof body.message === 'string' ? body.message.replace(/\r\n/g, '\n') : expected;
-    if (signed !== expected) return send(res, 400, { error: 'The signed message is not the Near Packs sign-in message. Try again.' });
+    if (signed !== expected) return send(res, 400, { error: 'The signed message is not the StonkPacks sign-in message. Try again.' });
     if (!verify.verifySolana({ address, signature, message: signed })) {
       console.warn('[solana-login] signature mismatch', { address, wallet: body.wallet, sigLen: String(signature || '').length });
       return send(res, 401, { error: 'The wallet signature did not match this address. If you use a Ledger or a multi-account wallet, select the account you connected and try again.' });
@@ -233,18 +254,29 @@ async function chainConfig() {
 }
 
 // NEAR/USD now: live market median, else the admin's manual price, else none.
+// Settings keys for the payment coin's price: live cache and the admin's backup price.
+const LAST_KEY = IS_SOL ? 'lastSolUsd' : 'lastNearUsd';
+const MANUAL_KEY = IS_SOL ? 'solUsd' : 'nearUsd';
 async function marketPrice() {
-  const live = await price.nearUsd().catch(() => null);
+  const live = await price.priceUsd(TOKEN).catch(() => null);
   if (live) {
-    if (!live.stale && (!db.settings.lastNearUsd || Date.now() - db.settings.lastNearUsd.at > 60 * 1000)) { db.settings.lastNearUsd = { usd: live.usd, at: live.at }; saveDb(); }
+    if (!live.stale && (!db.settings[LAST_KEY] || Date.now() - db.settings[LAST_KEY].at > 60 * 1000)) { db.settings[LAST_KEY] = { usd: live.usd, at: live.at }; saveDb(); }
     return { usd: live.usd, source: live.sources.join('+'), at: live.at, stale: live.stale };
   }
   // Every price source down: the last live price from the past 6 hours keeps packs open.
-  const last = db.settings && db.settings.lastNearUsd;
+  const last = db.settings && db.settings[LAST_KEY];
   if (last && Date.now() - last.at < 6 * 3600 * 1000) return { usd: last.usd, source: 'last-live', at: last.at, stale: true };
-  const manual = Number((db.settings && db.settings.nearUsd) || process.env.NEAR_USD);
+  const manual = Number((db.settings && db.settings[MANUAL_KEY]) || process.env[IS_SOL ? 'SOL_USD' : 'NEAR_USD']);
   if (manual > 0) return { usd: manual, source: 'manual', at: null, stale: false };
   return null;
+}
+
+// Lamports for `usdCents` at `usdPerSol`, rounded up to 0.0001 SOL.
+function lamportsFor(usdCents, usdPerSol) {
+  const micro = BigInt(Math.round(usdPerSol * 1e6));
+  const raw = BigInt(usdCents) * 1000000000n * 1000000n / (100n * micro);
+  const step = 100000n;
+  return ((raw + step - 1n) / step) * step;
 }
 
 // yoctoNEAR for `usdCents` at `usdPerNear`, rounded up to 0.0001 NEAR.
@@ -254,10 +286,11 @@ function yoctoFor(usdCents, usdPerNear) {
   return ((raw + ROUND - 1n) / ROUND) * ROUND;
 }
 
-/* Game config. Mode 'contract' once nearpacks.near runs the Near Packs contract, else 'direct'
+/* Game config. Mode 'contract' once nearpacks.near runs the StonkPacks contract, else 'direct'
    (NEAR sent straight to the treasury). Pack prices follow the live NEAR price unless the
    contract has fixed prices set on chain. */
 async function gameConfig() {
+  if (IS_SOL) return solGameConfig();
   const [chain, market] = await Promise.all([chainConfig(), marketPrice()]);
   const fixed = chain.initialized && chain.prices.length >= D.PACKS.length;
   const prices = fixed ? chain.prices : market ? D.PACKS.map((p) => yoctoFor(Math.round(p.usd * 100), market.usd).toString()) : [];
@@ -273,7 +306,21 @@ async function gameConfig() {
     buyback: chain.initialized && Boolean(PAYOUT_KEY) && Boolean(fixed || market)
   };
 }
-const notReady = () => ({ error: NO_STORAGE ? 'The game database is not connected yet.' : 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
+// Solana: no contract. Players send SOL to TREASURY_SOL at the live SOL price.
+async function solGameConfig() {
+  const market = await marketPrice();
+  const prices = market ? D.PACKS.map((p) => lamportsFor(Math.round(p.usd * 100), market.usd).toString()) : [];
+  const reason = NO_STORAGE ? 'storage' : !TREASURY_SOL ? 'treasury' : prices.length < D.PACKS.length ? 'price' : null;
+  return {
+    chain: 'solana', account: TREASURY_SOL || null, mode: 'direct', treasury: TREASURY_SOL || null,
+    currency: 'SOL', decimals: 9, prices, maxPerRip: 5,
+    priceSource: market ? market.source : null, usd: market ? market.usd : null, priceAt: market ? market.at : null,
+    ready: !reason, reason,
+    storage: kv.enabled ? 'redis-' + kv.transport : process.env.VERCEL ? { connected: false, redisEnvSeen: kv.seenEnv } : 'file',
+    buyback: false
+  };
+}
+const notReady = () => ({ error: NO_STORAGE ? 'The game database is not connected yet.' : IS_SOL && !TREASURY_SOL ? 'SOL payments open as soon as the treasury wallet is set.' : 'Packs open soon. Follow @' + D.X_HANDLE + ' for the launch.' });
 
 /* ---------- on-chain rips ----------
    start:  reserve a one-time seed. The player calls rip({seed, pack, count}) on GAME_ACCOUNT with the
@@ -282,6 +329,7 @@ const notReady = () => ({ error: NO_STORAGE ? 'The game database is not connecte
    finish: read the draw from chain, check it is this player's payment for this rip, derive the cards.
    cancel: drop the rip, only while nothing was paid for its seed. */
 function payFor(game, pr) {
+  if (pr.source === 'sol-transfer') return { method: 'sol-transfer', chain: 'solana', receiver: pr.treasury || TREASURY_SOL, lamports: pr.amount, deposit: pr.amount };
   if (pr.source === 'near-transfer') return { method: 'transfer', receiver: pr.treasury || TREASURY, deposit: pr.amount };
   const pack = D.PACKS.findIndex((p) => p.id === pr.pack);
   return { method: 'open_pack', receiver: GAME_ACCOUNT, deposit: pr.amount, args: { seed: pr.seed, pack, count: pr.count } };
@@ -298,7 +346,7 @@ async function ripRoute(req, res, step) {
     if (step === 'start' && isDev(st)) {
       // Dev wallet: no payment; the server draws the randomness and the rip is recorded as a dev rip.
       const seed = crypto.randomBytes(32).toString('hex');
-      const started = engine.apply(st, { type: 'ripStart', pack: body.pack, count: body.count, seed, chain: 'near', source: 'dev' }, ctx());
+      const started = engine.apply(st, { type: 'ripStart', pack: body.pack, count: body.count, seed, chain: CHAIN, source: 'dev' }, ctx());
       const out = engine.apply(started.state, { type: 'ripFinish', proof: { randomness: crypto.randomBytes(32).toString('hex'), source: 'dev', ref: st.user.address } }, ctx());
       db.users[uid] = out.state;
       saveDb();
@@ -312,9 +360,9 @@ async function ripRoute(req, res, step) {
       const count = D.MULTI.includes(body.count) ? body.count : 1;
       const amount = (BigInt(game.prices[index]) * BigInt(count)).toString();
       const seed = crypto.randomBytes(32).toString('hex');
-      const source = game.mode === 'direct' ? 'near-transfer' : 'nearpacks-near';
-      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: 'near', source }, ctx());
-      if (source === 'near-transfer') out.state.pendingRip.treasury = game.treasury;
+      const source = IS_SOL ? 'sol-transfer' : game.mode === 'direct' ? 'near-transfer' : 'nearpacks-near';
+      const out = engine.apply(st, { type: 'ripStart', pack: body.pack, count, seed, amount, chain: CHAIN, source }, ctx());
+      if (source !== 'nearpacks-near') out.state.pendingRip.treasury = game.treasury;
       db.users[uid] = out.state;
       saveDb();
       return send(res, 200, { state: out.state, rip: out.result.rip, pay: payFor(game, out.result.rip) });
@@ -327,6 +375,7 @@ async function ripRoute(req, res, step) {
       saveDb();
       return send(res, 200, { state: out.state, result: out.result });
     }
+    if (pr.source === 'sol-transfer') return solRip(req, res, step, uid, st, pr, body, game);
     if (pr.source === 'near-transfer') return directRip(req, res, step, uid, st, pr, body, game);
     const r = await withNearRpc((url) => onchain.nearDraw(url, GAME_ACCOUNT, pr.seed));
     if (step === 'cancel') {
@@ -350,7 +399,7 @@ async function ripRoute(req, res, step) {
   } catch (err) {
     if (err.isGameError) return send(res, 400, { error: err.message });
     console.error('[rip]', err.message);
-    return send(res, err.status || 502, { error: err.status ? err.message : 'Could not reach NEAR. Try again in a moment.' });
+    return send(res, err.status || 502, { error: err.status ? err.message : 'Could not reach ' + (IS_SOL ? 'Solana' : 'NEAR') + '. Try again in a moment.' });
   }
 }
 
@@ -401,6 +450,62 @@ async function directRip(req, res, step, uid, st, pr, body, game) {
   const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
   save(out.state);
   return send(res, 200, { state: out.state, result: out.result });
+}
+
+/* Solana rip: the player sent SOL to the treasury in one transaction. The server checks it on
+   chain (signed by the player, exact lamports to the treasury, succeeded, sent after this rip
+   started, never used before) and derives the randomness from the hash of the block that included it:
+     randomness = sha256("stonkpacks-sol:v1" || blockhash || seed)
+   Nobody knows that block hash before the transaction lands, and anyone can re-check it. */
+const SOL_DOMAIN = Buffer.from('stonkpacks-sol:v1');
+function solRandomness(blockhash, seedHex) {
+  return crypto.createHash('sha256').update(Buffer.concat([SOL_DOMAIN, Buffer.from(auth.base58Decode(blockhash)), Buffer.from(seedHex, 'hex')])).digest('hex');
+}
+async function solRip(req, res, step, uid, st, pr, body, game) {
+  const save = (state) => { db.users[uid] = state; saveDb(); };
+  if (step === 'cancel') {
+    const out = engine.apply(st, { type: 'ripCancel' }, ctx());
+    save(out.state);
+    return send(res, 200, { state: out.state, result: out.result });
+  }
+  const given = typeof body.tx === 'string' ? body.tx.trim() : '';
+  if (given) {
+    const raw = auth.base58Decode(given);
+    if (!raw || raw.length !== 64) return send(res, 400, { error: 'That is not a Solana transaction signature.' });
+    st.pendingRip.tx = given;
+    save(st);
+  }
+  const sig = st.pendingRip.tx;
+  if (!sig) return send(res, 202, { status: 'missing', rip: pr, pay: payFor(game, pr) });
+  if (kvReq) await kv.ensure(db, kvReq.snap, 'usedTx', [sig]);
+  const usedBy = db.usedTx[sig];
+  if (usedBy && usedBy !== uid + ':' + pr.seed) {
+    st.pendingRip.tx = null; save(st);
+    return send(res, 400, { error: 'That transaction was already used for another pack.' });
+  }
+  const t = await withSolRpc((url) => sol.solTransferTx(url, sig));
+  if (t.status === 'pending') return send(res, 202, { status: 'pending', rip: pr, pay: payFor(game, pr) });
+  const fail = (msg) => { st.pendingRip.tx = null; save(st); return send(res, 400, { error: msg }); };
+  if (t.status === 'failed') return fail('That transaction failed on Solana. Nothing was paid; try again.');
+  const treasury = pr.treasury || TREASURY_SOL;
+  const paid = t.transfers.filter((x) => x.source === st.user.address && x.destination === treasury).reduce((n, x) => n + BigInt(x.lamports), 0n);
+  if (t.signer !== st.user.address || paid !== BigInt(pr.amount)) {
+    console.warn('[rip] sol transfer mismatch', { user: st.user.address, tx: sig, t, rip: pr });
+    return fail('That transaction is not the payment for this pack (it must send exactly ' + (Number(pr.amount) / 1e9) + ' SOL to ' + treasury + ').');
+  }
+  const blk = await withSolRpc((url) => sol.solBlockhash(url, t.slot));
+  const blockTime = t.blockTime || blk.blockTime;
+  if (blockTime && blockTime * 1000 < pr.at - 30000) return fail('That payment was sent before this pack was started.');
+  db.usedTx[sig] = uid + ':' + pr.seed;
+  const proof = { randomness: solRandomness(blk.blockhash, pr.seed), source: 'sol-transfer', ref: treasury, tx: sig, block: blk.blockhash, paid: paid.toString() };
+  const out = engine.apply(st, { type: 'ripFinish', proof }, ctx());
+  save(out.state);
+  return send(res, 200, { state: out.state, result: out.result });
+}
+
+// Recent blockhash so the browser can build the SOL transfer without its own RPC.
+async function solBlockhashRoute(req, res) {
+  try { return send(res, 200, await withSolRpc((url) => sol.solLatestBlockhash(url))); } catch { return send(res, 502, { error: 'Could not reach Solana. Try again.' }); }
 }
 
 /* ---------- buyback ----------
@@ -472,8 +577,8 @@ const EMPTY_CODE = '11111111111111111111111111111111';
 function adminOnly(req, res) {
   const uid = currentUserId(req);
   const st = uid && db.users[uid];
-  if (!st || st.user.chain !== 'near' || !ADMIN_ACCOUNTS.includes(st.user.address)) {
-    send(res, 403, { error: 'Admin is only for ' + ADMIN_ACCOUNTS.join(', ') + '.' });
+  if (!st || st.user.chain !== CHAIN || !ADMIN_ACCOUNTS.includes(st.user.address)) {
+    send(res, 403, { error: ADMIN_ACCOUNTS.length ? 'Admin is only for ' + ADMIN_ACCOUNTS.join(', ') + '.' : 'No admin wallet is set yet (TREASURY_SOL).' });
     return null;
   }
   return st;
@@ -482,6 +587,16 @@ const safe = (p) => p.catch((err) => ({ error: err.message }));
 
 async function adminStatus(req, res) {
   if (!adminOnly(req, res)) return;
+  if (IS_SOL) {
+    const game = await gameConfig();
+    const bal = TREASURY_SOL ? await safe(withSolRpc((url) => sol.solBalance(url, TREASURY_SOL))) : null;
+    return send(res, 200, {
+      chain: 'solana', mode: 'direct', ready: game.ready, reason: game.reason,
+      usd: game.usd, priceSource: game.priceSource, priceAt: game.priceAt, manualUsd: db.settings[MANUAL_KEY] || null,
+      treasury: TREASURY_SOL || null, treasuryLamports: bal && !bal.error ? bal : null,
+      players: Object.keys(db.users).length, storage: game.storage
+    });
+  }
   gameCache = { at: 0, ttl: 0, value: null };
   const [account, config] = await Promise.all([
     safe(withNearRpc((url) => onchain.nearAccount(url, GAME_ACCOUNT))),
@@ -523,11 +638,11 @@ async function adminPrice(req, res) {
   if (!adminOnly(req, res)) return;
   let body;
   try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'Invalid request.' }); }
-  const usd = String(body && body.nearUsd || '').trim();
-  if (usd && !D.packPricesRaw(usd, 24)) return send(res, 400, { error: 'Enter the USD price of 1 NEAR, for example 2.50.' });
-  db.settings.nearUsd = usd || null;
+  const usd = String(body && (body.usd || body.nearUsd) || '').trim();
+  if (usd && !D.packPricesRaw(usd, IS_SOL ? 9 : 24)) return send(res, 400, { error: 'Enter the USD price of 1 ' + TOKEN + ', for example ' + (IS_SOL ? '150.25' : '2.50') + '.' });
+  db.settings[MANUAL_KEY] = usd || null;
   saveDb();
-  send(res, 200, { ok: true, nearUsd: db.settings.nearUsd });
+  send(res, 200, { ok: true, usd: db.settings[MANUAL_KEY], nearUsd: db.settings[MANUAL_KEY] });
 }
 
 async function balanceRoute(req, res) {
@@ -535,6 +650,7 @@ async function balanceRoute(req, res) {
   const st = uid && db.users[uid];
   if (!st) return send(res, 401, { error: 'Connect your wallet first.' });
   try {
+    if (IS_SOL) return send(res, 200, { amount: await withSolRpc((url) => sol.solBalance(url, st.user.address)), decimals: 9, symbol: 'SOL' });
     const acc = await withNearRpc((url) => onchain.nearAccount(url, st.user.address));
     return send(res, 200, { amount: acc ? String(acc.amount) : '0', decimals: 24, symbol: 'NEAR' });
   } catch (err) {
@@ -585,9 +701,10 @@ async function route(req, res) {
   let url;
   try { url = new URL(req.url.replace(/^\/+/, '/'), 'http://localhost'); } catch { return send(res, 400, 'Bad request'); }
   const p = url.pathname;
-  if (p === '/api/config') return send(res, 200, { mode: 'live', chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, adminAccounts: ADMIN_ACCOUNTS, version: D.VERSION });
+  if (p === '/api/config') return send(res, 200, { mode: 'live', chain: CHAIN, chains: CHAINS, nearNetwork: NEAR_NETWORK, game: await gameConfig(), devAccounts: DEV_ACCOUNTS, adminAccounts: ADMIN_ACCOUNTS, version: D.VERSION });
   if (p === '/api/buyback' && req.method === 'POST') return buybackRoute(req, res);
   if (p === '/api/balance' && req.method === 'GET') return balanceRoute(req, res);
+  if (p === '/api/sol/blockhash' && req.method === 'GET') return solBlockhashRoute(req, res);
   if (p === '/api/admin/status' && req.method === 'GET') return adminStatus(req, res);
   if (p === '/api/admin/price' && req.method === 'POST') return adminPrice(req, res);
   if (p === '/api/rip/start' && req.method === 'POST') return ripRoute(req, res, 'start');
@@ -685,8 +802,11 @@ if (require.main === module) {
   }
   server.listen(PORT, () => {
     console.log(`[db] ${DB_FILE}${process.env.RAILWAY_ENVIRONMENT_NAME && !process.env.RAILWAY_VOLUME_MOUNT_PATH && !process.env.DB_FILE ? ' (no Railway volume attached: data is lost on redeploy)' : ''}`);
-    console.log(`Near Packs v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
-    gameConfig().then((g) => console.log(`[game] packs ${g.ready ? 'OPEN' : 'CLOSED (no NEAR price: set a backup price on /admin)'} · mode ${g.mode} · NEAR/USD ${g.nearUsd || '-'} (${g.priceSource || 'none'}) · free opens: ${DEV_ACCOUNTS.join(', ')}`)).catch(() => {});
+    console.log(IS_SOL
+      ? `StonkPacks v${D.VERSION} running at http://localhost:${PORT} (Solana, SOL payments to ${TREASURY_SOL || 'NOT SET: set TREASURY_SOL'})`
+      : `StonkPacks v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
+    const why = (g) => (g.reason === 'treasury' ? 'no treasury wallet: set TREASURY_SOL' : g.reason === 'storage' ? 'no database' : 'no price: set a backup price on /admin');
+    gameConfig().then((g) => console.log(`[game] packs ${g.ready ? 'OPEN' : 'CLOSED (' + why(g) + ')'} · mode ${g.mode} · ${TOKEN}/USD ${g.usd || g.nearUsd || '-'} (${g.priceSource || 'none'}) · free opens: ${DEV_ACCOUNTS.join(', ') || '-'}`)).catch(() => {});
   });
 }
 

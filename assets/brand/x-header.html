@@ -16,7 +16,7 @@
     transform: rotateX(28deg) rotateY(-24deg) rotateZ(14deg); transform-style: preserve-3d; }
   .grid .card { width: 150px; box-shadow: 0 18px 30px rgba(0, 0, 0, 0.6); }
   .grid .card .foil { display: none; }
-  .grid .hot { box-shadow: 0 0 0 3px #00ec97, 0 0 46px rgba(0, 236, 151, 0.75); }
+  .grid .hot { box-shadow: 0 0 0 3px #14f195, 0 0 46px rgba(0, 236, 151, 0.75); }
   .fade { position: absolute; inset: 0; z-index: 1; pointer-events: none;
     background:
       linear-gradient(90deg, #050607 0%, #050607 34%, rgba(5, 6, 7, 0.85) 52%, rgba(5, 6, 7, 0.2) 72%, rgba(5, 6, 7, 0.05) 100%),
@@ -24,17 +24,17 @@
   .glow { position: absolute; z-index: 1; left: -200px; top: -120px; width: 900px; height: 700px; background: radial-gradient(closest-side, rgba(0, 236, 151, 0.2), transparent); }
   .scan { position: absolute; inset: 0; z-index: 1; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px); }
   .copy { position: absolute; z-index: 2; left: 84px; top: 64px; width: 900px; }
-  .kick { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border-radius: 999px; background: rgba(0, 236, 151, 0.12); border: 1px solid rgba(0, 236, 151, 0.5); color: #00ec97; font: 800 15px/1 Inter, sans-serif; letter-spacing: 0.16em; }
-  .kick i { width: 10px; height: 10px; border-radius: 50%; background: #00ec97; box-shadow: 0 0 0 5px rgba(0, 236, 151, 0.2), 0 0 14px #00ec97; }
+  .kick { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 12px; border-radius: 999px; background: rgba(0, 236, 151, 0.12); border: 1px solid rgba(0, 236, 151, 0.5); color: #14f195; font: 800 15px/1 Inter, sans-serif; letter-spacing: 0.16em; }
+  .kick i { width: 10px; height: 10px; border-radius: 50%; background: #14f195; box-shadow: 0 0 0 5px rgba(0, 236, 151, 0.2), 0 0 14px #14f195; }
   h1 { margin: 22px 0 0; font: 700 80px/0.95 'Space Grotesk', sans-serif; letter-spacing: -0.045em; color: #fff; }
-  h1 span { display: block; background: linear-gradient(90deg, #00ec97, #7df3ff 55%, #a99bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 span { display: block; background: linear-gradient(90deg, #14f195, #7df3ff 55%, #a99bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .sub { margin-top: 22px; display: flex; align-items: center; gap: 14px; font: 700 21px/1 Inter, sans-serif; color: rgba(255, 255, 255, 0.78); }
   .sub b { color: #fff; }
   .sub .sep { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
   .brand { position: absolute; z-index: 2; right: 46px; bottom: 34px; display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 12px; border-radius: 16px; background: rgba(5, 6, 7, 0.78); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(8px); }
   .brand img { width: 44px; height: 44px; }
   .brand span { font: 700 28px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
-  .brand span b { color: #00ec97; margin-left: 0.2em; }
+  .brand span b { color: #14f195; margin-left: 0.2em; }
   .brand em { font: 700 17px/1 'JetBrains Mono', monospace; font-style: normal; color: rgba(255, 255, 255, 0.7); padding-left: 14px; border-left: 1px solid rgba(255, 255, 255, 0.2); }
 </style>
 </head>
@@ -43,11 +43,11 @@
   <div class="wall"><div class="grid" id="grid"></div></div>
   <div class="glow"></div><div class="fade"></div><div class="scan"></div>
   <div class="copy">
-    <div class="kick"><i></i>LIVE ON NEAR</div>
+    <div class="kick"><i></i>ON SOLANA · LAUNCHING ON STONKFUN</div>
     <h1>Open real Pokémon<span>packs on-chain.</span></h1>
-    <div class="sub"><span>Packs from <b>$10</b></span><span class="sep"></span><span>Hits up to <b>$320</b></span><span class="sep"></span><span><b>96%</b> buyback</span></div>
+    <div class="sub"><span>Packs from <b>$10</b></span><span class="sep"></span><span>Paid in <b>SOL</b></span><span class="sep"></span><span>Hits up to <b>$320</b></span></div>
   </div>
-  <div class="brand"><img src="nearpacks-icon.svg" alt=""><span>Near<b>Packs</b></span><em>nearpacks.fun</em></div>
+  <div class="brand"><img src="stonkpacks-icon.svg" alt=""><span>Stonk<b>Packs</b></span><em>stonkfun.xyz</em></div>
 </div>
 <script>window.PN_CONFIG = { remoteImages: false };</script>
 <script src="../../js/cards.js"></script>

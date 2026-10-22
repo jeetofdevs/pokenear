@@ -1,4 +1,4 @@
-/* Near Packs UI. Renders from store.state; all game rules live in engine.js.
+/* StonkPacks UI. Renders from store.state; all game rules live in engine.js.
    Gacha model: tiered packs, one card per pack, published odds, instant 96% buyback.
    Cards are drawn from real set data (js/cards.js). When remote images are allowed,
    the official card scan fades in over the drawn card. */
@@ -42,6 +42,7 @@
     return whole.toLocaleString('en-US') + (frac ? '.' + String(frac).padStart(2, '0').replace(/0$/, '') : '');
   }
   // Live NEAR amount for a pack (from the server's market quote), e.g. "4.0123"; null if unknown.
+  function short(a) { a = String(a || ''); return a.length > 20 ? a.slice(0, 6) + '…' + a.slice(-6) : a; }
   function nearQuote(p, n) {
     var g = store.game;
     if (store.mode !== 'live' || !g || !g.prices || g.prices.length < D.PACKS.length || store.isDev()) return null;
@@ -50,21 +51,23 @@
     return fmtNear(raw);
   }
   function fmtNear(raw) {
-    var v = BigInt(raw), unit = BigInt(10) ** BigInt(24);
-    var frac = String(v % unit).padStart(24, '0').slice(0, 4).replace(/0+$/, '');
+    var dec = (store.game && store.game.decimals) || D.TOKEN_DECIMALS;
+    var v = BigInt(raw), unit = BigInt(10) ** BigInt(dec);
+    var frac = String(v % unit).padStart(dec, '0').slice(0, 4).replace(/0+$/, '');
     return (v / unit).toLocaleString('en-US') + (frac ? '.' + frac : '');
   }
   // Why packs are closed, in plain words (shown on the packs page).
   function closedReason() {
     if (store.mode !== 'live') return 'Game server not connected: this site cannot reach /api/config.';
     if (store.game && store.game.reason === 'storage') return 'Game database not connected: add Upstash Redis to the Vercel project, then redeploy.';
-    return 'Waiting for the live NEAR price. Packs open automatically as soon as it loads.';
+    if (store.game && store.game.reason === 'treasury') return 'SOL payments open as soon as the treasury wallet is set. Follow @' + D.X_HANDLE + ' for the launch.';
+    return 'Waiting for the live ' + D.TOKEN + ' price. Packs open automatically as soon as it loads.';
   }
   function payReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready)); }
   function buybackReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready && store.game.buyback)); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
-  var COIN = '<span class="coin" aria-hidden="true"></span>';
+  var COIN = '<span class="coin' + (D.CHAIN === 'solana' ? ' sol' : '') + '" aria-hidden="true"></span>';
   var WALLET_SVG = '<svg class="x-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a3 3 0 0 1 3-3h11a1 1 0 0 1 0 2H6a1 1 0 0 0 0 2h13a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm14 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
   var CHAIN_BADGE = {
     solana: '<span class="chain-dot sol" title="Solana" aria-label="Solana"></span>',
@@ -209,7 +212,7 @@
       '<div class="bw" style="clip-path:' + CRIMP + '">' +
         '<div class="bw-foil"></div><div class="bw-mono">N</div>' +
         '<div class="bw-seal top"></div><div class="bw-seal bottom"></div>' +
-        '<div class="bw-head"><img src="assets/brand/nearpacks-icon.svg" alt=""><span>NEAR<b>PACKS</b></span><em>S' + look.no + '</em></div>' +
+        '<div class="bw-head"><img src="assets/brand/stonkpacks-icon.svg" alt=""><span>STONK<b>PACKS</b></span><em>S' + look.no + '</em></div>' +
         '<div class="bw-window"><span class="bw-rays"></span><span class="bw-orb"></span></div>' +
         '<img class="bw-hero" src="' + artUrl(look.hero) + '" alt="" decoding="async">' +
         '<div class="bw-name"><small>Pokémon card pack</small><span>' + esc(look.label) + '</span></div>' +
@@ -233,7 +236,7 @@
   function packStatsHTML(p) {
     return '<div class="stat-chips">' +
       '<span class="schip"><small>Expected value</small><b>' + usd(p.ev) + '</b></span>' +
-      '<span class="schip"><small>Instant buyback</small><b>' + Math.round(D.BUYBACK_RATE * 100) + '%</b></span>' +
+      (buybackReady() ? '<span class="schip"><small>Instant buyback</small><b>' + Math.round(D.BUYBACK_RATE * 100) + '%</b></span>' : '<span class="schip"><small>Top hit</small><b>' + usd(p.top[0].usd) + '</b></span>') +
       '<span class="schip"><small>Pull ≥ ' + usd(p.usd) + '</small><b>' + fmtChance(p.beat) + '</b></span>' +
       '<span class="schip"><small>Pull ≥ ' + usd(p.usd * 3) + '</small><b>' + fmtChance(p.x3) + '</b></span>' +
     '</div>';
@@ -280,12 +283,12 @@
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
-      '<a class="brand" href="' + link('') + '"><img class="brand-icon" src="assets/brand/nearpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Near<b>Packs</b></span></a>' +
+      '<a class="brand" href="' + link('') + '"><img class="brand-icon" src="assets/brand/stonkpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Stonk<b>Packs</b></span></a>' +
       nav + '<div class="top-right">' + right + '</div></div></header>';
   }
 
   function footerHTML() {
-    return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in NEAR. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Near Packs is not affiliated with them.</span>' +
+    return '<footer><div class="wrap"><span>Sign in with a Solana wallet. Packs are priced in USD and paid in SOL. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; StonkPacks is not affiliated with them.</span>' +
       '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="' + link('docs') + '">Docs</a><a href="' + link('docs/rng') + '">On-chain RNG</a><a href="' + link('docs/faq') + '">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
@@ -314,9 +317,9 @@
     var starter = D.PACKS[0];
     return '<section class="hero">' +
       '<div class="hero-copy">' +
-        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on NEAR, paid in ' + D.TOKEN + '</span>' +
-        '<h1>Open real <span class="gold">Pokémon</span> packs. Sell back instantly.</h1>' +
-        '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and you can sell any pull back for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value on the spot.</p>' +
+        '<span class="eyebrow"><span class="live-dot"></span>Pokémon packs on Solana · token launching on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a></span>' +
+        '<h1>Open real <span class="gold">Pokémon</span> packs with SOL.</h1>' +
+        '<p class="lede">Packs from <b>' + usd(starter.usd) + '</b>, paid in ' + D.TOKEN + '. Every pack shows the exact chance of every card, the average card is worth ' + Math.round(D.EV_RATIO * 100) + '% of the price, and every pull is decided by the Solana block your payment lands in.</p>' +
         '<div class="hero-cta"><button class="btn btn-gold btn-lg" data-act="connect">' + WALLET_SVG + 'Connect wallet</button><a class="btn btn-ghost btn-lg" href="#rates" data-act="scroll-rates">See the odds</a></div>' +
       '</div>' +
       '<div class="fan" aria-hidden="true">' + fan + '</div>' +
@@ -327,10 +330,10 @@
     '<section class="view" style="gap:14px"><div class="section-head"><h2>Packs</h2><span class="muted">' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + ' · ' + fmt(D.ALL_CARDS.length) + ' real cards</span></div>' +
       '<div class="pack-grid" id="rates">' + D.PACKS.map(function (p) { return packTileHTML(p, true); }).join('') + '</div><p class="muted small">Tap a pack to see its top tier cards and odds.</p></section>' +
     '<section class="panel"><div class="steps">' +
-      step(1, 'Connect a NEAR wallet', 'HOT, Meteor, MyNearWallet, Sender or Intear. One signature, no transaction, no fee.') +
+      step(1, 'Connect a Solana wallet', 'Phantom, Solflare or Backpack. One signature, no transaction, no fee.') +
       step(2, 'Pick a pack', 'From ' + usd(starter.usd) + '. Every card and its chance is listed before you open it.') +
-      step(3, 'Pay in NEAR', 'One transaction pays for the pack and draws your card\'s randomness on chain.') +
-      step(4, 'Keep or sell back', 'Hold the card in your vault or sell it for ' + Math.round(D.BUYBACK_RATE * 100) + '% of its value, paid in ' + D.TOKEN + '.') +
+      step(3, 'Pay in SOL', 'One SOL transfer pays for the pack; the block it lands in decides your card.') +
+      step(4, 'Collect', 'Your cards go to your vault with an on-chain proof. Climb the Ranks board.') +
     '</div></section>';
   }
 
@@ -342,7 +345,7 @@
     var buttons = D.MULTI.map(function (n, i) {
       return '<button class="btn buy' + (i === 0 ? ' btn-gold' : '') + '" data-act="rip" data-count="' + n + '"' + (payReady() ? '' : ' disabled') + '>' +
         '<span class="buy-name">Open ' + n + (n > 1 ? ' packs' : ' pack') + '</span><span class="buy-usd">' + usd(p.usd * n) + '</span>' +
-        '<small>' + COIN + (nearQuote(p, n) ? '≈ ' + nearQuote(p, n) + ' NEAR now' : 'Paid in ' + D.TOKEN) + '</small></button>';
+        '<small>' + COIN + (nearQuote(p, n) ? '≈ ' + nearQuote(p, n) + ' ' + D.TOKEN + ' now' : 'Paid in ' + D.TOKEN) + '</small></button>';
     }).join('');
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an unopened pack</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' pack' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
@@ -390,7 +393,7 @@
             var c = D.cardById[it.id];
             return '<div class="slot vault-item"><button data-act="zoom" data-id="' + c.id + '" data-uid="' + it.uid + '" aria-label="' + esc(c.name) + '">' + cardHTML(c) + '</button>' +
               '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
-              '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens soon"') + '>Sell back ' + buybackUsd([c]) + '</button></div>';
+              '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens soon"') + '>' + (buybackReady() ? 'Sell back ' + buybackUsd([c]) : 'Buyback soon') + '</button></div>';
           }).join('') + '</div>'
         : '<div class="panel empty">Your vault is empty. <a href="' + link('packs') + '">Open a pack</a> to pull your first card.</div>');
   }
@@ -488,12 +491,12 @@
     var toc = docMenuHTML();
     var secs = [
       docSec('start', 'Getting started',
-        '<p>Near Packs is an on-chain Pokémon TCG gacha on NEAR. You open packs of real Pokémon cards, paid in ' + D.TOKEN + ', keep them in your vault or sell them back, and every card is decided by randomness drawn on chain that you can check yourself.</p>' +
+        '<p>StonkPacks is an on-chain Pokémon TCG gacha on Solana. You open packs of real Pokémon cards, paid in SOL, keep them in your vault, and every card is decided by randomness from the Solana block your payment lands in, which you can check yourself. The StonkPacks token launches on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a>.</p>' +
         '<ol class="doc-list">' +
-          '<li><b>Connect a NEAR wallet.</b> HOT, Meteor, MyNearWallet, Sender or Intear. You sign one message to prove the wallet is yours. That message is not a transaction and costs nothing.</li>' +
+          '<li><b>Connect a Solana wallet.</b> Phantom, Solflare or Backpack. You sign one message to prove the wallet is yours. That message is not a transaction and costs nothing.</li>' +
           '<li><b>Pick a pack.</b> Four tiers from ' + usd(D.PACKS[0].usd) + ' to ' + usd(D.PACKS[D.PACKS.length - 1].usd) + '. Every card in the pack and its exact chance is listed before you buy.</li>' +
-          '<li><b>Pay in NEAR.</b> Your wallet sends one transaction with the pack price to the Near Packs contract ' + GA + '. The same transaction draws your randomness on chain.</li>' +
-          '<li><b>Keep or sell.</b> Cards go to your vault. Sell any card back for ' + BB + ' of its value, paid in ' + D.TOKEN + ' to your wallet.</li>' +
+          '<li><b>Pay in SOL.</b> Your wallet sends one SOL transfer with the pack price to the StonkPacks treasury. The block it lands in decides your card.</li>' +
+          '<li><b>Keep your cards.</b> Cards go to your vault and count for the Ranks board. Selling back for ' + BB + ' opens later and will be announced on X.</li>' +
         '</ol>'),
       docSec('packs', 'Packs and prices',
         '<p>Each pack holds one card from a published list of real cards from the Scarlet &amp; Violet era (151, Mega Evolution, Black Bolt and White Flare). Every Pokémon is in exactly one pack, so each pack has its own cards and its own chase hits. Only Pokémon cards are used, one print per Pokémon.</p>' +
@@ -510,64 +513,61 @@
           return '<tr><td>' + esc(r) + '</td>' + rarityRows.map(function (x) { return '<td class="num">' + (x.by[r] ? fmtChance(x.by[r]) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>' +
         '<p class="muted small">Every pack is independent. There is no pity timer and no hidden adjustment: the odds you see are the odds the code uses, and the randomness comes from the chain.</p>'),
-      docSec('token', 'Paying with NEAR',
-        '<p>Packs are paid in <b>NEAR</b>. There are no credits, points or off-chain balances: the balance in the top bar is the NEAR in your wallet.</p>' +
+      docSec('token', 'Paying with SOL',
+        '<p>Packs are paid in <b>SOL</b>. There are no credits, points or off-chain balances: the balance in the top bar is the SOL in your wallet.</p>' +
         '<ul class="doc-list">' +
-          '<li><b>Live price.</b> Packs are priced in USD. When you open one, the NEAR amount is taken from the live NEAR market price at that moment and locked for that pack, so $10 is always $10 of NEAR.</li>' +
-          '<li><b>How you pay.</b> One approval, one transaction: a NEAR transfer to the Near Packs treasury <code>' + esc(D.TREASURY) + '</code>, or, once the Near Packs contract is live, a <code>open_pack</code> call on ' + GA + ' that forwards the NEAR to <code>' + esc(D.TREASURY) + '</code> in the same transaction.</li>' +
+          '<li><b>Live price.</b> Packs are priced in USD. When you open one, the SOL amount is taken from the live SOL market price at that moment (median of several exchanges) and locked for that pack, so $10 is always $10 of SOL.</li>' +
+          '<li><b>How you pay.</b> One approval, one transaction: a plain SOL transfer from your wallet to ' + (store.game && store.game.treasury ? '<code class="break">' + esc(store.game.treasury) + '</code>' : 'the StonkPacks treasury wallet') + '. No token approvals, no programs to trust.</li>' +
           '<li><b>Exact amount.</b> The site always asks for the exact quoted amount. A payment with a different amount does not open the pack.</li>' +
-          '<li><b>Buybacks</b> are paid in NEAR from ' + GA + ' straight to your wallet.</li>' +
+          '<li><b>Network fee.</b> Solana charges a tiny fee (about 0.000005 SOL) on top of the pack price.</li>' +
         '</ul>'),
       docSec('rng', 'On-chain RNG',
-        '<p>Nobody at Near Packs picks your card, and the server cannot change it after the fact. Each pack opening works like this:</p>' +
+        '<p>Nobody at StonkPacks picks your card, and the server cannot change it after the fact. Each pack opening works like this:</p>' +
         '<ol class="doc-list">' +
           '<li><b>Seed.</b> When you open a pack, the server gives you a one-time 32-byte <code>seed</code>. It is shown in the proof.</li>' +
-          '<li><b>Pay.</b> Your wallet calls <code>open_pack</code> on ' + GA + ' with that seed and the pack price in NEAR. The server never holds your keys and cannot pay for you.</li>' +
-          '<li><b>Draw.</b> Inside that transaction the contract mixes NEAR\'s protocol randomness (<code>env::random_seed()</code>, produced by validators each block) with the seed, your account and the block height using SHA-256, and stores it under the seed. A seed can be drawn only once.</li>' +
-          '<li><b>Cards.</b> The server reads the draw with <code>get_draw(seed)</code>, checks it is your payment for this pack, computes your cards with the public formula, and your browser computes them again to check.</li>' +
+          '<li><b>Pay.</b> Your wallet sends the SOL transfer. The server never holds your keys and cannot pay for you.</li>' +
+          '<li><b>Draw.</b> The randomness is <code>sha256("stonkpacks-sol:v1" || hash of the Solana block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands.</li>' +
+          '<li><b>Cards.</b> The server checks the transaction on chain (sent by you, exact amount to the treasury, succeeded, sent after the pack started, never used before), computes your cards with the public formula, and your browser computes them again to check.</li>' +
         '</ol>' +
-        '<p class="small"><b>Direct transfers.</b> When you pay with a plain transfer to <code>' + esc(D.TREASURY) + '</code>, the randomness is <code>sha256("nearpacks-transfer:v1" || hash of the block that includes your payment || seed)</code>. Nobody knows that block hash before your transaction lands, and the proof links the transaction so anyone can check it.</p>' +
         '<h3>The formula</h3>' +
-        '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("nearpacks-open:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
+        '<pre class="doc-code">for i in 0 .. count-1:\n  h   = sha256("stonkpacks-open:v1" || randomness || seed || byte(i))\n  u   = first 6 bytes of h, as an integer / 2^48      // 0 ≤ u &lt; 1\n  card = first card in the pack list whose cumulative chance &gt; u</pre>' +
         '<p class="muted small">The pack list is ordered by value, highest first, as on the pack page. The same code runs in the server and in your browser.</p>'),
       docSec('verify', 'Verify a pack',
-        '<p>After every opening the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness and links to your payment transaction and to ' + GA + ' on NearBlocks.</p>' +
+        '<p>After every opening the reveal shows a <b>proof</b>, and each card in your vault keeps its own. It contains the pack, the seed, the randomness, the block hash and a Solscan link to your payment.</p>' +
         '<ol class="doc-list">' +
-          '<li>Open the transaction link: the <code>open_pack</code> event logged by ' + GA + ' shows the same seed, randomness, pack and amount.</li>' +
+          '<li>Open the transaction on Solscan: it shows your SOL transfer to the treasury and the slot (block) it landed in.</li>' +
           '<li>Your browser already re-ran the formula: <span class="done-txt">✓ Verified in your browser</span> means it got the same cards.</li>' +
-          '<li>To check it yourself, call <code>get_draw</code> on ' + GA + ' with the seed and run the formula above with any SHA-256 tool.</li>' +
+          '<li>To check it yourself, take that block\'s hash, compute the randomness and run the formula above with any SHA-256 tool.</li>' +
         '</ol>'),
       docSec('buyback', 'Vault and buyback',
-        '<p>Every card you pull goes to your vault with its proof. You can:</p>' +
-        '<ul class="doc-list"><li><b>Keep it.</b> Your vault value sets your place on the Ranks board.</li>' +
-        '<li><b>Sell it back</b> for ' + BB + ' of its listed value. ' + GA + ' sends the ' + D.TOKEN + ' straight to your wallet; the card leaves your vault only after the payout succeeds.</li></ul>' +
-        '<p class="muted small">The ' + D.TOKEN + ' amount follows the same rate as the pack prices set in the contract. Card values are estimates and will follow a market price feed.</p>'),
+        '<p>Every card you pull goes to your vault with its proof. Your vault value sets your place on the Ranks board.</p>' +
+        '<p>Selling a card back for ' + BB + ' of its listed value, paid in SOL, opens later. It will be announced on X.</p>' +
+        '<p class="muted small">Card values are estimates and will follow a market price feed.</p>'),
       docSec('fees', 'Fees',
         '<div class="table-scroll"><table class="doc-table"><thead><tr><th>Action</th><th>You pay</th></tr></thead><tbody>' +
           '<tr><td>Connect wallet</td><td>Nothing (message signature)</td></tr>' +
-          '<tr><td>Open 1 or 5 packs</td><td>The pack price in NEAR, plus NEAR gas (a fraction of a cent)</td></tr>' +
-          '<tr><td>Sell back</td><td>Nothing. ' + D.GAME_ACCOUNT + ' pays the gas</td></tr>' +
+          '<tr><td>Open 1 or 5 packs</td><td>The pack price in SOL, plus the Solana network fee (about 0.000005 SOL)</td></tr>' +
         '</tbody></table></div>'),
       docSec('security', 'Wallet safety',
         '<ul class="doc-list">' +
           '<li>Sign-in is one plain-text message with a one-time code. It never asks for a transaction, approval or seed phrase.</li>' +
-          '<li>The only transaction Near Packs asks for is <code>open_pack</code> on ' + GA + ' with the pack price attached. Check both before you approve.</li>' +
-          '<li>Near Packs will never DM you, ask for your seed phrase, or ask you to send NEAR or tokens to any address.</li>' +
-          '<li>The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
+          '<li>The only transaction StonkPacks asks for is a SOL transfer of the pack price to the treasury. Check the amount and the address before you approve.</li>' +
+          '<li>StonkPacks will never DM you, ask for your seed phrase, or ask you to send SOL or tokens to any other address.</li>' +
+          '<li>The token launches only on <a href="' + D.LAUNCHPAD.url + '" target="_blank" rel="noopener">' + D.LAUNCHPAD.name + '</a>. The only official account is <a href="' + X_URL + '" target="_blank" rel="noopener">@' + D.X_HANDLE + '</a> on X.</li>' +
         '</ul>'),
       docSec('faq', 'FAQ',
         [
-          ['Can Near Packs change my card after I open a pack?', 'No. The card follows from the randomness stored on chain and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
-          ['Can Near Packs see the result before I pay?', 'No. The randomness is drawn inside your payment transaction, from the block it lands in.'],
+          ['Can StonkPacks change my card after I open a pack?', 'No. The card follows from the Solana block your payment landed in and the published list. If the server showed a different card, your browser\'s check would fail and the proof would not match.'],
+          ['Can StonkPacks see the result before I pay?', 'No. The randomness comes from the hash of the block that includes your payment, which nobody knows before it is produced.'],
           ['What if I reject the transaction or close the page?', 'Nothing is paid. The pack stays unopened: press Continue to pay and open it, or Cancel to drop it.'],
           ['What if I send the wrong amount?', 'The site always asks for the exact quoted amount. A payment with a different amount does not match the pack and opens nothing, so always pay from the site.'],
-          ['Why does the NEAR amount change?', 'Packs are priced in USD. The NEAR amount follows the live NEAR market price and is locked when you open the pack.'],
-          ['Why NEAR only?', 'Payments, randomness and buybacks all happen on NEAR, in one place you can verify.'],
+          ['Why does the SOL amount change?', 'Packs are priced in USD. The SOL amount follows the live SOL market price and is locked when you open the pack.'],
+          ['Where does the token launch?', 'On ' + D.LAUNCHPAD.name + ' (' + D.LAUNCHPAD.url + '). The contract address will be posted only by @' + D.X_HANDLE + ' on X.'],
           ['Are the cards physical?', 'Not today. Cards are digital and priced from real market data. Physical redemption may come later and will be announced on X.'],
-          ['How strong is NEAR randomness?', 'It comes from the validators of each block. It cannot be predicted by players or by Near Packs; in theory a block producer could withhold a block, which for card values like these costs far more than it could win.']
+          ['How strong is the randomness?', 'It comes from the Solana block that includes your payment. A player cannot predict it; in theory a block leader could skip a block, which for card values like these costs far more than it could win.']
         ].map(function (q) { return '<details class="doc-faq"><summary>' + esc(q[0]) + '</summary><p>' + esc(q[1]) + '</p></details>'; }).join(''))
     ];
-    return '<section class="section-head"><div><div class="eyebrow">Docs</div><h2 class="page-title">How Near Packs works</h2></div>' +
+    return '<section class="section-head"><div><div class="eyebrow">Docs</div><h2 class="page-title">How StonkPacks works</h2></div>' +
       '<a class="btn btn-sm btn-ghost" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></section>' +
       '<div class="docs">' + toc + '<div class="doc-body">' + secs.join('') + '</div></div>';
   }
@@ -614,9 +614,30 @@
     return '<section class="panel admin-step' + (done ? ' done' : '') + '"><div class="admin-head"><span class="admin-n">' + (done ? '✓' : n) + '</span><h3>' + title + '</h3>' +
       '<span class="admin-pill ' + (done ? 'ok' : 'todo') + '">' + (done ? 'Done' : 'To do') + '</span></div>' + body + '</section>';
   }
+  // Solana admin: payments go straight to the treasury wallet, so there is nothing to deploy.
+  function adminSolHTML(a) {
+    var st = a.status;
+    var head = '<section class="section-head"><div><div class="eyebrow">Treasury wallet</div><h2 class="page-title">Admin</h2></div>' +
+      '<button class="btn btn-sm" data-act="admin-refresh"' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'Checking…' : 'Refresh') + '</button></section>';
+    if (a.error) return head + '<section class="panel err">' + esc(a.error) + '</section>';
+    if (!st) return head + '<section class="panel muted">Reading the treasury from Solana…</section>';
+    var reason = { treasury: 'No treasury wallet: set TREASURY_SOL on the server.', storage: 'No database connected.', price: 'No SOL price: enter a backup price below.' }[st.reason] || '';
+    return head +
+      '<section class="panel admin-live' + (st.ready ? '' : ' err') + '"><b>' + (st.ready ? 'Packs are live.' : 'Packs are closed.') + '</b> ' + (st.ready ? 'Players send SOL straight to the treasury.' : esc(reason)) + '</section>' +
+      '<section class="panel"><div class="stats">' +
+        '<div class="stat"><b>' + (st.treasuryLamports ? fmtToken(st.treasuryLamports, 9) : '—') + '</b><span>SOL in the treasury</span></div>' +
+        '<div class="stat"><b>' + (st.usd ? usd(st.usd) : '—') + '</b><span>SOL price now' + (st.priceSource ? ' (' + esc(st.priceSource) + ')' : '') + '</span></div>' +
+        '<div class="stat"><b>' + fmt(st.players || 0) + '</b><span>Players</span></div>' +
+      '</div><p class="small">Treasury: <code class="break">' + esc(st.treasury || 'not set') + '</code></p></section>' +
+      '<section class="panel"><h3>Backup SOL price</h3><p class="muted small">Used only when every live price source fails.</p>' +
+        '<div class="admin-form two"><label>USD price of 1 SOL<input id="admin-usd" value="' + esc(st.manualUsd || '') + '" placeholder="150.00" inputmode="decimal" autocomplete="off"></label>' +
+        '<button class="btn" data-act="admin-manual-price"' + (a.busy === 'Backup price' ? ' disabled' : '') + '>Save</button></div></section>';
+  }
+
   function adminHTML() {
-    if (!store.isAdmin()) return '<section class="panel">The admin page is only for ' + esc(D.ADMIN_ACCOUNTS.join(' and ')) + '.</section>';
+    if (!store.isAdmin()) return '<section class="panel">The admin page is only for the ' + (D.CHAIN === 'solana' ? 'treasury wallet' : esc(D.ADMIN_ACCOUNTS.join(' and '))) + '.</section>';
     var a = adminState();
+    if (D.CHAIN === 'solana') { if (!a.status && !a.loading && !a.error) setTimeout(loadAdmin, 0); return adminSolHTML(a); }
     if (!a.status && !a.loading && !a.error) setTimeout(loadAdmin, 0);
     var st = a.status;
     var head = '<section class="section-head"><div><div class="eyebrow">Interaction wallet</div><h2 class="page-title">Admin</h2></div>' +
@@ -633,7 +654,7 @@
     var needOwner = '<p class="small">Log in as the contract owner <b>' + esc(owner) + '</b> or as ' + GA + ' to do this.</p>';
     var modeLine = st.ready
       ? '<section class="panel admin-live ok"><b>Packs are live.</b> ' + (st.mode === 'contract'
-          ? 'Players pay through the Near Packs contract on ' + esc(st.account) + '; payments go to ' + esc((st.config && st.config.treasury) || D.TREASURY) + '.'
+          ? 'Players pay through the StonkPacks contract on ' + esc(st.account) + '; payments go to ' + esc((st.config && st.config.treasury) || D.TREASURY) + '.'
           : 'Players send NEAR straight to ' + esc(st.directTreasury) + ' (direct mode). Deploy the contract below to turn on buybacks.') + '</section>'
       : '<section class="panel admin-live"><b>Packs are not open yet.</b> They open as soon as a NEAR price is available (step 2).</section>';
     var summary = modeLine + '<section class="panel admin-summary">' +
@@ -643,11 +664,11 @@
 
     // 1. Contract
     var cli = 'near deploy ' + st.account + ' nearpacks_game.wasm --initFunction new --initArgs \'{"owner":"' + D.CONTRACT_OWNER + '","treasury":"' + D.TREASURY + '","prices":null}\'';
-    var s1 = adminStep(1, st.initialized, 'Near Packs contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
+    var s1 = adminStep(1, st.initialized, 'StonkPacks contract on ' + esc(st.account) + ' (for on-chain draws and buybacks)',
       st.initialized ? '<p class="muted small">Deployed and initialized. Owner ' + esc(st.config.owner) + '.</p>'
         : !asGame ? needGame : (st.deployed
           ? '<p class="small">Code is deployed but not initialized.</p><button class="btn btn-gold" data-act="admin-init"' + busy('Initialize') + '>Initialize contract</button>'
-          : '<p class="small">Deploys the Near Packs contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
+          : '<p class="small">Deploys the StonkPacks contract to ' + GA + ' and initializes it, in one transaction your wallet approves. Your NEAR and tokens stay in the account.</p>' +
             '<button class="btn btn-gold" data-act="admin-deploy"' + busy('Deploy') + '>Deploy with wallet</button>' +
             '<p class="muted small">Some wallets cannot deploy contracts from a website. If yours refuses, run this once with NEAR CLI (logged in as ' + esc(st.account) + '), using <a href="contracts/near-rng/res/nearpacks_game.wasm" download>nearpacks_game.wasm</a>:</p><pre class="doc-code">' + esc(cli) + '</pre>'));
 
@@ -725,7 +746,7 @@
         break;
       case 'admin-manual-price':
         var v = (($('#admin-usd') || {}).value || '').trim().replace(',', '.');
-        if (v && !D.packPricesRaw(v, 24)) { toast('Enter the USD price of 1 NEAR, for example 2.50.', true); break; }
+        if (v && !D.packPricesRaw(v, D.TOKEN_DECIMALS)) { toast('Enter the USD price of 1 ' + D.TOKEN + ', for example ' + (D.CHAIN === 'solana' ? '150.25' : '2.50') + '.', true); break; }
         a.busy = 'Backup price'; render();
         store.adminSetPrice(v).then(function () { a.busy = null; toast(v ? 'Backup price saved.' : 'Backup price cleared.'); loadAdmin(); }, function (e) { a.busy = null; render(); toast(e.message, true); });
         break;
@@ -819,12 +840,30 @@
   }
 
   /* ---------- modals ---------- */
-  // Wallet picker: NEAR wallets load on demand.
+  // Wallet picker: Solana wallets in this browser (or NEAR wallets on a NEAR site, loaded on demand).
   function openConnect() {
+    if (D.CHAIN === 'solana') return renderConnectSol();
     ui.nearList = null;
     renderConnect();
     W.nearWallets().then(function (list) { ui.nearList = list; if ($('#wallet-modal')) renderConnect(); })
       .catch(function (err) { ui.nearList = { error: err.message }; if ($('#wallet-modal')) renderConnect(); });
+  }
+  function renderConnectSol() {
+    var rows = W.solanaWallets().map(function (w) {
+      var action = w.installed
+        ? '<button class="btn btn-sm btn-gold" data-act="wallet-sol" data-id="' + esc(w.id) + '" data-name="' + esc(w.name) + '">Connect</button>'
+        : w.openUrl ? '<a class="btn btn-sm" href="' + esc(w.openUrl) + '">Open in app</a>'
+        : '<a class="btn btn-sm" href="' + esc(w.install) + '" target="_blank" rel="noopener">Install</a>';
+      return '<li class="wallet-row">' + (w.icon ? '<img class="wallet-ico" src="' + w.icon + '" alt="">' : '<span class="wallet-ico">' + esc(w.name[0]) + '</span>') +
+        '<span class="wallet-name">' + esc(w.name) + '</span>' + action + '</li>';
+    }).join('');
+    $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal wallet-modal" id="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
+      '<div class="modal-title">' + WALLET_SVG + '<h2 id="connect-title">Connect wallet</h2></div>' +
+      '<p class="muted small">StonkPacks runs on Solana. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
+      '<section><div class="eyebrow">' + CHAIN_BADGE.solana + ' Solana</div><ul class="wallet-list">' + rows + '</ul></section>' +
+      '<div class="err" id="connect-err" role="alert"></div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button></div>' +
+      '</div></div>';
   }
   function renderConnect() {
     var near;
@@ -837,7 +876,7 @@
     }).join('');
     $('#modal').innerHTML = '<div class="modal-back" data-act="close-modal"><div class="modal wallet-modal" id="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">' +
       '<div class="modal-title">' + WALLET_SVG + '<h2 id="connect-title">Connect wallet</h2></div>' +
-      '<p class="muted small">Near Packs runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
+      '<p class="muted small">StonkPacks runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
       '<section><div class="eyebrow">' + CHAIN_BADGE.near + ' NEAR</div><ul class="wallet-list">' + near + '</ul></section>' +
       '<div class="err" id="connect-err" role="alert"></div>' +
       '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button></div>' +
@@ -920,6 +959,7 @@
   function rngSourceName(user) {
     if (store.mode !== 'live') return 'On-chain randomness';
     if (store.isDev()) return 'Owner opening · ' + user.address;
+    if (D.CHAIN === 'solana') return 'Paid in SOL · block randomness';
     return 'Paid on NEAR · ' + D.GAME_ACCOUNT;
   }
 
@@ -1006,7 +1046,7 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Owner opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Off-chain randomness';
+    var src = proof.source === 'sol-transfer' ? 'Paid in SOL to ' + short(proof.ref || '') + ' · block randomness' : proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Owner opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Off-chain randomness';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
       (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';
@@ -1033,18 +1073,19 @@
       var live = store.mode === 'live' && !store.isDev();
       var walletName = u.wallet || A.CHAINS[u.chain].name;
       var pay = store.pay;
-      var direct = !!(pay && pay.method === 'transfer');
+      var direct = !!(pay && (pay.method === 'transfer' || pay.method === 'sol-transfer'));
+      var tok = D.TOKEN;
       var steps = [
         [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
-          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Owner wallet: free, no payment' : 'Pay in NEAR',
-          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as owner openings' : 'This preview is not connected to a chain'],
+          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' ' + tok : ' in ' + tok) : store.isDev() ? 'Owner wallet: free, no payment' : 'Pay in ' + tok,
+          live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(short(pay.receiver)) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny network fee). Price from the live ' + tok + ' market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as owner openings' : 'This preview is not connected to a chain'],
         [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Randomness drawn on chain',
           o.status === 'slow' ? 'Taking longer than usual. Your pack is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
       ];
       var actions = '';
       if (o.status === 'error') {
         actions = '<button class="btn btn-gold" data-act="rip-retry">Try again</button><button class="btn" data-act="rip-refund">Cancel</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
-        if (live && direct) actions += '<div class="tx-paste"><span class="muted small">Already paid? Paste the transaction hash:</span><div class="ref-row"><input id="rip-tx" placeholder="Transaction hash" autocomplete="off"><button class="btn" data-act="rip-tx">Check</button></div><span class="muted small">Cancel only if you did not pay: a payment sent for a cancelled pack cannot be matched.</span></div>';
+        if (live && direct) actions += '<div class="tx-paste"><span class="muted small">Already paid? Paste the transaction ' + (D.CHAIN === 'solana' ? 'signature' : 'hash') + ':</span><div class="ref-row"><input id="rip-tx" placeholder="Transaction ' + (D.CHAIN === 'solana' ? 'signature' : 'hash') + '" autocomplete="off"><button class="btn" data-act="rip-tx">Check</button></div><span class="muted small">Cancel only if you did not pay: a payment sent for a cancelled pack cannot be matched.</span></div>';
       } else if (o.status === 'slow') {
         actions = '<button class="btn btn-gold" data-act="rip-check">Check again</button><button class="btn btn-ghost" data-act="rip-later">Later</button>';
       }
@@ -1071,10 +1112,10 @@
         var below = all
           ? '<div class="rip-cap' + (card.usd >= p.usd ? ' win' : '') + '"><b>' + usd(card.usd) + '</b><span>' + esc(card.code) + '</span></div>' +
             (sold ? '<div class="sold-tag">Sold for ' + buybackUsd([card]) + '</div>'
-              : '<button class="btn btn-sm sell" data-act="sell-rip" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled') + '>Sell back ' + buybackUsd([card]) + '</button>')
+              : '<button class="btn btn-sm sell" data-act="sell-rip" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled') + '>' + (buybackReady() ? 'Sell back ' + buybackUsd([card]) : 'Buyback soon') + '</button>')
           : '';
         return '<div class="rip-slot"><button class="flip' + hint + (o.revealed[i] ? ' revealed' : '') + (sold ? ' sold' : '') + '" data-act="flip" data-i="' + i + '" style="animation-delay:' + (i * 80) + 'ms" aria-label="' + (o.revealed[i] ? esc(card.name + ', ' + card.rarity) : 'Reveal card ' + (i + 1)) + '">' +
-          '<div class="flip-inner"><div class="face back"><div class="card-back"><img src="assets/brand/nearpacks-icon.svg" alt=""></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
+          '<div class="flip-inner"><div class="face back"><div class="card-back"><img src="assets/brand/stonkpacks-icon.svg" alt=""></div></div><div class="face front">' + cardHTML(card) + '</div></div></button>' + below + '</div>';
       }).join('');
       var summary = '', actions;
       if (all) {
@@ -1152,6 +1193,7 @@
     if (act.indexOf('admin-') === 0) { adminAction(act, el); return; }
     switch (act) {
       case 'connect': openConnect(); break;
+      case 'wallet-sol': signIn('solana', W.solanaSigner(id), el.getAttribute('data-name')); break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
       case 'logout': store.logout().then(function () { toast('Logged out.'); }); break;
@@ -1254,7 +1296,7 @@
     ['overlay', 'modal', 'toasts'].forEach(function (id) {
       if (!$('#' + id)) { var d = doc.createElement('div'); d.id = id; if (id === 'toasts') d.className = 'toasts'; doc.body.appendChild(d); }
     });
-    app.innerHTML = '<div class="wrap muted" style="padding-block:80px;text-align:center">Loading Near Packs…</div>';
+    app.innerHTML = '<div class="wrap muted" style="padding-block:80px;text-align:center">Loading StonkPacks…</div>';
     doc.addEventListener('click', onClick);
     doc.addEventListener('pointermove', onMove);
     doc.addEventListener('keydown', onKey);

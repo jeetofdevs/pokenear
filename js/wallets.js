@@ -1,4 +1,4 @@
-/* Near Packs wallet bridge: talks to Solana browser wallets and NEAR Wallet Selector,
+/* StonkPacks wallet bridge: talks to Solana browser wallets and NEAR Wallet Selector,
    and turns a sign-in nonce into a signed message for store.connectWallet(). */
 (function (root) {
   'use strict';
@@ -138,7 +138,45 @@
   /* Pay for a rip in NEAR from the player's NEAR wallet. pay comes from the server:
      { method: 'rip' | 'transfer', receiver, deposit (yoctoNEAR), args? }. Resolves { tx, ref }
      once the transaction is sent; the server then reads the draw from chain. */
+  /* ---------- SOL payment ---------- */
+  var solPayLoad = null;
+  function loadSolPay() {
+    if (solPayLoad) return solPayLoad;
+    solPayLoad = new Promise(function (resolve, reject) {
+      if (root.PNSolPay) return resolve(root.PNSolPay);
+      var s = root.document.createElement('script');
+      s.src = 'vendor/solana-pay.js';
+      s.onload = function () { root.PNSolPay ? resolve(root.PNSolPay) : reject(new Error('Solana payments failed to load.')); };
+      s.onerror = function () { reject(new Error('Solana payments failed to load. Check your connection and try again.')); };
+      root.document.head.appendChild(s);
+    });
+    solPayLoad.catch(function () { solPayLoad = null; });
+    return solPayLoad;
+  }
+  // The wallet the player signed in with (by name), else any Solana wallet in this browser.
+  function solWalletFor(user) {
+    var byName = SOLANA.filter(function (w) { return w.name === user.wallet && w.provider(); })[0];
+    return byName || SOLANA.filter(function (w) { return w.provider(); })[0] || null;
+  }
+  // One SOL transfer of pay.lamports to pay.receiver, signed and sent by the player's wallet.
+  function paySol(user, pay) {
+    var w = solWalletFor(user);
+    if (!w) return Promise.reject(new Error('Open this site in your Solana wallet (Phantom, Solflare or Backpack) to pay.'));
+    var provider = w.provider();
+    var blockhash = fetch('api/sol/blockhash', { credentials: 'same-origin' }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok || !j.blockhash) throw new Error(j.error || 'Could not reach Solana. Try again.'); return j; });
+    });
+    return Promise.all([loadSolPay(), blockhash, Promise.resolve(provider.connect())]).then(function (x) {
+      var conn = x[2];
+      var pk = (conn && conn.publicKey) || provider.publicKey;
+      var address = pk ? (pk.toBase58 ? pk.toBase58() : String(pk)) : '';
+      if (address && address !== user.address) throw new Error('Switch ' + w.name + ' to the wallet you signed in with (' + user.address.slice(0, 4) + '…' + user.address.slice(-4) + ').');
+      return x[0].pay(provider, { from: user.address, to: pay.receiver, lamports: pay.lamports, blockhash: x[1].blockhash, lastValidBlockHeight: x[1].lastValidBlockHeight });
+    }).then(function (sig) { return { tx: sig, ref: pay.receiver }; });
+  }
+
   function payRip(user, pay) {
+    if (pay && pay.method === 'sol-transfer') return paySol(user, pay);
     if (!pay || !pay.receiver || !pay.deposit) return Promise.reject(new Error('Packs open soon.'));
     var walletId = null;
     try { walletId = root.localStorage.getItem(NEAR_WALLET_KEY); } catch (e) { /* ignore */ }
@@ -164,6 +202,9 @@
   // Block explorer links for a proof.
   function explorer(proof, network) {
     if (!proof) return null;
+    if (proof.source === 'sol-transfer') {
+      return { label: 'Solscan', account: proof.ref ? 'https://solscan.io/account/' + proof.ref : null, tx: proof.tx ? 'https://solscan.io/tx/' + proof.tx : null };
+    }
     if (proof.source === 'nearpacks-near' || proof.source === 'near-rng' || proof.source === 'near-transfer') {
       var host = network === 'testnet' ? 'https://testnet.nearblocks.io' : 'https://nearblocks.io';
       return { label: 'NearBlocks', account: proof.ref ? host + '/address/' + proof.ref : null, tx: proof.tx ? host + '/txns/' + proof.tx : null };

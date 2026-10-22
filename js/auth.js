@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
 
-  var APP = 'Near Packs';
+  var APP = 'StonkPacks';
   var NEAR_RECIPIENT = 'nearpacks';
   var CHAINS = {
     solana: { id: 'solana', name: 'Solana' },

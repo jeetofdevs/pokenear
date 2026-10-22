@@ -1,36 +1,38 @@
 'use strict';
-/* Live NEAR/USD price for pack quotes. Six public sources (Binance, CoinGecko, Kraken, Coinbase, OKX, Bybit) are asked in parallel and the
-   median of the valid answers is used, so one bad or blocked source cannot move the price.
+/* Live USD price of the payment coin (SOL or NEAR) for pack quotes. Six public sources
+   (Binance, CoinGecko, Kraken, Coinbase, OKX, Bybit) are asked in parallel and the median of the
+   valid answers is used, so one bad or blocked source cannot move the price.
    Cached for CACHE_MS; if every source fails, the last good price is used for up to STALE_MS.
-   NEAR_PRICE_URL (env) replaces the sources with one URL returning {"usd": <number>} (tests). */
+   PRICE_URL (or NEAR_PRICE_URL) replaces the sources with one URL returning {"usd": <number>} (tests). */
 
 const CACHE_MS = 30 * 1000;
 const STALE_MS = 10 * 60 * 1000;
-const MIN_USD = 0.05;
-const MAX_USD = 1000;
+const RANGE = { SOL: [1, 100000], NEAR: [0.05, 1000] };
+const IDS = { SOL: { gecko: 'solana', kraken: 'SOLUSD' }, NEAR: { gecko: 'near', kraken: 'NEARUSD' } };
 
-const SOURCES = [
-  { name: 'binance', url: 'https://api.binance.com/api/v3/ticker/price?symbol=NEARUSDT', parse: (j) => Number(j.price) },
-  { name: 'coingecko', url: 'https://api.coingecko.com/api/v3/simple/price?ids=near&vs_currencies=usd', parse: (j) => Number(j.near && j.near.usd) },
-  { name: 'kraken', url: 'https://api.kraken.com/0/public/Ticker?pair=NEARUSD', parse: (j) => { const r = j.result && Object.values(j.result)[0]; return Number(r && r.c && r.c[0]); } },
-  { name: 'coinbase', url: 'https://api.coinbase.com/v2/prices/NEAR-USD/spot', parse: (j) => Number(j.data && j.data.amount) },
-  { name: 'okx', url: 'https://www.okx.com/api/v5/market/ticker?instId=NEAR-USDT', parse: (j) => Number(j.data && j.data[0] && j.data[0].last) },
-  { name: 'bybit', url: 'https://api.bybit.com/v5/market/tickers?category=spot&symbol=NEARUSDT', parse: (j) => Number(j.result && j.result.list && j.result.list[0] && j.result.list[0].lastPrice) }
-];
-
-let cache = null; // { usd, at, sources }
-let inflight = null;
-
-function sources() {
-  if (process.env.NEAR_PRICE_URL) return [{ name: 'custom', url: process.env.NEAR_PRICE_URL, parse: (j) => Number(j.usd) }];
-  return SOURCES;
+function sourcesFor(asset) {
+  const custom = process.env.PRICE_URL || process.env.NEAR_PRICE_URL;
+  if (custom) return [{ name: 'custom', url: custom, parse: (j) => Number(j.usd) }];
+  const id = IDS[asset];
+  return [
+    { name: 'binance', url: `https://api.binance.com/api/v3/ticker/price?symbol=${asset}USDT`, parse: (j) => Number(j.price) },
+    { name: 'coingecko', url: `https://api.coingecko.com/api/v3/simple/price?ids=${id.gecko}&vs_currencies=usd`, parse: (j) => Number(j[id.gecko] && j[id.gecko].usd) },
+    { name: 'kraken', url: `https://api.kraken.com/0/public/Ticker?pair=${id.kraken}`, parse: (j) => { const r = j.result && Object.values(j.result)[0]; return Number(r && r.c && r.c[0]); } },
+    { name: 'coinbase', url: `https://api.coinbase.com/v2/prices/${asset}-USD/spot`, parse: (j) => Number(j.data && j.data.amount) },
+    { name: 'okx', url: `https://www.okx.com/api/v5/market/ticker?instId=${asset}-USDT`, parse: (j) => Number(j.data && j.data[0] && j.data[0].last) },
+    { name: 'bybit', url: `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${asset}USDT`, parse: (j) => Number(j.result && j.result.list && j.result.list[0] && j.result.list[0].lastPrice) }
+  ];
 }
 
-async function ask(src) {
+const cache = {}; // asset -> { usd, at, sources }
+const inflight = {};
+
+async function ask(src, asset) {
   const res = await fetch(src.url, { signal: AbortSignal.timeout(4000), headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(src.name + ' HTTP ' + res.status);
   const usd = src.parse(await res.json());
-  if (!Number.isFinite(usd) || usd < MIN_USD || usd > MAX_USD) throw new Error(src.name + ' bad price');
+  const [lo, hi] = RANGE[asset] || [0, Infinity];
+  if (!Number.isFinite(usd) || usd < lo || usd > hi) throw new Error(src.name + ' bad price');
   return { name: src.name, usd };
 }
 
@@ -41,21 +43,24 @@ function median(values) {
 }
 
 // -> { usd, at, sources, stale } or null when no price is known.
-async function nearUsd() {
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache;
-  if (!inflight) {
-    inflight = Promise.allSettled(sources().map(ask)).then((results) => {
+async function priceUsd(asset = 'NEAR') {
+  const c = cache[asset];
+  if (c && Date.now() - c.at < CACHE_MS) return c;
+  if (!inflight[asset]) {
+    inflight[asset] = Promise.allSettled(sourcesFor(asset).map((s) => ask(s, asset))).then((results) => {
       const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
-      if (ok.length) cache = { usd: median(ok.map((x) => x.usd)), at: Date.now(), sources: ok.map((x) => x.name), stale: false };
-      else console.warn('[price] no NEAR price source answered:', results.map((r) => r.reason && r.reason.message).join('; '));
-    }).finally(() => { inflight = null; });
+      if (ok.length) cache[asset] = { usd: median(ok.map((x) => x.usd)), at: Date.now(), sources: ok.map((x) => x.name), stale: false };
+      else console.warn(`[price] no ${asset} price source answered:`, results.map((r) => r.reason && r.reason.message).join('; '));
+    }).finally(() => { delete inflight[asset]; });
   }
-  await inflight;
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache;
-  if (cache && Date.now() - cache.at < STALE_MS) return { ...cache, stale: true };
+  await inflight[asset];
+  const now = cache[asset];
+  if (now && Date.now() - now.at < CACHE_MS) return now;
+  if (now && Date.now() - now.at < STALE_MS) return { ...now, stale: true };
   return null;
 }
 
-function reset() { cache = null; }
+const nearUsd = () => priceUsd('NEAR');
+function reset() { for (const k of Object.keys(cache)) delete cache[k]; }
 
-module.exports = { nearUsd, median, reset, CACHE_MS };
+module.exports = { priceUsd, nearUsd, median, reset, CACHE_MS };

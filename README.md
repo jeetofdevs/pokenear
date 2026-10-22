@@ -1,3 +1,17 @@
+# StonkPacks
+
+Open real Pokémon card packs with **SOL** on Solana. The StonkPacks token launches on [StonkFun](https://www.stonkfun.xyz/).
+
+- **Payments:** one plain SOL transfer from the player to the treasury wallet (`TREASURY_SOL`), at the live SOL/USD price (median of Binance, CoinGecko, Kraken, Coinbase, OKX, Bybit), rounded up to 0.0001 SOL.
+- **Verification:** the server reads the transaction from Solana RPC (signed by the player, exact lamports to the treasury, succeeded, sent after the pack started, never reused).
+- **Randomness:** `sha256("stonkpacks-sol:v1" || hash of the block that includes the payment || seed)`; cards: `sha256("stonkpacks-open:v1" || randomness || seed || i)`. The browser re-checks every pull.
+- **Wallets:** Phantom, Solflare, Backpack (sign-in is one signed message, no transaction).
+- **Owner:** the treasury wallet opens packs free (recorded as owner openings) and sees `/admin` (treasury balance, SOL price, backup price).
+- **Not live yet on Solana:** the 96% buyback (needs a payout wallet; the button reads "Buyback soon").
+
+Set `TREASURY_SOL` (env, or `TREASURY_SOL` in `js/data.js`) to open packs. `CHAIN=near` switches back to the NEAR setup described below.
+
+---
 # Near Packs
 
 On-chain Pokémon TCG gacha on NEAR: packs are paid in **NEAR** through the contract on **nearpacks.near**, which draws the randomness and forwards every payment to the treasury **nearpacks.near** in the same transaction.
@@ -108,7 +122,7 @@ Rebuild generated files with `npm install` then `npm run build:cards` (card data
 
 | File | Use |
 | --- | --- |
-| `nearpacks-icon.svg` / `.png` | Logo icon: a holo-foil booster pack with the NEAR mark. Favicon, top bar, card backs |
+| `stonkpacks-icon.svg` / `.png` | Logo icon: a holo-foil booster pack with the NEAR mark. Favicon, top bar, card backs |
 | `x-profile.png` | 400×400 X profile picture |
 | `x-header.png` | 1500×500 X header (source: `x-header.html`) |
 | `x-post.png`, `x-first-post.png` | 1600×900 X post images (source: `x-post.html`, `?first` for the launch badge) |

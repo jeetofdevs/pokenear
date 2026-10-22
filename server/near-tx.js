@@ -1,6 +1,6 @@
 'use strict';
 /* Minimal NEAR transaction signer (node:crypto only) for one job: the server calling
-   payout() on the Near Packs contract with a function-call access key of the interaction wallet.
+   payout() on the StonkPacks contract with a function-call access key of the interaction wallet.
 
    Borsh layout (nearcore):
      Transaction { signer_id: string, public_key: PublicKey, nonce: u64, receiver_id: string,

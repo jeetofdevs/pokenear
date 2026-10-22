@@ -3,7 +3,7 @@
    - Solana: ORAO VRF v2. The randomness account is the PDA ["orao-vrf-randomness-request", seed]
      of the ORAO program. Layout (Anchor): 8-byte discriminator | enum tag (0 pending, 1 fulfilled)
      | client pubkey (32) | seed (32) | fulfilled: randomness (64).
-   - NEAR: the Near Packs contract on the interaction wallet (contracts/near-rng), get_draw({ seed }):
+   - NEAR: the StonkPacks contract on the interaction wallet (contracts/near-rng), get_draw({ seed }):
      the randomness drawn when the player paid for the rip in NEAR. */
 const crypto = require('node:crypto');
 const auth = require('../js/auth.js');
@@ -166,7 +166,7 @@ async function nearView(rpcUrl, contractId, method, args) {
   return text ? JSON.parse(text) : null;
 }
 
-// A paid rip on the Near Packs contract (see contracts/near-rng): randomness + what was paid.
+// A paid rip on the StonkPacks contract (see contracts/near-rng): randomness + what was paid.
 async function nearDraw(rpcUrl, contractId, seedHex) {
   const draw = await nearView(rpcUrl, contractId, 'get_draw', { seed: seedHex });
   if (!draw) return { status: 'missing' };

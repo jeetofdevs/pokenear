@@ -1,4 +1,4 @@
-/* Near Packs static game data: card values, gacha packs and the card index.
+/* StonkPacks static game data: card values, gacha packs and the card index.
    Shared by the browser (window.PN.data) and the Node server (require).
 
    Model (same as Courtyard / Collector Crypt / Phygitals):
@@ -9,15 +9,23 @@
 (function (root) {
   'use strict';
 
-  var TOKEN = 'NEAR'; // payment currency shown on the site
-  var VERSION = '20261022.14'; // shown in the footer and /api/config; bump with the ?v= in index.html
+  // StonkPacks runs on Solana: packs are paid in SOL with one transfer to the treasury wallet.
+  // (The NEAR setup below stays for CHAIN = 'near'.)
+  var CHAIN = 'solana';
+  var TOKEN = CHAIN === 'solana' ? 'SOL' : 'NEAR'; // payment currency shown on the site
+  var TOKEN_DECIMALS = CHAIN === 'solana' ? 9 : 24;
+  // Solana wallet that receives every SOL pack payment (public address). Empty = payments closed;
+  // the server's TREASURY_SOL env var overrides it. This wallet also opens packs free (owner).
+  var TREASURY_SOL = '';
+  var LAUNCHPAD = { name: 'StonkFun', url: 'https://www.stonkfun.xyz/' }; // where the token launches
+  var VERSION = '20261023.1'; // shown in the footer and /api/config; bump with the ?v= in index.html
 
-  // Packs are priced in US dollars and paid in NEAR through the Near Packs interaction wallet's
+  // Packs are priced in US dollars and paid in NEAR through the StonkPacks interaction wallet's
   // contract, which forwards every payment to the treasury. The NEAR amount of each pack is set on
   // chain (set_prices) and follows the NEAR price; the site never shows a fixed NEAR amount.
   var GAME_ACCOUNT = 'nearpacks.near'; // interaction wallet: receives payments, pays buybacks
   var TREASURY = 'nearpacks.near'; // receives every pack payment
-  var CONTRACT_OWNER = 'nearpacks.near'; // owner of the Near Packs contract (prices, treasury)
+  var CONTRACT_OWNER = 'nearpacks.near'; // owner of the StonkPacks contract (prices, treasury)
   var ADMIN_ACCOUNTS = ['nearpacks.near']; // wallets that see the admin page
   var X_HANDLE = 'NearPacks'; // official X account (link only)
 
@@ -204,6 +212,10 @@
 
   var data = {
     TOKEN: TOKEN,
+    CHAIN: CHAIN,
+    TOKEN_DECIMALS: TOKEN_DECIMALS,
+    TREASURY_SOL: TREASURY_SOL,
+    LAUNCHPAD: LAUNCHPAD,
     GAME_ACCOUNT: GAME_ACCOUNT,
     TREASURY: TREASURY,
     CONTRACT_OWNER: CONTRACT_OWNER,
