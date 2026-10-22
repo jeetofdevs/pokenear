@@ -59,6 +59,15 @@ cargo +stable test                                       # 15 unit tests
 cargo build --release --target wasm32-unknown-unknown    # toolchain 1.81 (rust-toolchain.toml); prebuilt: res/nearpacks_game.wasm
 ```
 
+## Deploy on Railway
+
+`railway.json` + `Dockerfile`: Railway builds a small Node 20 image (no `npm install`, the server has no runtime dependencies) and runs `node server/server.js`, health check `/api/config`.
+
+1. Railway → **New Project** → **Deploy from GitHub repo** → this repo / branch.
+2. Service → **Settings → Volumes** (or right-click the service → **Attach volume**), mount path `/data`. The server stores its database there automatically (`RAILWAY_VOLUME_MOUNT_PATH`); without a volume, data is lost on every redeploy (the log warns).
+3. **Variables**: none required. Optional `PAYOUT_KEY` (buyback), `NEAR_USD` (backup price).
+4. **Settings → Networking → Custom Domain** → `nearpacks.fun`, then set the DNS record Railway shows (CNAME) at your domain registrar, and remove the domain from Vercel.
+
 ## Deploy on Vercel
 
 The site and the game server both run on Vercel: static files are served as is, and every `/api/*` request goes to the serverless function `api/server.js` (same code as `npm start`, see `vercel.json`). Vercel keeps no files between requests, so game data lives in **Upstash Redis** (`server/kv.js`).

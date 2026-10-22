@@ -24,9 +24,10 @@ loadDotEnv(path.join(__dirname, '..', '.env'));
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 3000);
-const DB_FILE = process.env.DB_FILE || path.join(ROOT, 'data', 'db.json');
+// On Railway, a volume attached to the service is used automatically (RAILWAY_VOLUME_MOUNT_PATH).
+const DB_FILE = process.env.DB_FILE || path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(ROOT, 'data'), 'db.json');
 const PUBLIC_URL = process.env.PUBLIC_URL || '';
-const SECURE_COOKIE = PUBLIC_URL.startsWith('https://') || Boolean(process.env.VERCEL);
+const SECURE_COOKIE = PUBLIC_URL.startsWith('https://') || Boolean(process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT_NAME);
 const NEAR_NETWORK = process.env.NEAR_NETWORK || 'mainnet';
 // NEAR_RPC may list several URLs (comma separated); each call falls back to the next on failure.
 // rpc.*.near.org is deprecated and heavily rate limited, so FastNEAR's free RPC goes first.
@@ -90,15 +91,16 @@ function loadDb() {
 const db = loadDb();
 for (const id of Object.keys(db.users)) db.users[id] = engine.migrate(db.users[id]);
 let saveTimer = null;
+function writeDbNow() {
+  fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+  const tmp = DB_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(db));
+  fs.renameSync(tmp, DB_FILE);
+}
 function saveDb() {
-  if (kv.enabled || process.env.VERCEL) return; // serverless: written back per request (server/kv.js)
+  if (process.env.VERCEL) return; // serverless: written back per request (server/kv.js)
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
-    const tmp = DB_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, DB_FILE);
-  }, 100);
+  saveTimer = setTimeout(() => { saveTimer = null; writeDbNow(); }, 100);
 }
 
 const NONCE_TTL = 10 * 60 * 1000;
@@ -674,7 +676,15 @@ function handle(req, res) {
 }
 
 if (require.main === module) {
+  // Redeploys stop the old container with SIGTERM: write pending changes first.
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => {
+      if (saveTimer) { clearTimeout(saveTimer); try { writeDbNow(); } catch (err) { console.error('[db] final save failed', err.message); } }
+      process.exit(0);
+    });
+  }
   server.listen(PORT, () => {
+    console.log(`[db] ${DB_FILE}${process.env.RAILWAY_ENVIRONMENT_NAME && !process.env.RAILWAY_VOLUME_MOUNT_PATH && !process.env.DB_FILE ? ' (no Railway volume attached: data is lost on redeploy)' : ''}`);
     console.log(`Near Packs v${D.VERSION} running at http://localhost:${PORT} (NEAR ${NEAR_NETWORK}, interaction wallet ${GAME_ACCOUNT}, buyback ${PAYOUT_KEY ? 'on' : 'off'})`);
     gameConfig().then((g) => console.log(`[game] packs ${g.ready ? 'OPEN' : 'CLOSED (no NEAR price: set a backup price on /admin)'} · mode ${g.mode} · NEAR/USD ${g.nearUsd || '-'} (${g.priceSource || 'none'}) · free opens: ${DEV_ACCOUNTS.join(', ')}`)).catch(() => {});
   });
