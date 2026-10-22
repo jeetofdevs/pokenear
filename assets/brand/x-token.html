@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StonkPacks token post</title>
+<!-- Source for x-token.png (1600x900): the second post, "the token is live". The CA goes in the
+     post text, never on the image. Render with: npm run build:x-post -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@700&family=Space+Grotesk:wght@600;700&display=swap">
+<link rel="stylesheet" href="../../css/style.css">
+<style>
+  html, body { margin: 0; background: #0a1216; }
+  .post { position: relative; width: 1600px; height: 900px; overflow: hidden; background: #0a1216; }
+  .rays { position: absolute; left: 1150px; top: 430px; width: 2400px; height: 2400px; transform: translate(-50%, -50%);
+    background: repeating-conic-gradient(from 0deg, rgba(169, 199, 211, 0.09) 0 3deg, transparent 3deg 10deg);
+    -webkit-mask-image: radial-gradient(closest-side, #000 6%, transparent 60%); mask-image: radial-gradient(closest-side, #000 6%, transparent 60%); }
+  .halo { position: absolute; left: 1150px; top: 430px; width: 1000px; height: 1000px; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(169, 199, 211, 0.38), rgba(169, 199, 211, 0.08) 50%, transparent 72%); }
+  .gold { position: absolute; left: 1150px; top: 430px; width: 560px; height: 560px; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 196, 92, 0.28), transparent 70%); }
+  .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(169, 199, 211, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(169, 199, 211, 0.05) 1px, transparent 1px); background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse at 30% 50%, #000 20%, transparent 70%); mask-image: radial-gradient(ellipse at 30% 50%, #000 20%, transparent 70%); }
+
+  /* four packs fanned behind the logo */
+  .pack { position: absolute; z-index: 2; width: 220px; top: 250px; }
+  .pack .bw-sheen { display: none; }
+  .pack .booster { filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.75)); }
+  .p1 { left: 800px; transform: rotate(-20deg) translateY(60px); }
+  .p2 { left: 930px; transform: rotate(-7deg) translateY(10px); z-index: 3; }
+  .p3 { left: 1150px; transform: rotate(7deg) translateY(10px); z-index: 3; }
+  .p4 { left: 1280px; transform: rotate(20deg) translateY(60px); }
+  .logo { position: absolute; z-index: 5; left: 1150px; top: 400px; width: 330px; height: 330px; transform: translate(-50%, -50%);
+    filter: drop-shadow(0 30px 50px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 40px rgba(169, 199, 211, 0.45)); }
+  .logo img { width: 100%; height: 100%; border-radius: 34px; }
+  .ticker { position: absolute; z-index: 6; left: 1150px; top: 610px; transform: translateX(-50%) rotate(-3deg); padding: 14px 28px; border-radius: 16px;
+    background: #ffd277; color: #1a1205; font: 700 40px/1 'Space Grotesk', sans-serif; letter-spacing: -0.02em; white-space: nowrap;
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.55), 0 0 36px rgba(255, 196, 92, 0.45); }
+  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 260px; z-index: 4; background: linear-gradient(0deg, #0a1216 25%, transparent); }
+
+  /* copy */
+  .copy { position: absolute; z-index: 7; left: 90px; top: 100px; width: 640px; }
+  .brand { display: flex; align-items: center; gap: 14px; font: 700 34px/1 'Space Grotesk', sans-serif; color: #fff; letter-spacing: -0.03em; }
+  .brand img { width: 50px; height: 50px; }
+  .brand b { color: #a9c7d3; margin-left: 0.2em; }
+  .live { display: inline-flex; align-items: center; gap: 10px; margin-top: 54px; padding: 10px 18px 10px 14px; border-radius: 999px; background: rgba(255, 210, 119, 0.12); border: 1px solid rgba(255, 210, 119, 0.55);
+    color: #ffd277; font: 900 16px/1 Inter, sans-serif; letter-spacing: 0.18em; }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: #ffd277; box-shadow: 0 0 0 5px rgba(255, 210, 119, 0.18), 0 0 14px #ffd277; }
+  h1 { margin: 26px 0 0; font: 700 104px/0.92 'Space Grotesk', sans-serif; letter-spacing: -0.05em; color: #fff; }
+  h1 span { background: linear-gradient(90deg, #ffe7a3, #ffb84a 70%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { margin: 28px 0 0; font: 600 26px/1.45 Inter, sans-serif; color: rgba(255, 255, 255, 0.74); }
+  .lede b { color: #fff; }
+  .ctas { position: absolute; z-index: 7; left: 90px; bottom: 90px; display: flex; flex-direction: column; gap: 14px; }
+  .cta { display: inline-flex; align-items: center; gap: 16px; padding: 18px 24px; border-radius: 18px; font: 700 30px/1 'Space Grotesk', sans-serif; letter-spacing: -0.02em; width: max-content; }
+  .cta small { font: 800 14px/1 Inter, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.7; width: 74px; }
+  .cta.trade { background: #a9c7d3; color: #0a1216; box-shadow: 0 16px 36px rgba(169, 199, 211, 0.25); }
+  .cta.play { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.18); color: #fff; }
+  .ca { position: absolute; z-index: 7; right: 70px; bottom: 90px; font: 700 20px/1 'JetBrains Mono', monospace; color: rgba(255, 255, 255, 0.6); padding: 14px 18px; border: 1px dashed rgba(255, 255, 255, 0.25); border-radius: 14px; }
+</style>
+</head>
+<body>
+<div class="post" id="post">
+  <div class="grid-bg"></div><div class="halo"></div><div class="rays"></div><div class="gold"></div>
+  <div class="pack p1" data-pack="starter"></div>
+  <div class="pack p2" data-pack="rare"></div>
+  <div class="pack p3" data-pack="elite"></div>
+  <div class="pack p4" data-pack="legend"></div>
+  <div class="floor"></div>
+  <div class="logo"><img src="stonkpacks-icon.svg" alt=""></div>
+  <div class="ticker">TOKEN LIVE</div>
+  <div class="copy">
+    <div class="brand"><img src="stonkpacks-icon.svg" alt=""><span>Stonk<b>Packs</b></span></div>
+    <div class="live"><i></i>NOW TRADING</div>
+    <h1>The token<br>is <span>live.</span></h1>
+    <p class="lede">The token behind <b>StonkPacks</b>: real Pokémon card packs on Solana, paid in <b>SOL</b>, every pull drawn on‑chain.</p>
+  </div>
+  <div class="ctas">
+    <div class="cta trade"><small>Trade</small>www.stonkfun.xyz</div>
+    <div class="cta play"><small>Play</small>stonkpacks.store</div>
+  </div>
+  <div class="ca">CA in the post ↓</div>
+</div>
+<script>window.PN_CONFIG = { remoteImages: false };</script>
+<script src="../../js/cards.js"></script>
+<script src="../../js/auth.js"></script>
+<script src="../../js/sha256.js"></script>
+<script src="../../js/data.js"></script>
+<script src="../../js/engine.js"></script>
+<script src="../../js/store.js"></script>
+<script src="../../js/wallets.js"></script>
+<script src="../../js/app.js"></script>
+<script>
+  var fix = function (h) { return h.replace(/src="assets\//g, 'src="../../assets/'); };
+  document.querySelectorAll('[data-pack]').forEach(function (el) { el.innerHTML = fix(PN.ui.packArtHTML(PN.data.packById[el.getAttribute('data-pack')])); });
+  Promise.all(Array.from(document.images).map(function (im) { return im.decode().catch(function () {}); })).then(function () { document.body.setAttribute('data-ready', '1'); });
+</script>
+</body>
+</html>

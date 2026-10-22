@@ -15,7 +15,7 @@
     "build:sol-pay": "esbuild scripts/solana-pay-entry.js --bundle --minify --format=iife --platform=browser --target=es2020 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/solana-pay.js",
     "build:x-header": "node scripts/render-x-header.js",
     "payout-key": "node scripts/payout-key.js",
-    "build:x-post": "node scripts/render-x-header.js post && node scripts/render-x-header.js first",
+    "build:x-post": "node scripts/render-x-header.js post && node scripts/render-x-header.js first && node scripts/render-x-header.js token",
     "build:solana": "esbuild scripts/solana-vrf-entry.js --bundle --minify --format=iife --platform=browser --target=es2020 --inject:scripts/near-shims.js --define:global=globalThis --outfile=vendor/solana-vrf.js"
   },
   "devDependencies": {

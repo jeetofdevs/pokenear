@@ -2,7 +2,8 @@
 /* Renders X images from HTML sources in assets/brand/:
      node scripts/render-x-header.js          -> x-header.png (1500x500 profile header)
      node scripts/render-x-header.js post     -> x-post.png   (1600x900 post image)
-     node scripts/render-x-header.js first    -> x-first-post.png (launch post: "Live on NEAR")
+     node scripts/render-x-header.js first    -> x-first-post.png (first post, no CA)
+     node scripts/render-x-header.js token    -> x-token.png (second post: the token is live; the CA goes in the text)
    Needs Playwright with a Chromium build: npm i -D playwright && npx playwright install chromium */
 const path = require('node:path');
 const http = require('node:http');
@@ -18,7 +19,8 @@ const ROOT = path.resolve(__dirname, '..');
 const JOBS = {
   header: { file: 'x-header', width: 1500, height: 500, el: '#hdr' },
   post: { file: 'x-post', width: 1600, height: 900, el: '#post' },
-  first: { file: 'x-post', out: 'x-first-post', query: '?first', width: 1600, height: 900, el: '#post' }
+  first: { file: 'x-post', out: 'x-first-post', query: '?first', width: 1600, height: 900, el: '#post' },
+  token: { file: 'x-token', width: 1600, height: 900, el: '#post' }
 };
 const job = JOBS[process.argv[2] || 'header'];
 const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png' };
