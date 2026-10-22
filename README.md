@@ -79,7 +79,7 @@ The server runs on Node 18+ and has no runtime dependencies (no `npm install` ne
 | `DEV_ACCOUNTS` | `nearpacks.near` | Wallets that open packs without paying (recorded as dev openings) |
 | `DB_FILE` | `data/db.json` | Where game state is stored |
 
-Opened as static files (no server), the site runs in **demo mode**: packs are free and use browser randomness, progress stays in the browser, and a "demo wallet" button lets people try it without a wallet.
+Without the server the site only shows packs and docs; opening packs always needs the server and a NEAR payment (no demo mode).
 
 Rebuild generated files with `npm install` then `npm run build:cards` (card data and art) or `npm run build:near` (NEAR wallet bundle, including the `open_pack` payment).
 
@@ -108,7 +108,7 @@ Rebuild the X images with `npm run build:x-header` and `npm run build:x-post` (n
 | `js/auth.js` | Sign-in message, base58, address checks (browser + server) |
 | `js/wallets.js` | NEAR Wallet Selector bridge: sign-in and rip payments |
 | `vendor/near-wallet.js` | Bundled NEAR Wallet Selector (`scripts/near-wallet-entry.js`) |
-| `js/store.js` | Picks live server or local demo backend |
+| `js/store.js` | Talks to the live server (no demo mode) |
 | `js/app.js` | UI |
 | `js/sha256.js` | SHA-256 used to derive cards (browser + server) |
 | `server/server.js`, `server/wallet-verify.js` | Static files, wallet sign-in and signature checks, game API |

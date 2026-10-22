@@ -171,16 +171,7 @@
     return null;
   }
 
-  /* ---------- demo ---------- */
-  // Preview only: a random NEAR implicit account so the app can be tried without a wallet.
-  function demoSigner() {
-    return function () {
-      var b = new Uint8Array(32);
-      root.crypto.getRandomValues(b);
-      var hex = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-      return { accountId: hex, signature: '', wallet: 'Demo wallet' };
-    };
-  }
+
 
   root.PN.wallets = {
     solanaWallets: solanaWallets,
@@ -191,7 +182,6 @@
     payRip: payRip,
     adminKeyPair: adminKeyPair,
     adminSend: adminSend,
-    explorer: explorer,
-    demoSigner: demoSigner
+    explorer: explorer
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

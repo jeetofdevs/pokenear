@@ -54,8 +54,8 @@
     var frac = String(v % unit).padStart(24, '0').slice(0, 4).replace(/0+$/, '');
     return (v / unit).toLocaleString('en-US') + (frac ? '.' + frac : '');
   }
-  function payReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready); }
-  function buybackReady() { return store.mode !== 'live' || store.isDev() || (store.game && store.game.ready && store.game.buyback); }
+  function payReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready)); }
+  function buybackReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready && store.game.buyback)); }
   function seriesOf(card) { return D.seriesById[card.series]; }
 
   var COIN = '<span class="coin" aria-hidden="true">N</span>';
@@ -180,16 +180,16 @@
     return face.replace(/^<div class="/, '<div class="' + cls).slice(0, -6) + extras + '</div>';
   }
 
-  // Booster wrapper look per pack tier: foil colours, hero Pokémon and two companions behind it.
+  // Booster wrapper look per pack tier: foil colours and the hero Pokémon that breaks out of the window.
   var PACK_LOOK = {
-    starter: { hero: 25, side: [1, 7], foil: ['#7dffcb', '#00ec97', '#00744a'], ink: '#00170e', stars: 1, label: 'Starter' },
-    rare: { hero: 94, side: [92, 93], foil: ['#cfc7ff', '#8b7bff', '#2c1f86'], ink: '#ffffff', stars: 2, label: 'Rare' },
-    elite: { hero: 448, side: [282, 359], foil: ['#a8ecff', '#2db7ff', '#08376a'], ink: '#ffffff', stars: 3, label: 'Elite' },
-    legend: { hero: 6, side: [150, 151], foil: ['#5a6270', '#1b1f25', '#050607'], ink: '#00ec97', stars: 4, label: 'Legend' }
+    starter: { hero: 25, foil: ['#7dffcb', '#00ec97', '#004d31'], gems: 1, label: 'Starter', no: '01' },
+    rare: { hero: 94, foil: ['#d9d2ff', '#8b7bff', '#241866'], gems: 2, label: 'Rare', no: '02' },
+    elite: { hero: 448, foil: ['#b9f0ff', '#2db7ff', '#062d57'], gems: 3, label: 'Elite', no: '03' },
+    legend: { hero: 6, foil: ['#fff0b8', '#f5b942', '#5a3200'], gems: 4, label: 'Legend', no: '04' }
   };
-  // Zig-zag crimp along the top and bottom of the wrapper.
+  // Fine serrated seal along the top and bottom edge.
   var CRIMP = (function () {
-    var pts = [], teeth = 24, depth = 2.2;
+    var pts = [], teeth = 34, depth = 1.1;
     for (var i = 0; i <= teeth; i++) pts.push((i * 100 / teeth).toFixed(2) + '% ' + (i % 2 ? depth : 0) + '%');
     for (var j = teeth; j >= 0; j--) pts.push((j * 100 / teeth).toFixed(2) + '% ' + (100 - (j % 2 ? depth : 0)) + '%');
     return 'polygon(' + pts.join(',') + ')';
@@ -197,26 +197,19 @@
 
   function packArtHTML(p) {
     var look = PACK_LOOK[p.id] || PACK_LOOK.starter;
-    var stars = '';
-    for (var i = 0; i < 4; i++) stars += '<i class="' + (i < look.stars ? 'on' : '') + '">★</i>';
-    return '<div class="booster" style="--f1:' + look.foil[0] + ';--f2:' + look.foil[1] + ';--f3:' + look.foil[2] + ';--ink:' + look.ink + '">' +
+    var gems = '';
+    for (var i = 0; i < 4; i++) gems += '<i class="' + (i < look.gems ? 'on' : '') + '"></i>';
+    return '<div class="booster np-' + p.id + '" style="--f1:' + look.foil[0] + ';--f2:' + look.foil[1] + ';--f3:' + look.foil[2] + '">' +
       '<div class="bw" style="clip-path:' + CRIMP + '">' +
-        '<div class="bw-rays"></div><div class="bw-holo"></div>' +
-        '<div class="bw-crimp top"></div><div class="bw-crimp bottom"></div>' +
-        '<div class="bw-tear">TEAR ▸</div>' +
-        '<div class="bw-logo"><span>NEAR PACKS</span><small>Pokémon card packs</small></div>' +
-        '<div class="bw-stage">' +
-          '<span class="bw-ring"></span>' +
-          '<img class="bw-side l" src="' + artUrl(look.side[0]) + '" alt="" decoding="async">' +
-          '<img class="bw-side r" src="' + artUrl(look.side[1]) + '" alt="" decoding="async">' +
-          '<img class="bw-hero" src="' + artUrl(look.hero) + '" alt="" decoding="async">' +
-        '</div>' +
-        '<div class="bw-ribbon"><span>' + esc(look.label) + ' Pack</span></div>' +
-        '<div class="bw-stars">' + stars + '</div>' +
-        '<div class="bw-foot">1 CARD · EV ' + usd(p.ev) + '</div>' +
+        '<div class="bw-foil"></div><div class="bw-mono">N</div>' +
+        '<div class="bw-seal top"></div><div class="bw-seal bottom"></div>' +
+        '<div class="bw-head"><img src="assets/brand/nearpacks-icon.svg" alt=""><span>NEAR<b>PACKS</b></span><em>S' + look.no + '</em></div>' +
+        '<div class="bw-window"><span class="bw-rays"></span><span class="bw-orb"></span></div>' +
+        '<img class="bw-hero" src="' + artUrl(look.hero) + '" alt="" decoding="async">' +
+        '<div class="bw-name"><small>Pokémon card pack</small><span>' + esc(look.label) + '</span></div>' +
+        '<div class="bw-meta"><span class="bw-gems">' + gems + '</span><span>1 CARD · ' + usd(p.usd) + '</span></div>' +
         '<div class="bw-sheen"></div>' +
       '</div>' +
-      '<div class="bw-price"><b>' + usd(p.usd) + '</b></div>' +
     '</div>';
   }
 
@@ -276,13 +269,12 @@
         return '<a href="' + link(n[0]) + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
       }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="' + link('docs') + '"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
     var right = u
-      ? '<div class="balance" title="' + D.TOKEN + ' in your wallet">' + COIN + '<span class="num">' + (store.mode === 'live' ? (ui.balance ? fmtToken(ui.balance.amount, ui.balance.decimals) : '—') : 'Demo') + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
+      ? '<div class="balance" title="' + D.TOKEN + ' in your wallet">' + COIN + '<span class="num">' + (store.mode === 'live' ? (ui.balance ? fmtToken(ui.balance.amount, ui.balance.decimals) : '—') : '—') + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
         '<div class="user-chip" title="' + esc(u.address) + '">' + CHAIN_BADGE[u.chain] + '<span class="uh num">' + esc(u.name) + '</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
       '<a class="brand" href="' + link('') + '"><img class="brand-icon" src="assets/brand/nearpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Near<b>Packs</b></span></a>' +
-      (store.mode === 'local' ? '<span class="mode-pill" title="No server connected. Progress is saved in this browser only.">Demo</span>' : '') +
       nav + '<div class="top-right">' + right + '</div></div></header>';
   }
 
@@ -357,7 +349,6 @@
         '<div class="pull-info">' +
           '<div><div class="eyebrow">Pokémon TCG · ' + p.pool.length + ' cards from ' + usd(p.min) + ' to ' + usd(p.top[0].usd) + ' · ' + (st.pulls[p.id] || 0) + ' opened</div><h2>' + esc(p.name) + '</h2></div>' +
           '<div class="pull-buttons">' + buttons + '</div>' +
-          (store.mode === 'local' ? '<p class="demo-note">Preview: packs open free here and use browser randomness. On the live site you pay in NEAR and the randomness is drawn on chain in that payment.</p>' : '') +
           packStatsHTML(p) +
           '<div><div class="eyebrow" style="margin-bottom:10px">Top hits · <button class="linkish" data-act="pack-odds" data-id="' + p.id + '">See all top tier</button></div><div class="chase-row">' +
             p.top.slice(0, 6).map(function (c) { return slotHTML(c, { chance: chanceOf(p, c.id) }); }).join('') + '</div></div>' +
@@ -399,27 +390,20 @@
   }
 
   /* ---------- leaderboard ---------- */
-  var SAMPLE = [
-    ['near', 'charcollector.near', 2840, 41], ['near', 'holohunter.near', 1915, 33], ['near', '9f2c…a71e', 1290, 26],
-    ['near', 'packripper.tg', 948, 21], ['near', 'mewtwo.near', 612, 14], ['near', 'sirseeker.near', 402, 9],
-    ['near', 'b04d…11c9', 215, 6], ['near', 'gengar.near', 64, 3]
-  ];
   function ranksHTML() {
     var st = store.state;
     var me = { name: st.user.name, chain: st.user.chain, score: engine.vaultValue(st), cards: st.vault.length, me: true };
-    var rows, isSample = false;
+    var rows;
     if (ui.leaderboard) {
       rows = ui.leaderboard.map(function (r) { return { name: r.name, chain: r.chain, score: r.score, cards: r.cards, me: r.address === st.user.address && r.chain === st.user.chain }; });
     } else {
-      isSample = true;
-      rows = SAMPLE.map(function (r) { return { name: r[1], chain: r[0], score: r[2], cards: r[3], sample: true }; }).concat([me]);
+      rows = [me];
     }
     rows.sort(function (a, b) { return b.score - a.score; });
     return '<section class="section-head"><div><div class="eyebrow">Vault value</div><h2 class="page-title">Ranks</h2></div><span class="muted small">Ranked by the estimated value of the cards each collector holds</span></section>' +
-      (isSample ? '<p class="demo-note">Demo mode: rows marked Sample are placeholders. With the server running, this table lists real collectors.</p>' : '') +
       '<section class="panel table-scroll" style="padding:8px 12px"><table class="lb"><thead><tr><th>#</th><th>Collector</th><th class="num">Cards</th><th class="num">Vault value</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
-        return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who">' + CHAIN_BADGE[r.chain] + '<div><b class="num">' + esc(r.name) + '</b>' + (r.me ? ' <span class="muted">(you)</span>' : '') + (r.sample ? ' <span class="sample">Sample</span>' : '') + '<div class="muted small">' + A.CHAINS[r.chain].name + '</div></div></div></td>' +
+        return '<tr' + (r.me ? ' class="me"' : '') + '><td class="rank">' + (i + 1) + '</td><td><div class="who">' + CHAIN_BADGE[r.chain] + '<div><b class="num">' + esc(r.name) + '</b>' + (r.me ? ' <span class="muted">(you)</span>' : '') + '<div class="muted small">' + A.CHAINS[r.chain].name + '</div></div></div></td>' +
           '<td class="num">' + r.cards + '</td><td class="num"><b>' + usd(r.score) + '</b></td></tr>';
       }).join('') + '</tbody></table></section>';
   }
@@ -850,7 +834,6 @@
       '<p class="muted small">Near Packs runs on NEAR. Sign one message to prove you own the wallet. It does not send a transaction or cost any fee.</p>' +
       '<section><div class="eyebrow">' + CHAIN_BADGE.near + ' NEAR</div><ul class="wallet-list">' + near + '</ul></section>' +
       '<div class="err" id="connect-err" role="alert"></div>' +
-      (store.mode === 'local' ? '<div class="demo-wallet"><span class="muted small">No wallet in this browser? This preview can use a throwaway demo address.</span><button class="btn btn-sm" data-act="wallet-demo">Use demo wallet</button></div>' : '') +
       '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="close-modal">Cancel</button></div>' +
       '</div></div>';
   }
@@ -929,7 +912,7 @@
   }
 
   function rngSourceName(user) {
-    if (store.mode !== 'live') return 'Demo randomness';
+    if (store.mode !== 'live') return 'On-chain randomness';
     if (store.isDev()) return 'Dev opening · ' + user.address;
     return 'Paid on NEAR · ' + D.GAME_ACCOUNT;
   }
@@ -1017,7 +1000,7 @@
     if (!proof) return '';
     var check = engine.cardsFromRandomness(packId, count, proof.randomness, proof.seed).map(function (c) { return c.id; });
     var ok = ids.length === check.length && ids.every(function (id, i) { return id === check[i]; });
-    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Demo randomness (off-chain preview)';
+    var src = proof.source === 'near-transfer' ? 'Paid to ' + (proof.ref || D.TREASURY) + ' · block randomness' : proof.source === 'nearpacks-near' || proof.source === 'near-rng' ? 'Paid on NEAR · ' + (proof.ref || D.GAME_ACCOUNT) : proof.source === 'dev' ? 'Dev opening · server randomness, not paid' : proof.source === 'orao-vrf' ? 'ORAO VRF · Solana' : 'Off-chain randomness';
     var ex = W.explorer(proof, CFG.nearNetwork);
     var links = ex ? (ex.tx ? '<a href="' + esc(ex.tx) + '" target="_blank" rel="noopener">Transaction on ' + ex.label + '</a>' : '') +
       (ex.account ? '<a href="' + esc(ex.account) + '" target="_blank" rel="noopener">' + (proof.source === 'near-transfer' ? 'Treasury' : 'Interaction wallet') + '</a>' : '') : '';
@@ -1047,7 +1030,7 @@
       var direct = !!(pay && pay.method === 'transfer');
       var steps = [
         [o.status === 'wallet' || o.status === 'checking' ? 'active' : o.status === 'error' ? 'error' : 'done',
-          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Dev wallet: no payment needed' : 'Demo: nothing is paid in this preview',
+          live ? 'Pay ' + usd(p.usd * o.count) + (pay && pay.deposit ? ' = ' + fmtNear(pay.deposit) + ' NEAR' : ' in NEAR') : store.isDev() ? 'Dev wallet: no payment needed' : 'Pay in NEAR',
           live ? (o.status === 'checking' ? 'Checking the chain for your payment…' : 'Approve one ' + (direct ? 'transfer to ' + esc(pay.receiver) : 'transaction to ' + D.GAME_ACCOUNT) + ' in ' + esc(walletName) + ' (plus a tiny gas fee). Price from the live NEAR market.') : store.isDev() ? 'Packs opened by ' + esc(u.address) + ' are free and recorded as dev openings' : 'This preview is not connected to a chain'],
         [o.status === 'waiting' || o.status === 'slow' ? 'active' : 'todo', 'Randomness drawn on chain',
           o.status === 'slow' ? 'Taking longer than usual. Your pack is saved; check again in a moment.' : (live ? (direct ? 'From the hash of the block that includes your payment' : 'The ' + D.GAME_ACCOUNT + ' contract draws it in the same transaction') : store.isDev() ? 'Server randomness' : 'Browser randomness')]
@@ -1135,7 +1118,7 @@
   function closeOpening() { ui.opening = null; renderOverlay(); render(); }
 
   function soldToast(r) {
-    toast('Sold back for ' + usd(r.usd) + (r.payout && r.payout.amount ? ', paid in ' + D.TOKEN + ' to your wallet.' : r.payout && r.payout.dev ? ' (dev wallet, recorded only).' : ' (demo, nothing paid).'));
+    toast('Sold back for ' + usd(r.usd) + (r.payout && r.payout.amount ? ', paid in ' + D.TOKEN + ' to your wallet.' : r.payout && r.payout.dev ? ' (dev wallet, recorded only).' : '.'));
     refreshBalance();
   }
   function sell(uids, onDone) {
@@ -1164,7 +1147,6 @@
     switch (act) {
       case 'connect': openConnect(); break;
       case 'wallet-near': signIn('near', W.nearSigner(id, el.getAttribute('data-name')), el.getAttribute('data-name')); break;
-      case 'wallet-demo': signIn('near', W.demoSigner(), 'Demo wallet'); break;
       case 'close-modal': if (e.target === el || el.tagName === 'BUTTON') closeModal(); break;
       case 'logout': store.logout().then(function () { toast('Logged out.'); }); break;
       case 'doc-jump':
