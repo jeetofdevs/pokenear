@@ -54,6 +54,11 @@
     var frac = String(v % unit).padStart(24, '0').slice(0, 4).replace(/0+$/, '');
     return (v / unit).toLocaleString('en-US') + (frac ? '.' + frac : '');
   }
+  // Why packs are closed, in plain words (shown on the packs page).
+  function closedReason() {
+    if (store.mode !== 'live') return 'Game server not connected: this site cannot reach /api/config. Run the Near Packs server (npm start) for this domain.';
+    return 'Waiting for the live NEAR price. Packs open automatically as soon as it loads.';
+  }
   function payReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready)); }
   function buybackReady() { return store.mode === 'live' && (store.isDev() || (store.game && store.game.ready && store.game.buyback)); }
   function seriesOf(card) { return D.seriesById[card.series]; }
@@ -341,7 +346,7 @@
     var pr = st.pendingRip;
     var openRip = pr ? '<section class="panel open-rip"><div><b>You have an unopened pack</b><p class="muted small">' + esc(D.packById[pr.pack].name) + ' · ' + pr.count + ' pack' + (pr.count > 1 ? 's' : '') + ' · ' + usd(D.packById[pr.pack].usd * pr.count) + '. Finish it to get your cards, or cancel it if you have not paid yet.</p></div>' +
       '<div class="open-actions"><button class="btn btn-gold" data-act="rip-resume">Continue</button><button class="btn" data-act="rip-refund">Cancel</button></div></section>' : '';
-    var launch = store.isDev() ? '<p class="demo-note gold-note">Owner wallet ' + esc(st.user.address) + ': packs open free, no payment, and are recorded as owner openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Launching soon</div><h2>Packs open soon</h2></div>' +
+    var launch = store.isDev() ? '<p class="demo-note gold-note">Owner wallet ' + esc(st.user.address) + ': packs open free, no payment, and are recorded as owner openings.</p>' : payReady() ? '' : '<section class="daily-bar"><div><div class="eyebrow">Packs paused</div><h2>' + closedReason() + '</h2></div>' +
         '<div class="daily-right"><a class="btn btn-gold" href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + 'Follow @' + D.X_HANDLE + '</a></div></section>';
     return openRip + launch +
       '<section class="panel pull-stage">' +
