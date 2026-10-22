@@ -273,22 +273,22 @@
     var u = st.user;
     var nav = u ? '<nav class="nav" aria-label="Main">' +
       [['packs', 'Packs'], ['vault', 'Vault'], ['ranks', 'Ranks'], ['docs', 'Docs']].concat(store.isAdmin() ? [['admin', 'Admin']] : []).map(function (n) {
-        return '<a href="#' + n[0] + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
-      }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="#docs"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
+        return '<a href="' + link(n[0]) + '"' + (ui.route === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + (n[0] === 'vault' && st.vault.length ? ' <span class="nav-count num">' + st.vault.length + '</span>' : '') + '</a>';
+      }).join('') + '</nav>' : '<nav class="nav" aria-label="Main"><a href="' + link('docs') + '"' + (ui.route === 'docs' ? ' aria-current="page"' : '') + '>Docs</a></nav>';
     var right = u
       ? '<div class="balance" title="' + D.TOKEN + ' in your wallet">' + COIN + '<span class="num">' + (store.mode === 'live' ? (ui.balance ? fmtToken(ui.balance.amount, ui.balance.decimals) : '—') : 'Demo') + '</span><span class="muted bal-label">' + D.TOKEN + '</span></div>' +
         '<div class="user-chip" title="' + esc(u.address) + '">' + CHAIN_BADGE[u.chain] + '<span class="uh num">' + esc(u.name) + '</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-act="logout">Log out</button>'
       : '<button class="btn btn-gold btn-sm" data-act="connect">' + WALLET_SVG + 'Connect wallet</button>';
     return '<header class="topbar"><div class="wrap">' +
-      '<a class="brand" href="#packs"><img class="brand-icon" src="assets/brand/nearpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Near<b>Packs</b></span></a>' +
+      '<a class="brand" href="' + link('') + '"><img class="brand-icon" src="assets/brand/nearpacks-icon.svg" alt="" width="36" height="36"><span class="brand-name">Near<b>Packs</b></span></a>' +
       (store.mode === 'local' ? '<span class="mode-pill" title="No server connected. Progress is saved in this browser only.">Demo</span>' : '') +
       nav + '<div class="top-right">' + right + '</div></div></header>';
   }
 
   function footerHTML() {
     return '<footer><div class="wrap"><span>Sign in with a NEAR wallet. Packs are priced in USD and paid in NEAR. Card values are estimates. Card data: TCGdex. Pokémon is a trademark of Nintendo / The Pokémon Company; Near Packs is not affiliated with them.</span>' +
-      '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="#docs">Docs</a><a href="#docs/rng">On-chain RNG</a><a href="#docs/faq">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
+      '<span class="foot-links"><span class="muted small" title="Site version">v' + D.VERSION + (store.mode === 'live' && store.serverVersion && store.serverVersion !== D.VERSION ? ' · server ' + esc(store.serverVersion) : '') + '</span><a href="' + link('docs') + '">Docs</a><a href="' + link('docs/rng') + '">On-chain RNG</a><a href="' + link('docs/faq') + '">FAQ</a><a href="' + X_URL + '" target="_blank" rel="noopener">' + X_SVG + '@' + D.X_HANDLE + '</a></span>' +
       '</div></footer>';
   }
 
@@ -364,7 +364,7 @@
         '</div></section>' +
       '<section class="view" style="gap:14px"><div class="section-head"><h2>Choose a pack</h2><span class="muted">Tap a pack to see its top tier</span></div>' +
         '<div class="pack-grid">' + D.PACKS.map(function (x) { return packTileHTML(x, true); }).join('') + '</div></section>' +
-      (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="#vault" class="muted">Open vault</a></div><div class="mini-cards">' +
+      (recent.length ? '<section class="view" style="gap:14px"><div class="section-head"><h2>Your latest pulls</h2><a href="' + link('vault') + '" class="muted">Open vault</a></div><div class="mini-cards">' +
         recent.map(function (h) { return slotHTML(D.cardById[h.id], {}); }).join('') + '</div></section>' : '');
   }
 
@@ -395,7 +395,7 @@
               '<div class="slot-cap"><b>' + usd(c.usd) + '</b><span>' + esc(c.code) + '</span></div>' +
               '<button class="btn btn-sm sell" data-act="sell" data-uid="' + it.uid + '"' + (buybackReady() ? '' : ' disabled title="Buyback opens soon"') + '>Sell back ' + buybackUsd([c]) + '</button></div>';
           }).join('') + '</div>'
-        : '<div class="panel empty">Your vault is empty. <a href="#packs">Open a pack</a> to pull your first card.</div>');
+        : '<div class="panel empty">Your vault is empty. <a href="' + link('packs') + '">Open a pack</a> to pull your first card.</div>');
   }
 
   /* ---------- leaderboard ---------- */
@@ -439,6 +439,49 @@
     ['security', 'Wallet safety'],
     ['faq', 'FAQ']
   ];
+  // Docs menu: sections grouped, each with a small line icon.
+  var DOC_GROUPS = [['Basics', ['start', 'packs', 'odds']], ['Fair play', ['token', 'rng', 'verify']], ['Your cards', ['buyback', 'fees']], ['Help', ['security', 'faq']]];
+  var DOC_ICONS = {
+    start: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    packs: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 7h14M5 17h14"/>',
+    odds: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    token: '<circle cx="12" cy="12" r="9"/><path d="M9 15V9l6 6V9"/>',
+    rng: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9" cy="15" r="1.2"/>',
+    verify: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    buyback: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+    fees: '<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+    security: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    faq: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>'
+  };
+  function docMenuHTML() {
+    var title = {};
+    DOC_SECTIONS.forEach(function (s) { title[s[0]] = s[1]; });
+    return '<nav class="doc-toc" aria-label="Docs sections">' + DOC_GROUPS.map(function (g) {
+      return '<div class="toc-group"><div class="toc-label">' + esc(g[0]) + '</div>' + g[1].map(function (id) {
+        return '<a href="' + link('docs/' + id) + '" data-act="doc-jump" data-to="' + id + '"' + (ui.docActive === id ? ' class="on"' : '') + '>' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true">' + DOC_ICONS[id] + '</svg><span>' + esc(title[id]) + '</span></a>';
+      }).join('') + '</div>';
+    }).join('') + '</nav>';
+  }
+  // Highlights the menu item of the section in view.
+  function docSpy() {
+    if (ui.route !== 'docs') return;
+    var current = DOC_SECTIONS[0][0];
+    var toc = $('.doc-toc');
+    var line = (toc && root.innerWidth <= 900 ? toc.getBoundingClientRect().bottom : ($('.topbar') ? $('.topbar').offsetHeight : 64)) + 40;
+    DOC_SECTIONS.forEach(function (s) { var el = $('#doc-' + s[0]); if (el && el.getBoundingClientRect().top < line) current = s[0]; });
+    if ((root.innerHeight + root.scrollY) >= doc.documentElement.scrollHeight - 4) current = DOC_SECTIONS[DOC_SECTIONS.length - 1][0];
+    if (current === ui.docActive) return;
+    ui.docActive = current;
+    var links = doc.querySelectorAll('.doc-toc a');
+    for (var i = 0; i < links.length; i++) links[i].classList.toggle('on', links[i].getAttribute('data-to') === current);
+    tocToActive();
+  }
+  // On phones the menu is one scrolling row: keep the active item in view.
+  function tocToActive() {
+    var toc = $('.doc-toc'), a = $('.doc-toc a.on');
+    if (toc && a && root.innerWidth <= 900) toc.scrollLeft = a.getBoundingClientRect().left - toc.getBoundingClientRect().left + toc.scrollLeft - 12;
+  }
   function docSec(id, title, body) {
     return '<section class="doc-sec panel" id="doc-' + id + '"><h2>' + title + '</h2>' + body + '</section>';
   }
@@ -452,9 +495,7 @@
       return { p: p, by: by };
     });
     var rarities = Object.keys(D.RARITY_INFO).filter(function (r) { return rarityRows.some(function (x) { return x.by[r]; }); });
-    var toc = '<nav class="doc-toc" aria-label="Docs sections">' + DOC_SECTIONS.map(function (s) {
-      return '<a href="#docs/' + s[0] + '" data-act="doc-jump" data-to="' + s[0] + '">' + esc(s[1]) + '</a>';
-    }).join('') + '</nav>';
+    var toc = docMenuHTML();
     var secs = [
       docSec('start', 'Getting started',
         '<p>Near Packs is an on-chain Pokémon TCG gacha on NEAR. You open packs of real Pokémon cards, paid in ' + D.TOKEN + ', keep them in your vault or sell them back, and every card is decided by randomness drawn on chain that you can check yourself.</p>' +
@@ -738,12 +779,43 @@
     else if (ui.route === 'ranks') body = ranksHTML();
     else body = packsHTML();
     $('#app').innerHTML = topbarHTML() + '<main><div class="wrap view">' + body + '</div></main>' + footerHTML();
+    syncTopbar();
+    if (ui.route === 'docs') tocToActive();
+  }
+  // The top bar wraps to two rows on phones; sticky menus sit right under it.
+  function syncTopbar() {
+    var bar = $('.topbar');
+    if (bar) doc.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+  }
+
+  /* Clean URLs (/packs, /docs/rng) when the site runs on its server; #packs in the static preview. */
+  function cleanUrls() { return store.mode === 'live' && root.history && root.history.pushState; }
+  function link(path) { return cleanUrls() ? '/' + path : '#' + path; }
+  function routeParts() {
+    if (!cleanUrls()) return (root.location.hash || '').replace('#', '').split('/');
+    var h = (root.location.hash || '').replace('#', '');
+    if (h && ROUTES.indexOf(h.split('/')[0]) >= 0) { root.history.replaceState(null, '', '/' + h); return h.split('/'); } // old #links
+    return root.location.pathname.split('/').filter(Boolean);
+  }
+  function navigate(path) {
+    if (!cleanUrls()) { root.location.hash = path; return; }
+    root.history.pushState(null, '', '/' + path);
+    setRoute();
+  }
+  // Same-site links move with pushState instead of a page load.
+  function onLink(e) {
+    if (!cleanUrls() || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest('a[href^="/"]');
+    if (!a || a.target || a.hasAttribute('data-act')) return;
+    e.preventDefault();
+    if (a.getAttribute('href') !== root.location.pathname) root.history.pushState(null, '', a.getAttribute('href'));
+    setRoute();
   }
 
   function setRoute() {
-    var parts = (root.location.hash || '').replace('#', '').split('/');
+    var parts = routeParts();
     var h = parts[0];
-    ui.route = ROUTES.indexOf(h) >= 0 ? h : (ui.route || 'packs');
+    ui.route = ROUTES.indexOf(h) >= 0 ? h : 'packs';
     if ($('#modal') && $('#modal').innerHTML) closeModal();
     if (ui.route === 'ranks' && store.mode === 'live') {
       store.leaderboard().then(function (rows) { ui.leaderboard = rows; render(); }).catch(function () { ui.leaderboard = null; });
@@ -752,6 +824,8 @@
     var sec = h === 'docs' && parts[1] && $('#doc-' + parts[1]);
     if (sec) sec.scrollIntoView();
     else root.scrollTo(0, 0);
+    ui.docActive = null;
+    docSpy();
   }
 
   /* ---------- modals ---------- */
@@ -787,8 +861,7 @@
     if (err) err.textContent = 'Approve the sign-in in ' + label + '…';
     store.connectWallet(chain, signer).then(function (r) {
       $('#modal').innerHTML = '';
-      root.location.hash = 'packs';
-      setRoute();
+      navigate('packs');
       var u = store.state.user;
       toast('Welcome ' + u.name + '!');
       refreshBalance();
@@ -1098,14 +1171,14 @@
         e.preventDefault();
         var ds = $('#doc-' + el.getAttribute('data-to'));
         if (ds) ds.scrollIntoView({ behavior: 'smooth' });
-        try { root.history.replaceState(null, '', '#docs/' + el.getAttribute('data-to')); } catch (err) { /* ignore */ }
+        try { root.history.replaceState(null, '', link('docs/' + el.getAttribute('data-to'))); } catch (err) { /* ignore */ }
         break;
       case 'scroll-rates': e.preventDefault(); var r = $('#rates'); if (r) r.scrollIntoView({ behavior: 'smooth' }); break;
       case 'pack':
         if ($('.pull-stage')) { ui.pack = id; render(); }
         openPackOdds(D.packById[id]); break;
       case 'pack-odds': openPackOdds(D.packById[id]); break;
-      case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (root.location.hash !== '#packs') root.location.hash = 'packs'; else render(); break;
+      case 'go-pack': e.preventDefault(); closeModal(); ui.pack = id; if (ui.route !== 'packs') navigate('packs'); else render(); break;
       case 'zoom': openZoom(id, Number(el.getAttribute('data-uid')) || null); break;
       case 'rip': startRip(Number(el.getAttribute('data-count'))); break;
       case 'rip-resume': resumeRip(); break;
@@ -1200,6 +1273,10 @@
     doc.addEventListener('load', onImgLoad, true);
     doc.addEventListener('error', onImgError, true);
     root.addEventListener('hashchange', setRoute);
+    root.addEventListener('popstate', setRoute);
+    root.addEventListener('scroll', docSpy, { passive: true });
+    root.addEventListener('resize', syncTopbar);
+    doc.addEventListener('click', onLink);
     store.subscribe(function () { if (!ui.opening) render(); });
     root.addEventListener('beforeunload', function () { /* open rips stay saved and can be resumed */ });
     store.init().then(function () {
@@ -1216,7 +1293,7 @@
         var hashes = q.get('transactionHashes');
         if (hashes && store.state.pendingRip) {
           ui.returnedTx = hashes.split(',').pop();
-          root.history.replaceState(null, '', root.location.pathname + root.location.hash);
+          root.history.replaceState(null, '', root.location.pathname + (cleanUrls() ? '' : root.location.hash));
           resumeRip();
         }
       } catch (e) { /* ignore */ }

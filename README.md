@@ -20,7 +20,7 @@ Players connect a NEAR wallet, open Pokémon card packs with published odds, kee
 - **Buyback at 96%** (`BUYBACK_RATE`) of a card's value, paid in NEAR from nearpacks.near at the same rate as the pack prices.
 - **Dev wallet**: `nearpacks.near` (`DEV_ACCOUNTS`) opens packs without paying; its openings use server randomness and are recorded like any other (vault, history, ranks, database), marked as dev openings.
 - **Real cards**: 740 Pokémon TCG cards from Scarlet & Violet 151, Mega Evolution, Black Bolt and White Flare (TCGdex data). Black White Rare, Mega Hyper Rare and gold Hyper Rare cards use the drawn card art (their etched-foil scans look washed out on screen). Every Pokémon has artwork: dream-world sprites up to Gen 5, PokeAPI official artwork for newer Pokémon (`npm run build:cards` downloads it once into `.cache/`).
-- **Docs** at `#docs` and a leaderboard by vault value. Official X: [@NearPacks](https://x.com/NearPacks).
+- **Docs** at `/docs` and a leaderboard by vault value. Official X: [@NearPacks](https://x.com/NearPacks).
 
 ## Going live (direct mode)
 
@@ -42,7 +42,7 @@ Packs open as soon as the server knows the NEAR price; no contract is needed for
 
 ### Launch from the admin page (no terminal)
 
-Log in to the site with **nearpacks.near** and open **Admin** (`#admin`, only shown to that wallet). Each step is one transaction your wallet approves; the server never holds the wallet's keys:
+Log in to the site with **nearpacks.near** and open **Admin** (`/admin`, only shown to that wallet). Each step is one transaction your wallet approves; the server never holds the wallet's keys:
 
 1. **Deploy** the Near Packs contract (treasury nearpacks.near is set at deploy). If your wallet cannot deploy from a website, the page shows the one CLI command instead.
 2. **Prices**: enter the USD price of 1 NEAR, calculate, save. Packs open for players right away. Update when the NEAR price moves.

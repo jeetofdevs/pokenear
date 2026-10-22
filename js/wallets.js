@@ -127,7 +127,7 @@
     var pending = null;
     try { pending = JSON.parse(root.sessionStorage.getItem(PENDING_KEY) || 'null'); root.sessionStorage.removeItem(PENDING_KEY); } catch (e) { pending = null; }
     var q = new URLSearchParams(h.slice(1));
-    root.history.replaceState(null, '', root.location.pathname + root.location.search + '#packs');
+    root.history.replaceState(null, '', root.location.pathname + root.location.search);
     if (!pending || !q.get('accountId')) return null;
     return { nonce: pending.nonce, signed: { accountId: q.get('accountId'), publicKey: q.get('publicKey'), signature: q.get('signature'), wallet: pending.wallet, callbackUrl: pending.callbackUrl } };
   }

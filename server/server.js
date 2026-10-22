@@ -530,11 +530,23 @@ function leaderboard() {
     .slice(0, 100);
 }
 
+const PAGE_RE = /^(packs|vault|ranks|docs|admin)(\/[a-z0-9-]*)?\/?$/;
+// index.html with <base href="/"> so its relative asset paths also work on /docs/rng.
+function sendIndex(req, res) {
+  fs.readFile(path.join(ROOT, 'index.html'), 'utf8', (err, html) => {
+    if (err) return send(res, 404, 'Not found');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' });
+    res.end(req.method === 'HEAD' ? undefined : html.replace('<head>', '<head>\n  <base href="/">'));
+  });
+}
+
 function serveStatic(req, res, pathname) {
   let rel;
   try { rel = decodeURIComponent(pathname).replace(/^\/+/, ''); } catch { return send(res, 400, 'Bad request'); }
-  if (rel === '') rel = 'index.html';
+  // Page routes (/packs, /docs/rng, ...) are the app itself; the browser picks the view from the path.
+  if (rel === '' || PAGE_RE.test(rel)) rel = 'index.html';
   if (!STATIC.has(rel) && !ART_RE.test(rel)) return send(res, 404, 'Not found');
+  if (rel === 'index.html') return sendIndex(req, res);
   const file = path.join(ROOT, rel);
   fs.readFile(file, (err, buf) => {
     if (err) return send(res, 404, 'Not found');
